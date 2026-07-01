@@ -1,0 +1,10 @@
+# Magnet OS — Netlify config
+# Serves the static app from the deploy root and exposes the email function at
+# /.netlify/functions/send-email. Works with drag-and-drop deploys.
+
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"

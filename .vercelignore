@@ -1,0 +1,10 @@
+.git
+DEPLOYMENT.md
+GUIDEBOOK_AR.md
+netlify
+netlify.toml
+_redirects
+supabase-schema.sql
+supabase-auth-migration.sql
+SECURITY-UPGRADE.md
+.vercelignore

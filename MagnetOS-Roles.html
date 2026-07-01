@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Magnet OS — الأدوار والصلاحيات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#0d0e12; --card:#171a21; --card2:#1e222b; --ink:#f4f6f8; --muted:#9aa1ad; --line:rgba(255,255,255,.09); --lime:#c8f31e; --edit:#c8f31e; --view:#63b3ff; --hide:#6b7280; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Tajawal',system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;padding:40px 5vw 80px}
+  .wrap{max-width:1080px;margin:0 auto}
+  header.top{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+  .mark{width:46px;height:46px;border-radius:13px;background:var(--lime);color:#111;font-weight:900;font-size:24px;display:flex;align-items:center;justify-content:center}
+  h1{font-size:clamp(24px,3.4vw,40px);font-weight:900}
+  .sub{color:var(--muted);font-size:15px;margin:6px 0 26px}
+  .legend{display:flex;gap:20px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:30px;font-size:14.5px}
+  .legend b{font-weight:800}
+  .chip{display:inline-flex;align-items:center;gap:8px}
+  .dot{width:12px;height:12px;border-radius:4px;display:inline-block}
+  .d-edit{background:var(--edit)} .d-view{background:var(--view)} .d-hide{background:var(--hide)}
+  .role{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px;margin-bottom:20px;break-inside:avoid}
+  .role h2{font-size:clamp(19px,2.4vw,26px);font-weight:800;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .tag{font-size:12px;font-weight:700;color:var(--lime);background:rgba(200,243,30,.13);border-radius:999px;padding:4px 12px}
+  .resp{color:var(--muted);font-size:14.5px;margin:8px 0 16px}
+  table{width:100%;border-collapse:collapse}
+  td{vertical-align:top;padding:0;width:50%}
+  .col-h{font-weight:800;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .col-h.edit{color:var(--edit)} .col-h.view{color:var(--view)}
+  .mods{display:flex;flex-wrap:wrap;gap:7px;padding-inline-start:20px}
+  .m{background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:5px 11px;font-size:13.5px}
+  .m.edit{border-color:rgba(200,243,30,.3)} .m.view{border-color:rgba(99,179,255,.25)}
+  .m small{color:var(--muted);font-size:.82em;margin-inline-start:4px}
+  .none{color:var(--muted);font-size:13.5px;padding-inline-start:20px}
+  .hidnote{color:var(--muted);font-size:13px;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+  .foot{color:var(--muted);font-size:13.5px;margin-top:26px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 20px}
+  .foot b{color:var(--ink)}
+  @media(max-width:720px){ td{display:block;width:100%} td+td{margin-top:16px} }
+  @media print{ body{background:#fff;color:#111;padding:0} .role,.legend,.foot{background:#f7f7f8;border-color:#ddd} .m{background:#fff;border-color:#ccc} .mark{background:#c8f31e} .tag{color:#5b7d00;background:#eef7cf} .col-h.edit{color:#5b7d00} .col-h.view{color:#1e6fbf} }
+</style>
+</head>
+<body><div class="wrap">
+  <header class="top"><div class="mark">M</div><h1>Magnet OS — الأدوار والصلاحيات</h1></header>
+  <div class="sub">لكل بوزيشن: بيعدّل إيه، وبيشوف إيه فقط. أي حاجة مش مذكورة = مخفية عنه. تقدر تخصّص أي موظف بعينه من «Users &amp; Permissions».</div>
+
+  <div class="legend">
+    <span class="chip"><span class="dot d-edit"></span><b>تعديل (Edit)</b> — يضيف/يعدّل</span>
+    <span class="chip"><span class="dot d-view"></span><b>مشاهدة (View)</b> — يشوف بس</span>
+    <span class="chip"><span class="dot d-hide"></span><b>مخفي</b> — مش بيظهر له</span>
+    <span class="chip">لوحة المتصدرين والأركيد متاحين للجميع (مشاهدة).</span>
+  </div>
+
+  <!-- Owner/Admin -->
+  <div class="role">
+    <h2>المالك / الأدمن <span class="tag">Owner · Admin</span></h2>
+    <div class="resp">تحكم كامل في النظام: الإعدادات، الأدوار، الصلاحيات، المستخدمين، النسخ الاحتياطي، والموافقات الحساسة.</div>
+    <div class="col-h edit"><span class="dot d-edit"></span>تعديل كامل لكل الموديولات بدون استثناء.</div>
+    <div class="hidnote">استثناء وحيد: الفواتير والمدفوعات ممنوع <b>حذفها</b> نهائيًا (حماية مالية) — لكن تعديلها متاح.</div>
+  </div>
+
+  <!-- Manager (full access) -->
+  <div class="role" style="border-color:rgba(200,243,30,.35)">
+    <h2>مدير عام <span class="tag">Manager</span> <span class="tag" style="background:rgba(200,243,30,.22)">صلاحيات كاملة</span></h2>
+    <div class="resp">شريك/مدير الوكالة — بيشوف ويعمل <b>كل حاجة زي الأونر بالظبط</b> (بدون أي قيود).</div>
+    <div class="col-h edit"><span class="dot d-edit"></span>تعديل كامل لكل الموديولات: المالية، الموظفين، المبيعات، المستخدمين والأدوار، النسخ الاحتياطي، الإعدادات — كله.</div>
+    <div class="hidnote">استثناء وحيد زي الأونر: الفواتير والمدفوعات ممنوع <b>حذفها</b> (حماية مالية).</div>
+  </div>
+
+  <!-- HR -->
+  <div class="role">
+    <h2>الموارد البشرية <span class="tag">HR</span></h2>
+    <div class="resp">إدارة التوظيف والموظفين والحضور والإجازات والأقسام. أشخاص فقط — بدون مالية أو مشاريع أو عملاء.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">التوظيف<small>candidates</small></span><span class="m edit">الحضور<small>attendance</small></span><span class="m edit">الإجازات<small>leaves</small></span><span class="m edit">توافر الفريق<small>availability</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">الموظفين<small>employees</small></span><span class="m view">الأقسام<small>departments</small></span><span class="m view">عبء العمل<small>workload</small></span><span class="m view">الفريلانسرز<small>freelancers</small></span><span class="m view">مركز الموافقات<small>approvals</small></span><span class="m view">التقارير<small>reports</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">الملفات<small>files</small></span><span class="m view">الإشعارات<small>notifications</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، المشاريع، العملاء، المبيعات، المستخدمين.</div>
+  </div>
+
+  <!-- Marketing Director -->
+  <div class="role">
+    <h2>مدير التسويق <span class="tag">Marketing Director</span></h2>
+    <div class="resp">قيادة التسويق: الحملات وتقويم المحتوى والبريفات واللِيدز والعروض والتقارير. تنسيق فريق التسويق.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">الخطط<small>plans</small></span><span class="m edit">اللِيدز<small>leads</small></span><span class="m edit">الحملات<small>campaigns</small></span><span class="m edit">البريفات<small>briefs</small></span><span class="m edit">أنشطة المبيعات<small>sales</small></span><span class="m edit">العروض<small>proposals</small></span><span class="m edit">تقويم المحتوى<small>calendar</small></span><span class="m edit">أصول العميل<small>assets</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">العملاء<small>clients</small></span><span class="m view">جهات الاتصال<small>contacts</small></span><span class="m view">عروض الأسعار<small>quotations</small></span><span class="m view">العقود<small>contracts</small></span><span class="m view">الاجتماعات<small>meetings</small></span><span class="m view">مركز الموافقات<small>approvals</small></span><span class="m view">وكلاء AI<small>agents</small></span><span class="m view">التقارير<small>reports</small></span><span class="m view">المستندات<small>documents</small></span><span class="m view">عبء العمل<small>workload</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، الموظفين/الحضور/الإجازات، المستخدمين.</div>
+  </div>
+
+  <!-- Art Director -->
+  <div class="role">
+    <h2>المدير الفني <span class="tag">Art Director</span></h2>
+    <div class="resp">قيادة الفريق الإبداعي: المهام والتسليمات وتقويم المحتوى وأصول العميل والمراجعات ومراجعة الشغل الإبداعي.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">المهام<small>tasks</small></span><span class="m edit">التسليمات<small>deliverables</small></span><span class="m edit">تقويم المحتوى<small>calendar</small></span><span class="m edit">أصول العميل<small>assets</small></span><span class="m edit">الملفات<small>files</small></span><span class="m edit">الإجازات<small>leaves</small></span><span class="m edit">توافر الفريق<small>availability</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">المشاريع<small>projects</small></span><span class="m view">المراجعات<small>revisions</small></span><span class="m view">مركز الموافقات<small>approvals</small></span><span class="m view">الموظفين<small>employees</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">التقارير<small>reports</small></span><span class="m view">الإجراءات/المعرفة<small>sops</small></span><span class="m view">الإشعارات<small>notifications</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، المبيعات، المستخدمين.</div>
+  </div>
+
+  <!-- Sales -->
+  <div class="role">
+    <h2>المبيعات / مدير الحساب <span class="tag">Sales · Account Manager</span></h2>
+    <div class="resp">إضافة اللِيدز والحملات والبريفات والعروض وعروض الأسعار ومتابعة العملاء المحتملين وتحويلهم لعملاء.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">اللِيدز<small>leads</small></span><span class="m edit">الحملات<small>campaigns</small></span><span class="m edit">البريفات<small>briefs</small></span><span class="m edit">جهات الاتصال<small>contacts</small></span><span class="m edit">أنشطة المبيعات<small>sales</small></span><span class="m edit">العروض<small>proposals</small></span><span class="m edit">عروض الأسعار<small>quotations</small></span><span class="m edit">أصول العميل<small>assets</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">العملاء<small>clients</small></span><span class="m view">العقود<small>contracts</small></span><span class="m view">الاجتماعات<small>meetings</small></span><span class="m view">مركز المشاركة<small>share</small></span><span class="m view">وكلاء AI<small>agents</small></span><span class="m view">المستندات<small>documents</small></span><span class="m view">التقارير<small>reports</small></span><span class="m view">الملفات<small>files</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، المشاريع/المهام، الموظفين، المستخدمين.</div>
+  </div>
+
+  <!-- Social Media -->
+  <div class="role">
+    <h2>أخصائي سوشيال ميديا <span class="tag">Social Media Specialist</span></h2>
+    <div class="resp">إنتاج وإدارة محتوى السوشيال: تقويم المحتوى والحملات والبريفات والتسليمات وأصول العميل.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">المهام<small>tasks</small></span><span class="m edit">التسليمات<small>deliverables</small></span><span class="m edit">تقويم المحتوى<small>calendar</small></span><span class="m edit">الحملات<small>campaigns</small></span><span class="m edit">البريفات<small>briefs</small></span><span class="m edit">الملفات<small>files</small></span><span class="m edit">الإجازات<small>leaves</small></span><span class="m edit">توافر الفريق<small>availability</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">أصول العميل<small>assets</small></span><span class="m view">المراجعات<small>revisions</small></span><span class="m view">الموظفين<small>employees</small></span><span class="m view">الإجراءات/المعرفة<small>sops</small></span><span class="m view">الإشعارات<small>notifications</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، المشاريع، العملاء، المستخدمين.</div>
+  </div>
+
+  <!-- Designer / Content -->
+  <div class="role">
+    <h2>مصمم جرافيك / صانع محتوى <span class="tag">Graphic Designer · Content Creator</span></h2>
+    <div class="resp">تنفيذ المهام والتسليمات، رفع الملفات، إرسال الشغل للمراجعة، والتعليقات. شغل تنفيذي.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">المهام<small>tasks</small></span><span class="m edit">التسليمات<small>deliverables</small></span><span class="m edit">الملفات<small>files</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الإجازات<small>leaves</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">توافر الفريق<small>availability</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">أصول العميل<small>assets</small></span><span class="m view">تقويم المحتوى<small>calendar</small></span><span class="m view">المراجعات<small>revisions</small></span><span class="m view">الموظفين<small>employees</small></span><span class="m view">الإجراءات/المعرفة<small>sops</small></span><span class="m view">الإشعارات<small>notifications</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، المبيعات، المشاريع، العملاء، المستخدمين.</div>
+  </div>
+
+  <!-- Reel / Video -->
+  <div class="role">
+    <h2>صانع ريلز / مونتير <span class="tag">Reel Creator · Video Editor</span></h2>
+    <div class="resp">مونتاج الفيديو والريلز، إدارة المهام والتسليمات والملفات، وإرسال الشغل للمراجعة. (نفس صلاحيات المصمم.)</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">المهام<small>tasks</small></span><span class="m edit">التسليمات<small>deliverables</small></span><span class="m edit">الملفات<small>files</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الإجازات<small>leaves</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">توافر الفريق<small>availability</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">أصول العميل<small>assets</small></span><span class="m view">تقويم المحتوى<small>calendar</small></span><span class="m view">المراجعات<small>revisions</small></span><span class="m view">الموظفين<small>employees</small></span><span class="m view">الإجراءات/المعرفة<small>sops</small></span><span class="m view">الإشعارات<small>notifications</small></span><span class="m view">الفرق<small>teams</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل المالية، المبيعات، المشاريع، العملاء، المستخدمين.</div>
+  </div>
+
+  <!-- Finance -->
+  <div class="role">
+    <h2>المالية / المحاسب <span class="tag">Finance</span></h2>
+    <div class="resp">إنشاء وتعديل الفواتير والمدفوعات والتحصيلات والمصروفات والتكاليف والشركاء، ومتابعة الإيرادات والأرباح.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">الفواتير<small>invoices</small></span><span class="m edit">المدفوعات<small>payments</small></span><span class="m edit">التحصيلات<small>collections</small></span><span class="m edit">المصروفات<small>expenses</small></span><span class="m edit">التكاليف الثابتة<small>fixed</small></span><span class="m edit">الشركاء<small>partners</small></span><span class="m edit">الطلبات<small>requests</small></span><span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">الربحية<small>profitability</small></span><span class="m view">العملاء<small>clients</small></span><span class="m view">الموظفين<small>employees</small></span><span class="m view">مركز الموافقات<small>approvals</small></span><span class="m view">وكلاء AI<small>agents</small></span><span class="m view">المستندات<small>documents</small></span><span class="m view">الاجتماعات<small>meetings</small></span><span class="m view">التقارير<small>reports</small></span><span class="m view">الملفات<small>files</small></span><span class="m view">الإعدادات<small>settings</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: المشاريع/المهام، المبيعات، المستخدمين. والفواتير/المدفوعات ممنوع حذفها.</div>
+  </div>
+
+  <!-- Client -->
+  <div class="role">
+    <h2>العميل <span class="tag">Client</span></h2>
+    <div class="resp">بوابة العميل: يشوف مشاريعه وتسليماته وفواتيره وملفاته، ويعلّق ويشات فقط.</div>
+    <table><tr>
+      <td><div class="col-h edit"><span class="dot d-edit"></span>يعدّل</div><div class="mods">
+        <span class="m edit">التعليقات<small>comments</small></span><span class="m edit">الشات<small>chat</small></span>
+      </div></td>
+      <td><div class="col-h view"><span class="dot d-view"></span>يشوف فقط</div><div class="mods">
+        <span class="m view">مشاريعه<small>projects</small></span><span class="m view">تسليماته<small>deliverables</small></span><span class="m view">فواتيره<small>invoices</small></span><span class="m view">أصوله<small>assets</small></span><span class="m view">التقويم<small>calendar</small></span><span class="m view">ملفاته<small>files</small></span><span class="m view">الإشعارات<small>notifications</small></span>
+      </div></td>
+    </tr></table>
+    <div class="hidnote">مخفي: كل الحاجات الداخلية (المالية، الفريق، المبيعات، المشاريع الأخرى…). العميل بيشوف بياناته هو بس.</div>
+  </div>
+
+  <div class="foot">
+    <b>ملاحظات:</b> • دي الصلاحيات الافتراضية لكل دور. • تقدر تخصّص أي <b>موظف بعينه</b> وتغيّر أي موديول لـ Hidden / View / Edit من «Users &amp; Permissions». • <b>لوحة المتصدرين والأركيد</b> متاحة للجميع (مشاهدة). • <b>الإعدادات</b> ظاهرة للكل (كل واحد يعدّل ملفه الشخصي وثيمه). • رول <b>المالك = الأدمن</b> = تعديل كامل.
+  </div>
+</div></body>
+</html>

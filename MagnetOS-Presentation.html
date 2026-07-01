@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Magnet OS — العرض التقديمي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#0d0e12; --bg2:#14161d; --card:#191c24; --ink:#f5f6f8; --muted:#9aa1ad; --line:rgba(255,255,255,.09); --lime:#c8f31e; --lime-dim:rgba(200,243,30,.14); }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{font-family:'Tajawal',system-ui,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--ink); overflow:hidden}
+  .deck{height:100vh; width:100vw; position:relative}
+  .slide{position:absolute; inset:0; display:none; flex-direction:column; justify-content:center; padding:6vh 8vw; opacity:0; transition:opacity .35s ease}
+  .slide.on{display:flex; opacity:1}
+  .eyebrow{color:var(--lime); font-weight:700; font-size:clamp(13px,1.4vw,18px); letter-spacing:.04em; margin-bottom:14px}
+  h1{font-size:clamp(30px,5.2vw,68px); font-weight:900; line-height:1.1; margin-bottom:16px}
+  h2{font-size:clamp(24px,3.6vw,46px); font-weight:800; line-height:1.15; margin-bottom:22px}
+  p.lead{font-size:clamp(15px,1.8vw,24px); color:var(--muted); line-height:1.7; max-width:60ch}
+  ul{list-style:none; display:flex; flex-direction:column; gap:14px; margin-top:8px}
+  li{font-size:clamp(15px,1.7vw,23px); line-height:1.5; display:flex; gap:14px; align-items:flex-start}
+  li .b{flex:0 0 auto; width:11px; height:11px; border-radius:3px; background:var(--lime); margin-top:.55em}
+  li b{color:var(--ink); font-weight:700}
+  li span{color:var(--muted)}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:16px 34px; margin-top:6px}
+  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:10px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 20px}
+  .card .n{color:var(--lime); font-weight:800; font-size:14px; margin-bottom:8px; letter-spacing:.04em}
+  .card h3{font-size:clamp(16px,1.8vw,22px); font-weight:800; margin-bottom:6px}
+  .card p{color:var(--muted); font-size:clamp(13px,1.35vw,17px); line-height:1.55}
+  table{width:100%; border-collapse:collapse; margin-top:6px; font-size:clamp(13px,1.4vw,19px)}
+  th,td{text-align:right; padding:11px 14px; border-bottom:1px solid var(--line)}
+  th{color:var(--lime); font-weight:700; font-size:.9em; letter-spacing:.03em}
+  td b{font-weight:700}
+  td.muted{color:var(--muted)}
+  .steps{counter-reset:s; display:flex; flex-direction:column; gap:16px; margin-top:6px}
+  .step{display:flex; gap:16px; align-items:flex-start; font-size:clamp(15px,1.6vw,22px)}
+  .step .num{counter-increment:s; flex:0 0 auto; width:38px; height:38px; border-radius:11px; background:var(--lime-dim); color:var(--lime); font-weight:800; display:flex; align-items:center; justify-content:center; font-size:18px}
+  .step .num::before{content:counter(s)}
+  .step .t{padding-top:5px}
+  .step .t b{font-weight:700}
+  .step .t span{color:var(--muted)}
+  .pill{display:inline-block; background:var(--lime-dim); color:var(--lime); border-radius:999px; padding:6px 14px; font-weight:700; font-size:clamp(12px,1.2vw,15px); margin-top:18px}
+  /* title slide */
+  .title{align-items:flex-start}
+  .logo{display:flex; align-items:center; gap:14px; margin-bottom:34px}
+  .logo .mark{width:52px; height:52px; border-radius:14px; background:var(--lime); color:#111; font-weight:900; font-size:26px; display:flex; align-items:center; justify-content:center}
+  .logo .nm{font-weight:800; font-size:22px}
+  .big{font-size:clamp(44px,8vw,110px); font-weight:900; line-height:.98; letter-spacing:-.01em}
+  .big .g{color:var(--lime)}
+  .sub{color:var(--muted); font-size:clamp(16px,2vw,26px); margin-top:20px; max-width:52ch; line-height:1.6}
+  .meta{margin-top:40px; color:var(--muted); font-size:clamp(13px,1.3vw,17px); display:flex; gap:26px; flex-wrap:wrap}
+  .meta b{color:var(--ink)}
+  /* chrome */
+  .bar{position:fixed; top:0; right:0; height:4px; background:var(--lime); width:0; transition:width .3s; z-index:20}
+  .hud{position:fixed; bottom:22px; left:0; right:0; display:flex; align-items:center; justify-content:center; gap:18px; z-index:20; pointer-events:none}
+  .hud button{pointer-events:auto; background:var(--card); border:1px solid var(--line); color:var(--ink); width:44px; height:44px; border-radius:12px; font-size:20px; cursor:pointer; transition:.15s}
+  .hud button:hover{background:#20242e; border-color:var(--lime)}
+  .count{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:0 16px; height:44px; display:flex; align-items:center; color:var(--muted); font-weight:700; font-size:15px}
+  .count b{color:var(--ink)}
+  .foot{position:fixed; bottom:26px; right:36px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.05em; z-index:10}
+  .hint{position:fixed; top:20px; left:28px; color:var(--muted); font-size:12.5px; z-index:10}
+  @media (max-width:760px){ .cards{grid-template-columns:1fr} .grid{grid-template-columns:1fr} .slide{padding:8vh 7vw} }
+  @media print{
+    html,body{overflow:visible; height:auto; background:#fff; color:#111}
+    .slide{display:flex!important; opacity:1!important; position:relative; inset:auto; min-height:100vh; page-break-after:always; border-bottom:1px solid #ddd}
+    .hud,.bar,.foot,.hint{display:none!important}
+    .card,.count,.hud button{background:#f6f6f7}
+    .eyebrow,.card .n,th,.logo .mark,.big .g{color:#5b7d00}
+    .logo .mark{background:#c8f31e}
+    li .b,.step .num{background:#5b7d00; color:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="hint">↔ الأسهم للتنقّل · اضغط F لملء الشاشة · Ctrl/Cmd+P لحفظ PDF</div>
+<div class="foot">MAGNET OS</div>
+<div class="deck" id="deck">
+
+  <!-- 1 -->
+  <section class="slide title on">
+    <div class="logo"><div class="mark">M</div><div class="nm">Magnet OS</div></div>
+    <div class="big">نظام تشغيل <span class="g">ماجنت</span><br/>الوكالة كلها في مكان واحد</div>
+    <div class="sub">CRM · مشاريع · مالية · موارد بشرية · تحصيلات · تقييم الأداء — بلوحة واحدة، صلاحيات لكل دور، وأمان على مستوى السيرفر.</div>
+    <div class="meta"><span>الرابط: <b>magnet-op.vercel.app</b></span><span>الدخول: <b>owner</b></span><span>عربي / إنجليزي</span></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="eyebrow">نظرة عامة</div>
+    <h2>إيه هو Magnet OS؟</h2>
+    <ul>
+      <li><span class="b"></span><span><b>نظام واحد</b> بيدير رحلة الشغل كلها: كسب العميل ← تنفيذ الشغل ← التحصيل ← دفع الفريق ← متابعة الأداء.</span></li>
+      <li><span class="b"></span><span><b>كل حاجة "record"</b> — عميل، مهمة، فاتورة، تحصيلة — بتتعمل وتتعدّل من خلال فورم بسيط.</span></li>
+      <li><span class="b"></span><span><b>مزامنة سحابية</b> — كل الأجهزة بتشوف نفس الداتا الحيّة خلال ثواني.</span></li>
+      <li><span class="b"></span><span><b>صلاحيات لكل دور</b> — كل موظف يشوف اللي يخصّه بس.</span></li>
+    </ul>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="eyebrow">البداية السريعة</div>
+    <h2>أول 5 دقائق</h2>
+    <div class="steps">
+      <div class="step"><div class="num"></div><div class="t"><b>سجّل الدخول</b> — <span>افتح الرابط وادخل باسم المستخدم والباسورد.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>الشريط العلوي</b> — <span>موسيقى · صوت التنبيه · الإشعارات · اللغة · الوضع الليلي · ملفك الشخصي.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>القائمة الجانبية</b> — <span>موديولاتك مقسّمة (Main · Finance · Team/HR …) حسب دورك.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>غيّر الباسورد</b> — <span>من "Profile" فورًا.</span></div></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="eyebrow">الأدوار والصلاحيات</div>
+    <h2>كل بوزيشن بيشوف إيه</h2>
+    <table>
+      <tr><th>الدور</th><th>بيعمل إيه</th></tr>
+      <tr><td><b>Owner / Admin</b></td><td class="muted">كل حاجة — إعدادات، مستخدمين، نسخ احتياطي.</td></tr>
+      <tr><td><b>Manager</b></td><td class="muted">مشاريع، مهام، عملاء، خطط، وكل الموارد البشرية.</td></tr>
+      <tr><td><b>HR</b></td><td class="muted">موظفين، حضور، إجازات، توظيف — أشخاص فقط.</td></tr>
+      <tr><td><b>Marketing / Art Director</b></td><td class="muted">حملات، محتوى، تسليمات، موافقات إبداعية.</td></tr>
+      <tr><td><b>Sales / Account Manager</b></td><td class="muted">لِيدز، عروض، بريفات، عملاء.</td></tr>
+      <tr><td><b>الفريق الإبداعي</b></td><td class="muted">مهام، تسليمات، ملفات، تقويم المحتوى.</td></tr>
+      <tr><td><b>Finance</b></td><td class="muted">فواتير، مدفوعات، تحصيلات، مصروفات، أرباح.</td></tr>
+      <tr><td><b>Client</b></td><td class="muted">بوابة العميل: مشاريعه وتسليماته وفواتيره.</td></tr>
+    </table>
+    <span class="pill">تقدر تخصّص أي موظف بعينه: Hidden / View / Edit</span>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="eyebrow">الموديولات</div>
+    <h2>النظام مقسّم لمجموعات</h2>
+    <div class="cards">
+      <div class="card"><div class="n">MAIN</div><h3>الأساسيات</h3><p>لوحة التحكم · الخطط · CRM · العملاء · المشاريع · المهام · التسليمات</p></div>
+      <div class="card"><div class="n">SALES</div><h3>المبيعات</h3><p>الحملات · البريفات · العروض · عروض الأسعار · جهات الاتصال</p></div>
+      <div class="card"><div class="n">FINANCE</div><h3>المالية</h3><p>الفواتير · المدفوعات · <b>التحصيلات</b> · المصروفات · التكاليف · الشركاء · الأرباح</p></div>
+      <div class="card"><div class="n">TEAM / HR</div><h3>الفريق</h3><p>التوظيف · الموظفين · الحضور · الإجازات · الفرق · عبء العمل</p></div>
+      <div class="card"><div class="n">OPERATIONS</div><h3>العمليات</h3><p>الطلبات · الموافقات · أصول العميل · تقويم المحتوى</p></div>
+      <div class="card"><div class="n">WORKSPACE</div><h3>المساحة</h3><p>الملفات · التعليقات · الإشعارات · لوحة المتصدرين</p></div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="eyebrow">Playbook</div>
+    <h2>إزاي تضيف عميل جديد</h2>
+    <div class="steps">
+      <div class="step"><div class="num"></div><div class="t"><b>CRM/Leads</b> <span>← لِيد جديد ← حرّكه في المراحل ← Won ← "→ Client".</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>بيانات العقد</b> <span>← نوع الخدمة، الريتينر الشهري، دورة الفوترة، ويوم التحصيل.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>عيّن</b> <span>مدير الحساب والفريق.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>Projects</b> <span>← مشروع جديد (المهام بتتولّد تلقائيًا حسب نوع المشروع).</span></div></div>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="eyebrow">Playbook · الموديول الجديد</div>
+    <h2>التحصيلات — تعرف تحصّل من مين وإمتى</h2>
+    <div class="grid">
+      <ul>
+        <li><span class="b"></span><span>حط على العميل: <b>الريتينر + دورة الفوترة + يوم التحصيل</b>.</span></li>
+        <li><span class="b"></span><span>Collections بيتنبّأ <b>مين المستحق، كام، وإمتى</b> تلقائيًا.</span></li>
+        <li><span class="b"></span><span><b>Generate due</b> يعمل سجلات التحصيل، و<b>Mark collected</b> يسجّل دفعة تلقائي.</span></li>
+      </ul>
+      <ul>
+        <li><span class="b"></span><span>مؤشرات: المتوقع الشهر ده · المُحصّل · <b>المتأخر</b> · مستحق خلال 7 أيام.</span></li>
+        <li><span class="b"></span><span>تنبيه يومي للمالية بالمتأخر والقريب.</span></li>
+        <li><span class="b"></span><span>التحصيل بيدخل تلقائيًا في <b>الأرباح والشركاء</b>.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <div class="eyebrow">Playbook</div>
+    <h2>الفواتير والمدفوعات</h2>
+    <ul>
+      <li><span class="b"></span><span><b>Invoices</b> — فاتورة ببنود وخصم وضريبة؛ الإجمالي المطبوع = رصيد النظام. اطبع/احفظ PDF.</span></li>
+      <li><span class="b"></span><span><b>Payments</b> — سجّل دفعة على فاتورة (أو تتولّد تلقائي من التحصيلات).</span></li>
+      <li><span class="b"></span><span><b>Profitability</b> — الإيراد − المصروفات − التكاليف الثابتة، لكل عميل/مشروع.</span></li>
+      <li><span class="b"></span><span><b>Partners</b> — تقسيم 50/50 مع تسوية لكل بند وسجل كامل.</span></li>
+      <li><span class="b"></span><span>الفواتير والمدفوعات <b>ممنوع حذفها</b> — حماية مالية.</span></li>
+    </ul>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <div class="eyebrow">Playbook · الموظف</div>
+    <h2>طلبات الإجازة / الإذن / التأخير</h2>
+    <div class="steps">
+      <div class="step"><div class="num"></div><div class="t"><b>الموظف</b> <span>← من الداشبورد أو Requests ← "طلب إجازة/إذن/تأخير" ← يختار المدير ويبعت.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>المدير/HR</b> <span>← يجيله إشعار ← Pending My Approval ← موافقة/رفض.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>الموظف</b> <span>← يوصله إشعار بالنتيجة.</span></div></div>
+      <div class="step"><div class="num"></div><div class="t"><b>تلقائيًا</b> <span>← الإجازة تتسجّل في التقويم، والتأخير في الحضور.</span></div></div>
+    </div>
+    <span class="pill">يوافق: Admin · Manager · HR · Directors · أو المدير المختار</span>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <div class="eyebrow">Playbook</div>
+    <h2>المهام والتسليمات والـ HR</h2>
+    <div class="grid">
+      <ul>
+        <li><span class="b"></span><span><b>Tasks</b> — بورد بالسحب والإفلات، بتعيين لأعضاء الفريق.</span></li>
+        <li><span class="b"></span><span><b>Deliverables</b> — إرسال للمراجعة؛ العميل يوافق أو يطلب تعديل من بوابته.</span></li>
+        <li><span class="b"></span><span><b>Content Calendar</b> — جدولة المحتوى مع إشعارات.</span></li>
+      </ul>
+      <ul>
+        <li><span class="b"></span><span><b>Attendance</b> — تسجيل حضور تلقائي عند الدخول.</span></li>
+        <li><span class="b"></span><span><b>Payroll</b> — ملخّص رواتب شهري (بحد أقصى الراتب الكامل).</span></li>
+        <li><span class="b"></span><span><b>Recruitment</b> — مسار المرشّحين ← تحويل المقبول لموظف.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <div class="eyebrow">الأمان</div>
+    <h2>حماية على مستوى السيرفر</h2>
+    <ul>
+      <li><span class="b"></span><span><b>الباسوردات على السيرفر</b> — الدخول عبر Supabase Edge Function؛ الهاشات مابتنزلش للمتصفح خالص.</span></li>
+      <li><span class="b"></span><span><b>الحسابات مقفولة</b> — المفتاح العام مايقدرش يقرا ولا يعدّل الحسابات (تم القفل والتأكد).</span></li>
+      <li><span class="b"></span><span><b>PBKDF2 + salt</b> للباسوردات، وترقية تلقائية للقديم.</span></li>
+      <li><span class="b"></span><span><b>Backup Center</b> — نسخ احتياطية JSON + نسخ Supabase.</span></li>
+      <li><span class="b"></span><span>غيّر باسورد الـ Owner الافتراضي فورًا.</span></li>
+    </ul>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <div class="eyebrow">الإيميل والنشر</div>
+    <h2>التشغيل والصيانة</h2>
+    <div class="grid">
+      <ul>
+        <li><span class="b"></span><span><b>الإيميل عبر Resend</b> — الإشعارات ونسيت الباسورد.</span></li>
+        <li><span class="b"></span><span>لإرسال للفريق كله: <b>وثّق دومين</b> في Resend.</span></li>
+      </ul>
+      <ul>
+        <li><span class="b"></span><span><b>Vercel</b> يستضيف التطبيق · <b>Supabase</b> للبيانات.</span></li>
+        <li><span class="b"></span><span>بعد أي تعديل: نشر + refresh مرة واحدة.</span></li>
+      </ul>
+    </div>
+    <span class="pill">الروابط العامة: ?form= (لِيد) · ?brief= (بريف) · ?verify= (تأكيد)</span>
+  </section>
+
+  <!-- 13 -->
+  <section class="slide title">
+    <div class="logo"><div class="mark">M</div><div class="nm">Magnet OS</div></div>
+    <div class="big">النظام بيدير<br/><span class="g">الوكالة من الألف للياء</span></div>
+    <div class="sub">اكسب عميل · نفّذ الشغل · حصّل الفلوس · ادفع للفريق · تابع الأداء — بأمان وصلاحيات لكل دور.</div>
+    <div class="meta"><span>الدليل الكامل: <b>HANDBOOK.md</b></span><span>magnet-op.vercel.app</span></div>
+  </section>
+
+</div>
+
+<div class="hud">
+  <button id="prev" title="السابق">›</button>
+  <div class="count"><b id="cur">1</b>&nbsp;/&nbsp;<span id="tot">13</span></div>
+  <button id="next" title="التالي">‹</button>
+</div>
+
+<script>
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0, bar=document.getElementById('bar'), cur=document.getElementById('cur');
+  document.getElementById('tot').textContent=slides.length;
+  function show(n){ i=Math.max(0,Math.min(slides.length-1,n)); slides.forEach(function(s,k){ s.classList.toggle('on',k===i); }); bar.style.width=((i+1)/slides.length*100)+'%'; cur.textContent=i+1; }
+  function next(){ show(i+1); } function prev(){ show(i-1); }
+  document.getElementById('next').onclick=next;
+  document.getElementById('prev').onclick=prev;
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowLeft'||e.key==='PageDown'||e.key===' ') next();       // RTL: left = forward
+    else if(e.key==='ArrowRight'||e.key==='PageUp') prev();
+    else if(e.key==='Home') show(0);
+    else if(e.key==='End') show(slides.length-1);
+    else if(e.key==='f'||e.key==='F'){ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+  });
+  // click anywhere (not on buttons) to advance
+  document.getElementById('deck').addEventListener('click',function(e){ if(e.target.closest('.hud')) return; next(); });
+  show(0);
+</script>
+</body>
+</html>
