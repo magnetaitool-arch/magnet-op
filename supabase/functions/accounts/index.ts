@@ -40,6 +40,31 @@ async function dbUpsert(rows:any[]){ const r=await fetch(REST+'?on_conflict=id',
 async function dbDelete(id:string){ const r=await fetch(REST+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db del '+r.status); }
 const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.verifyToken; return c; };
 
+// ---- email helper (was previously called but never defined -> `forgot` crashed).
+// Sends via Resend directly when RESEND_API_KEY is set, otherwise POSTs to the
+// app's own /api/send-email Vercel function. Returns true only on a real success
+// so `forgot` never rotates a password when the mail could not be delivered.
+async function sendMail(to:string, subject:string, text:string):Promise<boolean>{
+  if(!to) return false;
+  try{
+    if(RESEND){
+      const r=await fetch('https://api.resend.com/emails',{
+        method:'POST',
+        headers:{ Authorization:'Bearer '+RESEND, 'Content-Type':'application/json' },
+        body:JSON.stringify({ from:FROM, to:[to], subject, text }),
+      });
+      return r.ok;
+    }
+    // No key on the function itself — fall back to the deployed email endpoint.
+    const r=await fetch(EMAIL_ENDPOINT,{
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ to, subject, text }),
+    });
+    return r.ok;
+  }catch{ return false; }
+}
+
 Deno.serve(async (req)=>{
   if(req.method==='OPTIONS') return new Response('ok',{headers:CORS});
   if(req.method!=='POST') return json({error:'POST only'},405);
@@ -102,8 +127,10 @@ Deno.serve(async (req)=>{
       const targetId = body.id && isAdmin(p.role) ? body.id : p.uid;
       const rec=findById(targetId); if(!rec) return json({ ok:false });
       if(targetId===p.uid && body.currentPassword!=null){ if(!(await verifyPw(body.currentPassword, rec.u.passwordHash||''))) return json({ ok:false, reason:'bad-current' }); }
-      const newHash = body.newHash || (body.newPassword? await makePbkdf2(body.newPassword) : null);
-      if(!newHash) return json({error:'no new password'},400);
+      // SECURITY: the server ALWAYS hashes. A client-supplied `newHash` is ignored
+      // so no caller can inject an arbitrary stored hash for an account.
+      if(!body.newPassword || String(body.newPassword).length<6) return json({error:'weak password'},400);
+      const newHash = await makePbkdf2(String(body.newPassword));
       const u={...rec.u, passwordHash:newHash, isDefaultPassword:false};
       await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]);
       return json({ ok:true });
@@ -118,5 +145,10 @@ Deno.serve(async (req)=>{
       return json({ ok:true });
     }
     return json({error:'unknown action'},400);
-  }catch(e){ return json({error:String((e as any)?.message||e)},500); }
+  }catch(e){
+    // Log the real error to the function logs, but return a generic message so
+    // internal details (SQL, stack traces) are never exposed to the browser.
+    console.error('accounts function error:', (e as any)?.message||e);
+    return json({error:'server error'},500);
+  }
 });

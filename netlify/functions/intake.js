@@ -9,8 +9,12 @@
 // only in Netlify env here, and this function will ONLY ever write the
 // whitelisted collections `candidates` / `leads`.
 //
+// NOTE: The live production project is jdylrthffifbhyrrhuqd (matches index.html and
+// the accounts Edge Function). Older docs referenced ksunojpdzunyqrxdmogd — that is
+// STALE; use jdylrthffifbhyrrhuqd everywhere.
+//
 // SETUP (Netlify -> Site settings -> Environment variables):
-//   SUPABASE_URL   = https://ksunojpdzunyqrxdmogd.supabase.co
+//   SUPABASE_URL   = https://jdylrthffifbhyrrhuqd.supabase.co
 //   SUPABASE_KEY   = <service_role key>   (server-side only — NEVER in the browser)
 //   (optional email notify, reuses Resend like send-email.js)
 //   RESEND_API_KEY = <resend key>

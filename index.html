@@ -7276,8 +7276,10 @@ function ProfileModal({ authUser, lang, onClose, onChanged }){
     // PRIMARY: server verifies current + stores new hash (hash never leaves the server).
     if(cfg&&cfg.url&&cfg.key){
       try {
-        const newHash=await AUTH.hashPassword(np);
-        const r=await acctApi(cfg,'changepw',{ token:getAcctToken(), currentPassword:cur, newHash });
+        // Send the plaintext new password over HTTPS; the server hashes it (PBKDF2)
+        // and stores it. The browser never computes or sends a password hash, so a
+        // crafted request can't inject an arbitrary stored hash.
+        const r=await acctApi(cfg,'changepw',{ token:getAcctToken(), currentPassword:cur, newPassword:np });
         if(r&&r.ok){ u.isDefaultPassword=false; setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes'); return; }
         if(r&&r.reason==='bad-current'){ setMsg(badMsg); return; }
       } catch(e){ /* unreachable -> legacy fallback */ }
