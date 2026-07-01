@@ -1,0 +1,19 @@
+{
+  "name": "magnet-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Magnet OS — internal agency operating system (single-file React PWA + Supabase). This package.json exists only for the backup/QA tooling and env docs; the app itself is static (index.html) and needs no build step.",
+  "type": "commonjs",
+  "scripts": {
+    "backup:local": "node tools/backup-local-data.js",
+    "backup:supabase": "node tools/backup-supabase-records.js",
+    "backup:validate": "node tools/validate-backup.js",
+    "restore:supabase:dry": "node tools/restore-supabase-records.js",
+    "restore:supabase": "node tools/restore-supabase-records.js --apply",
+    "check:config": "node tools/check-config.js",
+    "smoke": "node tools/smoke-test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
