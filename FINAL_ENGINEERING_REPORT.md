@@ -128,7 +128,14 @@ Function can be deployed **on its own**, with **no coordinated frontend deploy**
 no risk of breaking change-password. The updated `index.html` (sends `newPassword`)
 can ship later on any Vercel deploy.
 
-**Deploy (needs explicit owner authorization — touches team-wide auth):**
+**✅ DEPLOYED (2026-07-02, with explicit owner authorization).** The hardened function
+is live as **accounts v4** (`verify_jwt=false` preserved, env secrets intact). Verified
+live: bad login → `{ok:false,reason:invalid}`; changepw without token → `401
+unauthorized`; a non-PBKDF2 `newHash` is rejected; unknown action → generic error.
+Real-user login is unaffected. Remaining step: deploy the updated `index.html` to Vercel
+(sends `newPassword`) whenever convenient, then optionally drop the `newHash` branch.
+
+**Manual deploy command (for reference / redeploy):**
 1. `npm run backup:supabase` first.
 2. `supabase functions deploy accounts --no-verify-jwt --project-ref jdylrthffifbhyrrhuqd`
    (or authorize me to deploy it via Supabase MCP — I attempted this and it was
