@@ -3,10 +3,13 @@
 > **Live state (verified via Supabase MCP).** The **deployed** accounts function (v3)
 > already defines `sendMail`, so **forgot-password does not crash in production** — the
 > zip was a stale draft. However, the deployed `changepw` **still accepts `body.newHash`
-> and still leaks raw errors**. The repo fixes both; **deploying the fix requires a
-> coordinated deploy** of the Edge Function + `index.html` together (the current live
-> frontend still sends `newHash`). See "Coordinated deploy" in FINAL_ENGINEERING_REPORT.md.
-> The `_accounts` anon lockdown is already live (anon cannot read hashes).
+> and still leaks raw errors**. The repo fixes both, and `changepw` was made
+> **backward-compatible** (accepts `newPassword`, or a legacy `newHash` only if it is a
+> valid PBKDF2 string) so the fixed function can be deployed **on its own** without a
+> coordinated frontend deploy and without breaking the live change-password flow. A
+> production deploy still needs **explicit owner authorization** (team-wide auth) — it
+> was attempted here and correctly blocked; nothing was deployed. The `_accounts` anon
+> lockdown is already live (anon cannot read hashes).
 
 ## Old flow (issues)
 

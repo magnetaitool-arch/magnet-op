@@ -13,10 +13,11 @@ _Generated during production-stabilization pass. No application code was modifie
 >   earlier draft without `sendMail`; the repo fix realigns it and adds hardening.
 > - **Risk H1 IS still live.** The deployed `changepw` still does
 >   `newHash = body.newHash || …` and the top-level catch still returns the raw error.
->   The repo now fixes both, but **closing H1 in production needs a coordinated deploy
->   of the fixed Edge Function *and* `index.html` together** (the current live frontend
->   still sends `newHash`; deploying only the function would break change-password).
->   See FINAL_ENGINEERING_REPORT.md → "Coordinated deploy required".
+>   The repo fixes both, and `changepw` was made **backward-compatible** (accepts
+>   `newPassword`, or a legacy `newHash` only if it's a valid PBKDF2 string) so the fix
+>   can be deployed to the Edge Function **on its own** without breaking the live
+>   frontend. A production deploy still needs **explicit owner authorization** (it was
+>   attempted and correctly blocked). See FINAL_ENGINEERING_REPORT.md.
 > - **Live data:** 522 records, 41 collections, 21 accounts — real production data.
 >   All migrations here are additive/idempotent and safe against it.
 

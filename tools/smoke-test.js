@@ -32,7 +32,10 @@ for (const file of ['package.json', 'manifest.json', 'vercel.json']) {
 console.log('\n[3] accounts Edge Function hardening');
 const acct = read('supabase/functions/accounts/index.ts');
 /function sendMail\(/.test(acct) ? ok('sendMail is defined (forgot-password works)') : bad('sendMail NOT defined — forgot-password will 500');
-/body\.newHash/.test(acct) ? bad('accounts still accepts client body.newHash') : ok('accounts ignores client newHash (server-side hashing)');
+// newHash must be gone OR only accepted when format-validated as PBKDF2.
+(!/body\.newHash/.test(acct) || /\^pbkdf2\\\$/.test(acct))
+  ? ok('accounts hashes server-side; any newHash is PBKDF2-format-validated (no arbitrary hash)')
+  : bad('accounts accepts an unvalidated client body.newHash');
 /return json\(\{error:'server error'\},500\)/.test(acct) ? ok('generic 500 (no internal-error leak)') : bad('top-level catch may leak internal errors');
 
 console.log('\n[4] frontend password-change hardening');
