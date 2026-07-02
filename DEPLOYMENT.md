@@ -1,5 +1,12 @@
 # Magnet OS — Deployment & Go-Live Runbook
 
+> ⚠️ **This is the LEGACY Netlify runbook.** The live site runs on **Vercel** — use
+> **[DEPLOYMENT_FIXED.md](DEPLOYMENT_FIXED.md)** as the current, authoritative guide.
+> The production Supabase project is **`jdylrthffifbhyrrhuqd`** (an older draft of
+> this file said `ksunojpdzunyqrxdmogd` — that was wrong and is corrected below).
+> The "edit index.html line ~773 by hand" step is no longer needed: the real anon
+> key is already wired in `index.html`.
+
 دليل التشغيل أونلاين خطوة بخطوة. نفّذه مرة واحدة.
 
 ---
@@ -8,7 +15,7 @@
 1. افتح مشروعك على Supabase → **SQL Editor** → **New query**.
 2. الصق محتوى ملف `supabase-schema.sql` كامل واضغط **Run**. (بيعمل الجدول + الفهارس + الـ trigger + RLS.)
 3. روح **Project Settings → API** وانسخ:
-   - **Project URL** = `https://ksunojpdzunyqrxdmogd.supabase.co`
+   - **Project URL** = `https://jdylrthffifbhyrrhuqd.supabase.co`
    - **anon public key** (هتتحط في `index.html`).
    - **service_role key** (هتتحط في Netlify بس — **متحطهاش في الكود أبداً**).
 
@@ -25,7 +32,7 @@
 2. بعد النشر: **Site settings → Environment variables** وأضف:
    | Key | Value |
    |---|---|
-   | `SUPABASE_URL` | `https://ksunojpdzunyqrxdmogd.supabase.co` |
+   | `SUPABASE_URL` | `https://jdylrthffifbhyrrhuqd.supabase.co` |
    | `SUPABASE_KEY` | الـ **service_role** key |
    | `RESEND_API_KEY` | مفتاح Resend (اختياري للإيميل) |
    | `FROM_EMAIL` | `Magnet OS <onboarding@resend.dev>` |

@@ -42,10 +42,12 @@ const html = read('index.html');
   : (/newHash\s*=\s*await\s+AUTH\.hashPassword/.test(html) ? bad('PwResetForm still computes/sends newHash') : ok('no client-side newHash in change-password'));
 
 console.log('\n[5] dangerous-pattern scan');
-// admin123 may legitimately appear once as the seeded default; flag if it appears
-// as a hardcoded LOGIN comparison rather than the ensureDefaultOwner seed.
-const adminHits = (html.match(/admin123/g) || []).length;
-adminHits <= 1 ? ok(`admin123 appears ${adminHits}x (seed default only)`) : bad(`admin123 appears ${adminHits}x — check for hardcoded login bypass`);
+// admin123 legitimately appears as the ensureDefaultOwner seed + a comment. Only
+// a hardcoded LOGIN COMPARISON (e.g. password==='admin123') is a real bypass.
+const bypass = /(===?\s*['"]admin123['"])|(['"]admin123['"]\s*===?)|password\s*==?=?\s*['"]admin123['"]/.test(html);
+const seedOnly = /hashPassword\('admin123'\)/.test(html);
+bypass ? bad('admin123 used in a hardcoded login comparison (bypass risk)')
+       : ok(`admin123 present only as ${seedOnly ? 'ensureDefaultOwner seed' : 'text'} (no login bypass)`);
 /sb_secret_|service_role.{0,40}=\s*['"]eyJ/.test(html) ? bad('possible service_role/secret key in index.html') : ok('no service_role/secret key in index.html');
 /\/\.netlify\/functions\/intake/.test(html) ? bad('index.html calls netlify intake (Vercel default) — use /api/intake') : ok('no hardcoded netlify intake call in index.html');
 

@@ -1,5 +1,9 @@
 # Magnet OS — Handover / Continue in a new chat
 
+> 📌 **Start here after the stabilization pass:** read **[README.md](README.md)** and
+> **[FINAL_ENGINEERING_REPORT.md](FINAL_ENGINEERING_REPORT.md)**. Before deploying,
+> back up (`npm run backup:supabase`) and follow **[DEPLOYMENT_FIXED.md](DEPLOYMENT_FIXED.md)**.
+
 ## What this is
 **Magnet OS** — a single-file agency CRM/operating system for "Magnet".
 - Whole app lives in **`index.html`** (React via htm/babel, no build step).

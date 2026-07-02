@@ -3,6 +3,14 @@
 This documents everything changed in this pass, what you must do to finish, and
 the one remaining architectural item.
 
+> 📌 **A newer stabilization pass followed this one.** See
+> **[FINAL_ENGINEERING_REPORT.md](FINAL_ENGINEERING_REPORT.md)** for the latest
+> changes (forgot-password `sendMail` fix, server-only password hashing,
+> `/api/intake`, backup/restore tooling, idempotent RLS migrations). The service
+> worker cache is now **`magnet-os-v4`**. New guides:
+> **[SUPABASE_SECURITY_GUIDE.md](SUPABASE_SECURITY_GUIDE.md)** ·
+> **[AUTH_SECURITY_REPORT.md](AUTH_SECURITY_REPORT.md)**.
+
 ## ✅ Fixed in code (safe, no action needed beyond deploy)
 
 | # | Issue | What changed |
