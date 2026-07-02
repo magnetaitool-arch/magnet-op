@@ -110,6 +110,28 @@ Vercel. 6. Smoke-test login, forgot-password, `/api/intake`, and the `_accounts`
   `records_backup_001` or a `/backups` file (dry-run first).
 - Nothing here deletes data, so rollback never loses records.
 
+## Live verification (Supabase MCP, project `jdylrthffifbhyrrhuqd`, read-only)
+- `_accounts` anon lockdown **is applied in production** (all `records` anon policies
+  scoped `coll <> '_accounts'`; no open policy). Hashes are not anon-readable. Security
+  advisors clean (one non-applicable Supabase-Auth WARN).
+- The **deployed** accounts function (v3) already has `sendMail` → forgot-password does
+  not crash live. It **still accepts client `newHash`** and leaks raw errors → the H1
+  hardening in this repo is **not yet live**.
+- Live data: **522 records, 41 collections, 21 accounts**. All migrations are additive.
+
+## ⚠️ Coordinated deploy required (to close H1 in production)
+The fixed `changepw` ignores `newHash` and requires `newPassword`; the fixed
+`index.html` sends `newPassword`. These must deploy **together** — deploying only the
+Edge Function would break change-password for the current live frontend (which still
+sends `newHash`). Steps (needs owner approval — touches team-wide auth; and a Vercel
+token, not available in this session):
+1. `npm run backup:supabase` first.
+2. Deploy frontend: `vercel deploy --prod …` (updated `index.html` sending `newPassword`).
+3. Deploy function: `supabase functions deploy accounts --no-verify-jwt --project-ref jdylrthffifbhyrrhuqd`.
+4. Verify: change a password, confirm the request body carries `newPassword` (not `newHash`).
+This session **did not deploy** (no Vercel token + outward-facing team auth change) —
+nothing is faked; the repo holds the correct, ready-to-deploy versions of both files.
+
 ## Remaining risks
 - Business collections still anon-readable by design (Stage B / Supabase Auth needed
   for full isolation — DATA_MIGRATION_PLAN.md + SUPABASE_SECURITY_GUIDE.md).

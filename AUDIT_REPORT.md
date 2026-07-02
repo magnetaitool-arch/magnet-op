@@ -2,6 +2,24 @@
 
 _Generated during production-stabilization pass. No application code was modified before this report._
 
+> **⚑ Live verification addendum (via Supabase MCP, project `jdylrthffifbhyrrhuqd`, read-only).**
+> After the initial zip-based audit, the live project was inspected directly. Findings:
+> - **RLS lockdown IS live.** All four anon policies on `records` are scoped
+>   `coll <> '_accounts'`; no fully-open policy exists. **Risk H2 is already resolved
+>   in production** — anon cannot read password hashes. (Security advisors: clean; only
+>   a non-applicable "leaked-password protection" WARN for unused Supabase Auth.)
+> - **The DEPLOYED accounts function (v3) already defines `sendMail`** → **Risk C1
+>   (forgot-password crash) is NOT present in production.** The zip shipped a stale
+>   earlier draft without `sendMail`; the repo fix realigns it and adds hardening.
+> - **Risk H1 IS still live.** The deployed `changepw` still does
+>   `newHash = body.newHash || …` and the top-level catch still returns the raw error.
+>   The repo now fixes both, but **closing H1 in production needs a coordinated deploy
+>   of the fixed Edge Function *and* `index.html` together** (the current live frontend
+>   still sends `newHash`; deploying only the function would break change-password).
+>   See FINAL_ENGINEERING_REPORT.md → "Coordinated deploy required".
+> - **Live data:** 522 records, 41 collections, 21 accounts — real production data.
+>   All migrations here are additive/idempotent and safe against it.
+
 Baseline git commit: `ef51ad7` ("chore: baseline snapshot before stabilization").
 
 ---

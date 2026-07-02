@@ -1,5 +1,13 @@
 # Magnet OS — Auth Security Report (Phase 3)
 
+> **Live state (verified via Supabase MCP).** The **deployed** accounts function (v3)
+> already defines `sendMail`, so **forgot-password does not crash in production** — the
+> zip was a stale draft. However, the deployed `changepw` **still accepts `body.newHash`
+> and still leaks raw errors**. The repo fixes both; **deploying the fix requires a
+> coordinated deploy** of the Edge Function + `index.html` together (the current live
+> frontend still sends `newHash`). See "Coordinated deploy" in FINAL_ENGINEERING_REPORT.md.
+> The `_accounts` anon lockdown is already live (anon cannot read hashes).
+
 ## Old flow (issues)
 
 1. **`forgot` crashed.** `supabase/functions/accounts/index.ts` called `sendMail(...)`
