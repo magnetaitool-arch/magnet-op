@@ -1129,7 +1129,7 @@ a.mini{text-decoration:none;display:inline-block}
       // hosted: register the real external serviceworker.js (falls back silently)
       navigator.serviceWorker.register("/serviceworker.js").then(function(r){ try{ r.update(); }catch(e){} }).catch(function(){});
       // Purge any stale caches from older versions so old data/code can't linger.
-      try{ if(window.caches) caches.keys().then(function(ks){ ks.forEach(function(k){ if(k!=="magnet-os-v4") caches.delete(k); }); }); }catch(e){}
+      try{ if(window.caches) caches.keys().then(function(ks){ ks.forEach(function(k){ if(k!=="magnet-os-v5") caches.delete(k); }); }); }catch(e){}
       // If an EXISTING controlling worker gets replaced by a new version, reload once
       // to pick up fresh code (fresh installs have no controller, so they don't reload).
       try{ var _rl=false, _had=!!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", function(){ if(_rl||!_had) return; _rl=true; location.reload(); }); }catch(e){}

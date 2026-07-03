@@ -19,6 +19,25 @@
       "headers": [
         { "key": "Cache-Control", "value": "no-cache" }
       ]
+    },
+    {
+      "comment": "Always revalidate the app shell so a new deploy shows up automatically — no hard-refresh / cache-clearing needed.",
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
     }
   ]
 }
