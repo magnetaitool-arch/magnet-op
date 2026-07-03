@@ -1566,7 +1566,7 @@ const CURRENCIES = {
   EUR:{ code:'EUR', symbol:'€',  en:'EUR', ar:'يورو', after:false },
   KWD:{ code:'KWD', symbol:'د.ك', en:'KWD', ar:'د.ك',  after:true },
 };
-function getAppSettings(){ try { return Object.assign({ currency:'EGP', language:'en', theme:'light' }, JSON.parse(store.get(APP_SETTINGS_KEY)||'{}')); } catch(e){ return { currency:'EGP', language:'en', theme:'light' }; } }
+function getAppSettings(){ try { return Object.assign({ currency:'EGP', language:'en', theme:'dark' }, JSON.parse(store.get(APP_SETTINGS_KEY)||'{}')); } catch(e){ return { currency:'EGP', language:'en', theme:'dark' }; } }
 function setAppSettings(patch){ const next=Object.assign(getAppSettings(),patch); store.set(APP_SETTINGS_KEY, JSON.stringify(next)); return next; }
 function currencySymbol(code){ return (CURRENCIES[code]||CURRENCIES.USD).symbol; }
 // Central currency formatter. English -> "EGP 15,000"; Arabic -> "15,000 ج.م".
@@ -3064,14 +3064,18 @@ function mergeDB(local, cloud){
 async function cloudUpsert(cfg, coll, rec){
   if(!cfgComplete(cfg) || !rec || !rec.id) return;
   try {
-    await fetch(_rest(cfg,'records?on_conflict=id'),
+    const res = await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify([{ id:rec.id, coll, data:rec }]) });
-  } catch(e){ /* offline-safe */ }
+    if(!res.ok) syncQueuePush({ type:'upsert', coll, rec });      // server rejected -> retry later
+  } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); }      // offline -> durable queue, retry later
 }
 async function cloudDelete(cfg, id){
   if(!cfgComplete(cfg) || !id) return;
-  try { await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent(id)), { method:'DELETE', headers:_headers(cfg) }); } catch(e){}
+  try {
+    const res = await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent(id)), { method:'DELETE', headers:_headers(cfg) });
+    if(!res.ok) syncQueuePush({ type:'delete', id });
+  } catch(e){ syncQueuePush({ type:'delete', id }); }
 }
 async function cloudPushAll(cfg, db){
   if(!cfgComplete(cfg)) return;
@@ -3083,6 +3087,76 @@ async function cloudPushAll(cfg, db){
         body: JSON.stringify(rows.slice(i,i+200)) }); } catch(e){}
   }
 }
+
+/* ---- Durable offline sync queue (additive). Failed cloud writes no longer
+   vanish until the next bulk push: they are queued in localStorage and retried
+   automatically (on the browser 'online' event, every 30s while pending, and on
+   startup). Records are already saved locally BEFORE the cloud write, and the
+   cloud merge keeps the newest copy per id, so draining can never overwrite a
+   newer cloud record with a stale one being resurrected: the queued write is
+   simply upserted and the usual merge-by-updatedAt rules apply on next load.
+   Diagnostics: window.__syncQueue.{size,list,drain}. A small non-React chip
+   shows the pending count (click = retry now). ---- */
+const SYNC_QUEUE_KEY = 'tia_sync_queue';
+function syncQueueLoad(){ try { const l=JSON.parse(store.get(SYNC_QUEUE_KEY)||'[]'); return Array.isArray(l)?l:[]; } catch(e){ return []; } }
+function syncQueueSave(list){ try { store.set(SYNC_QUEUE_KEY, JSON.stringify(list.slice(-500))); } catch(e){} syncQueueChip(); }
+function syncQueuePush(item){
+  try {
+    const list=syncQueueLoad();
+    const keyOf=(x)=> x.type+':'+(x.id || (x.rec&&x.rec.id) || '');
+    const k=keyOf(item); const i=list.findIndex(x=>keyOf(x)===k);
+    item.queuedAt=nowISO(); item.tries=(i>=0?(list[i].tries||0):0);
+    if(i>=0) list[i]=item; else list.push(item);       // newest write per record wins in the queue
+    syncQueueSave(list);
+  } catch(e){}
+}
+let _sqDraining=false;
+async function syncQueueDrain(){
+  if(_sqDraining) return; _sqDraining=true;
+  try {
+    const cfg=getCfg(); if(!cfgComplete(cfg)) return;
+    const list=syncQueueLoad(); if(!list.length) return;
+    const keep=[];
+    for(const item of list){
+      let ok=false;
+      try {
+        if(item.type==='upsert' && item.rec && item.rec.id){
+          const res=await fetch(_rest(cfg,'records?on_conflict=id'),
+            { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
+              body: JSON.stringify([{ id:item.rec.id, coll:item.coll, data:item.rec }]) });
+          ok=res.ok;
+        } else if(item.type==='delete' && item.id){
+          const res=await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent(item.id)), { method:'DELETE', headers:_headers(cfg) });
+          ok=res.ok;
+        } else { ok=true; } // unknown/corrupt item -> drop rather than retry forever
+      } catch(e){ ok=false; }
+      if(!ok){ item.tries=(item.tries||0)+1; keep.push(item); }
+    }
+    syncQueueSave(keep);
+    if(!keep.length) window.__moLastSync=Date.now();
+  } finally { _sqDraining=false; }
+}
+function syncQueueChip(){
+  try {
+    const n=syncQueueLoad().length;
+    let el=document.getElementById('sync-pending-chip');
+    if(!n){ if(el) el.remove(); return; }
+    if(!el){
+      el=document.createElement('div'); el.id='sync-pending-chip';
+      el.style.cssText='position:fixed;left:14px;bottom:14px;z-index:9999;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
+      el.title='Pending cloud writes. They retry automatically; click to retry now.';
+      el.onclick=function(){ syncQueueDrain(); };
+      document.body.appendChild(el);
+    }
+    el.textContent='SYNC PENDING: '+n;
+  } catch(e){}
+}
+window.__syncQueue = { size:()=>syncQueueLoad().length, list:syncQueueLoad, drain:syncQueueDrain };
+try {
+  window.addEventListener('online', function(){ syncQueueDrain(); });
+  setInterval(function(){ if(syncQueueLoad().length) syncQueueDrain(); }, 30000);
+  setTimeout(function(){ syncQueueChip(); if(syncQueueLoad().length) syncQueueDrain(); }, 2500);
+} catch(e){}
 
 /* ---- Supabase Auth (optional). Falls back to local role switcher if absent. ---- */
 async function cloudSignIn(cfg, email, password){

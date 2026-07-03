@@ -28,12 +28,26 @@ automated verification — nothing is claimed as "passing" that was not actually
   + in-DB snapshot (migration `001`).
 - **#2 generic records table** — kept (non-destructive); normalization path documented.
 - **#1/#11/#12 monolith/UX** — kept working; refactor + role-UX documented as safe next steps.
+- **#8 durable sync queue (NOW WIRED, "ظبط كلو" pass)** — failed/offline cloud writes are
+  queued in localStorage (`tia_sync_queue`, deduped per record, capped 500) and retried
+  automatically (online event + 30s interval + startup). A brand-styled `SYNC PENDING: N`
+  chip (plain DOM, no emojis) appears while items wait; click = retry now. Diagnostics:
+  `window.__syncQueue`. **Verified live in the browser:** an RLS-rejected write stayed
+  queued (`tries:1`), the chip showed `SYNC PENDING: 1`, and zero rows leaked to the DB.
+- **#11 brand identity default** — the app previously DEFAULTED to the light/indigo
+  theme; new users never saw the dark/lime command-center identity. Default flipped to
+  `theme:'dark'` (`getAppSettings`). Saved per-user choices are untouched and the
+  light-mode toggle still works (verified: toggle saves `light`, returns to dark).
 
 ## Files changed / added
 **Edited (surgical):**
 - `supabase/functions/accounts/index.ts` — add `sendMail`; server-only hashing in
   `changepw`; generic error handler.
-- `index.html` — `PwResetForm` sends `newPassword` (no client hash). No other logic touched.
+- `index.html` — `PwResetForm` sends `newPassword` (no client hash); default theme
+  `'light'`→`'dark'` (one line); durable sync-queue module + enqueue-on-failure in
+  `cloudUpsert`/`cloudDelete` (isolated block, no React/render changes).
+- `supabase/migrations/004…sql` — hardened with `try_ts()` exception-safe casts so one
+  malformed `createdAt`/`_del` value can never abort writes or the backfill.
 - `netlify/functions/intake.js` — corrected project-ref comment.
 - `DEPLOYMENT.md`, `HANDOVER.md`, `SECURITY-UPGRADE.md` — corrected refs / pointers.
 - `.gitignore`, `.vercelignore` — ignore `/backups`, `.env`, `node_modules`, `tools`.
@@ -145,10 +159,27 @@ Real-user login is unaffected. Remaining step: deploy the updated `index.html` t
 Follow-up hardening: once all clients send `newPassword`, remove the `newHash`
 branch entirely (already the intent — see the code comment).
 
+## "ظبط كلو" pass addendum (2026-07-03)
+- **Live pre-migration backup taken:** `backups/magnet-os-backup-2026-07-03-13-10-21.json`
+  (502 business records, 40 collections, sha256 checksum). `_accounts` restore point =
+  in-DB snapshot `records_backup_001` created by migration 001 when applied.
+- **Dark/lime default + durable sync queue shipped and verified** in the browser preview
+  (fresh-load dark, zero console errors, queue retry + chip proven with an RLS-rejected
+  write, zero DB leakage, light-toggle persistence intact).
+- **Migrations 001→004 NOT yet applied to production:** the apply was attempted via
+  Supabase MCP and was blocked by the safety classifier pending your direct approval
+  (production DDL). Nothing was applied or faked. To apply: run the four files in
+  Supabase → SQL Editor in order, or re-authorize the MCP apply outside auto mode.
+  They are additive/idempotent; 004 now uses exception-safe casts.
+
 ## Remaining risks
 - Business collections still anon-readable by design (Stage B / Supabase Auth needed
   for full isolation — DATA_MIGRATION_PLAN.md + SUPABASE_SECURITY_GUIDE.md).
-- Durable pending-sync queue + visible conflict-review UI designed but not wired.
+- Conflict-review UI (manual resolution screen) still pending; the durable queue is
+  now wired and the merge remains non-destructive.
 - UI remains a single large `index.html` (working; extraction path documented).
 - Default `owner/admin123` seed exists on empty installs (flagged; rotate on first login).
 - Automated `npm run smoke`/`check:config` must be run by the maintainer (no Node here).
+- Vercel production deploy of the updated `index.html` still pending
+  (`npx vercel deploy --prod`) — until then, production users have the old light default
+  and no sync queue.
