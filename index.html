@@ -4855,7 +4855,15 @@ function App(){
   ];
   const go = (r)=>{ setRoute(r); if(canvasRef.current) canvasRef.current.scrollTop=0; };
 
-  const notifs = (db.notifications||[]).filter(n=>!n.userId || n.userId===user.id).filter(n=>!n.role || n.role===role);
+  // Notifications a user should see:
+  //  • personal ones (userId set) -> only if addressed to ME (even Owner doesn't see others' personal notes)
+  //  • role ones (role set) -> Owner/Admin see ALL of them; everyone else sees their own role (incl. its alias,
+  //    so e.g. a Manager sees Project-Manager-targeted ones). This is why the bell was empty for the Owner:
+  //    24 of 32 notifications are role-targeted (HR/Sales/PM) and the old filter required an exact role match.
+  const _seesAllNotifs = (role==='Owner' || aliasRole(role)==='Admin');
+  const notifs = (db.notifications||[])
+    .filter(n=> !n.userId || n.userId===user.id)
+    .filter(n=> !n.role || _seesAllNotifs || n.role===role || aliasRole(n.role)===aliasRole(role));
   const unread = notifs.filter(n=>!n.read).length;
   // Sound + alert when a new notification or a new chat message (from someone else) arrives.
   const othersChat = (db.chatMessages||[]).filter(m=>m.senderId&&m.senderId!==user.id).length;
