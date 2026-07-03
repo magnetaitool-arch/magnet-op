@@ -32,8 +32,8 @@ Full list + local `.env` for the tools: see **`.env.example`**.
 ## Vercel setup
 1. Import the repo (framework preset: **Other** — the app is static + `/api`).
 2. Set the env vars above. Redeploy.
-3. `.vercelignore` already excludes `magnetrun.html`, `tools`, `netlify`, SQL, and
-   backups from the deploy.
+3. `.vercelignore` excludes `tools`, `netlify`, SQL, and backups from the deploy.
+   `magnetrun.html` IS deployed (it is the "Magnet Run" arcade game linked from the app).
 
 ## Supabase setup
 1. `npm run backup:supabase` (keep the file).

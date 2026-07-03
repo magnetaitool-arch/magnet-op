@@ -141,7 +141,7 @@ Effectively **last-write-wins by timestamp, non-destructive on absence**. There 
 - **L1 — No durable pending-sync queue / explicit conflict review.** Offline writes are safe but silently reconciled in bulk; there's no visible "pending changes / conflict detected" queue with per-item retry. _(Brief issue #8.)_
 - **L2 — Monolithic `index.html`.** Fragile to maintain; already section-marked so a later extraction is low-risk. _(Brief issue #1.)_
 - **L3 — Music autoplay.** A hidden YouTube player uses `autoplay:1` but is gated by `musicGetOn()` (off unless the user enabled it), so it does not autoplay for new users. Acceptable; noted for Phase 7.
-- **L4 — `magnetrun.html`** (1.35 MB) is a second, older full copy of the app in the repo root — dead weight that can confuse deploys. Not referenced by any config.
+- **L4 — `magnetrun.html`** (1.35 MB) — **CORRECTION:** initially assumed dead weight, but it is the **"Magnet Run" arcade game**, linked from `index.html:3789` (`<a href="magnetrun.html">Play Magnet Run</a>`) and it writes back `gameScores`. It is a live feature — **kept**. (It was briefly listed in `.vercelignore`; that was removed so the game deploys to Vercel and the Play button doesn't 404.)
 
 ---
 

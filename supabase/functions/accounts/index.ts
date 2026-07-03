@@ -65,12 +65,51 @@ async function sendMail(to:string, subject:string, text:string):Promise<boolean>
   }catch{ return false; }
 }
 
+// ---- Rate limiting (brute-force protection for login/forgot). Stored in the
+// records table under coll '_ratelimit', keyed by a hash of action+identifier.
+// FAIL-OPEN: any error here lets the request through, so a limiter glitch can
+// NEVER lock out real staff. Sliding 15-minute window, 10 failed attempts.
+const RL_WINDOW_MS = 15*60*1000;
+const RL_MAX = 10;
+async function rlKey(action:string, id:string){
+  const h=await crypto.subtle.digest('SHA-256', enc.encode(action+':'+String(id||'').trim().toLowerCase()));
+  return 'rl-'+hex(h).slice(0,32);
+}
+async function rlBlocked(action:string, id:string):Promise<boolean>{
+  try{
+    const key=await rlKey(action,id);
+    const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+    if(!r.ok) return false;
+    const rows=await r.json(); const d=(rows[0]&&rows[0].data)||null;
+    if(!d) return false;
+    if(Date.now()-(d.windowStart||0) > RL_WINDOW_MS) return false; // window expired
+    return (d.count||0) >= RL_MAX;
+  }catch{ return false; } // fail-open
+}
+async function rlBump(action:string, id:string){
+  try{
+    const key=await rlKey(action,id);
+    const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+    let d:any={count:0, windowStart:Date.now()};
+    if(r.ok){ const rows=await r.json(); const ex=rows[0]&&rows[0].data; if(ex && Date.now()-(ex.windowStart||0)<=RL_WINDOW_MS) d={count:ex.count||0, windowStart:ex.windowStart}; }
+    d.count=(d.count||0)+1;
+    await dbUpsert([{ id:key, coll:'_ratelimit', data:d }]);
+  }catch{ /* fail-open */ }
+}
+async function rlClear(action:string, id:string){
+  try{ const key=await rlKey(action,id); await fetch(REST+'?id=eq.'+encodeURIComponent(key), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); }catch{}
+}
+
 Deno.serve(async (req)=>{
   if(req.method==='OPTIONS') return new Response('ok',{headers:CORS});
   if(req.method!=='POST') return json({error:'POST only'},405);
   let body:any={}; try{ body=await req.json(); }catch{ return json({error:'bad json'},400); }
   const action=body.action;
   try{
+    // Throttle credential-guessing on login/forgot before doing any work.
+    if((action==='login'||action==='forgot') && await rlBlocked(action, body.identifier)){
+      return json({ ok:false, reason:'invalid' }); // same generic answer — no hint that it's a lockout
+    }
     const rows=await dbAll();
     const accounts=rows.map((r:any)=>({ rowId:r.id, u:r.data||{} }));
     const findByLogin=(id:string)=>{ id=(id||'').trim().toLowerCase(); return accounts.find((a:any)=> (a.u.email||'').toLowerCase()===id || (a.u.username||'').toLowerCase()===id); };
@@ -78,9 +117,10 @@ Deno.serve(async (req)=>{
 
     if(action==='login'){
       const rec=findByLogin(body.identifier);
-      if(!rec) return json({ ok:false, reason:'invalid' });
+      if(!rec){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
       if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
-      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))) return json({ ok:false, reason:'invalid' });
+      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
+      await rlClear('login', body.identifier); // good login resets the counter
       const u={...rec.u, lastLogin:nowISO()};
       if(!String(u.passwordHash||'').startsWith('pbkdf2$')){ try{ u.passwordHash=await makePbkdf2(body.password); }catch{} }
       await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]);
@@ -145,6 +185,7 @@ Deno.serve(async (req)=>{
       return json({ ok:true });
     }
     if(action==='forgot'){
+      await rlBump('forgot', body.identifier); // throttle reset-spam / user-enumeration probing
       const rec=findByLogin(body.identifier);
       if(rec && rec.u.email){
         const temp=hex(crypto.getRandomValues(new Uint8Array(5)).buffer);

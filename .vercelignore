@@ -4,7 +4,6 @@
 /backups
 node_modules
 tools
-magnetrun.html
 DEPLOYMENT.md
 GUIDEBOOK_AR.md
 netlify

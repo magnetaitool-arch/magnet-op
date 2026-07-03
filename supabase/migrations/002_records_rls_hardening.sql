@@ -31,16 +31,18 @@ drop policy if exists records_anon_delete   on public.records;
 drop policy if exists records_anon_public_read   on public.records;
 drop policy if exists records_anon_public_insert on public.records;
 
--- anon may read/write EVERY collection EXCEPT _accounts. _accounts is reachable
--- only through the service_role Edge Function (which bypasses RLS).
+-- anon may read/write EVERY collection EXCEPT the server-only ones:
+--   _accounts   — password hashes (must never reach the browser)
+--   _ratelimit  — brute-force counters (anon must not clear its own limiter)
+-- Both are reachable only through the service_role Edge Function (bypasses RLS).
 create policy records_anon_select on public.records
-  for select to anon using      (coll <> '_accounts');
+  for select to anon using      (coll not in ('_accounts','_ratelimit'));
 create policy records_anon_insert on public.records
-  for insert to anon with check (coll <> '_accounts');
+  for insert to anon with check (coll not in ('_accounts','_ratelimit'));
 create policy records_anon_update on public.records
-  for update to anon using      (coll <> '_accounts') with check (coll <> '_accounts');
+  for update to anon using      (coll not in ('_accounts','_ratelimit')) with check (coll not in ('_accounts','_ratelimit'));
 create policy records_anon_delete on public.records
-  for delete to anon using      (coll <> '_accounts');
+  for delete to anon using      (coll not in ('_accounts','_ratelimit'));
 
 -- Remove leftover SECURITY DEFINER functions callable by anon (advisor findings
 -- from an earlier Auth attempt; the app does not use them).
@@ -51,7 +53,7 @@ do $$ begin
 end $$;
 
 insert into public.migration_audit (migration, note)
-values ('002_records_rls_hardening', 'anon blocked from _accounts (select/insert/update/delete); revoked leftover definer funcs');
+values ('002_records_rls_hardening', 'anon blocked from _accounts + _ratelimit (select/insert/update/delete); revoked leftover definer funcs');
 
 -- ---------- verification ----------
 -- With the ANON key, this must now return 401/403 (was 200 before):

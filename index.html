@@ -4485,7 +4485,7 @@ function App(){
           .on('postgres_changes', { event:'*', schema:'public', table:'records' }, (p)=>{
             try {
               if(p.eventType==='DELETE'){ const o=p.old||{}; removeRow(o.coll, o.id); return; }
-              const n=p.new||{}; if(n.coll==='_accounts') return; applyRow(n.coll, Object.assign({id:n.id}, n.data||{}));
+              const n=p.new||{}; if(n.coll==='_accounts'||n.coll==='_ratelimit') return; applyRow(n.coll, Object.assign({id:n.id}, n.data||{}));
             } catch(e){}
           })
           .subscribe();
