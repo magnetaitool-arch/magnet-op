@@ -5033,7 +5033,7 @@ function App(){
    FORM SCHEMAS + ROUTE RENDERER (all sections)
    ============================================================================ */
 const FORM_SCHEMAS = {
-  leads:[{k:'name',label:'Lead name',req:true},{k:'company',label:'Company'},{k:'brand',label:'Brand',type:'select',opts:BRANDS},{k:'source',label:'Source',type:'select',opts:['Referral','Instagram','Website','Ads','Cold','Event']},{k:'serviceInterest',label:'Service',type:'select',opts:PROJECT_TYPES},{k:'value',label:'Est. value',type:'number'},{k:'status',label:'Stage',type:'select',opts:ST.leadStage},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'notes',label:'Notes',type:'textarea'}],
+  leads:[{k:'name',label:'Lead name',req:true},{k:'company',label:'Company'},{k:'brand',label:'Brand',type:'select',opts:BRANDS},{k:'source',label:'Source',type:'select',opts:['Referral','Instagram','Website','Ads','Cold','Event']},{k:'serviceInterest',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES},{k:'value',label:'Est. value',type:'number'},{k:'status',label:'Stage',type:'select',opts:ST.leadStage},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'notes',label:'Notes',type:'textarea'}],
   candidates:[
     {k:'fullName',label:'Full name',req:true,group:'Personal'},{k:'age',label:'Age',type:'number',group:'Personal'},
     {k:'mobile',label:'Mobile',req:true,group:'Personal'},{k:'otherPhones',label:'Other phone(s)',group:'Personal'},
