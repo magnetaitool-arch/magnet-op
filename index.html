@@ -3667,6 +3667,18 @@ function Field({ f, value, onChange, db, rec }) {
         ${opts.length===0?html`<div class="muted" style=${{fontSize:12,padding:6}}>—</div>`:''}</div>
       </div></label>`;
   }
+  if(f.type==='multi'){ // multi-select from a fixed option list (stores an array of strings)
+    const arr = Array.isArray(value)?value : (value?[value]:[]);
+    const opts = f.opts||[];
+    const toggle = v => { const s=new Set(arr); s.has(v)?s.delete(v):s.add(v); set([...s]); };
+    return html`<label class="fld full"><span>${f.label}</span>
+      <div class="multiref">
+        ${arr.length?html`<div class="mr-chips">${arr.map(v=>html`<span class="mr-chip" key=${v}>${v}<button type="button" onClick=${()=>toggle(v)}>×</button></span>`)}</div>`:''}
+        <div class="mr-list">${opts.map(v=>html`<label class="mr-opt ${arr.includes(v)?'on':''}" key=${v}>
+          <input type="checkbox" checked=${arr.includes(v)} onChange=${()=>toggle(v)}/><span>${v}</span></label>`)}
+        ${opts.length===0?html`<div class="muted" style=${{fontSize:12,padding:6}}>—</div>`:''}</div>
+      </div></label>`;
+  }
   if(f.type==='checkbox') return html`<label class="fld" style=${{flexDirection:'row',alignItems:'center',gap:9}}>
     <input type="checkbox" checked=${!!value} onChange=${e=>set(e.target.checked)} style=${{width:16,height:16,accentColor:'var(--lime)'}}/>
     <span style=${{textTransform:'none',letterSpacing:0,fontSize:13,color:'var(--ink-2)'}}>${f.label}</span></label>`;
@@ -5045,7 +5057,7 @@ const FORM_SCHEMAS = {
     {k:'mainContactPhone',label:'Phone',req:true,group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
     {k:'location',label:'Location',group:'Business'},{k:'targetAudience',label:'Target audience',group:'Business'},{k:'brandTone',label:'Brand tone',group:'Business'},
     {k:'competitors',label:'Competitors',group:'Business'},{k:'googleDriveFolder',label:'Drive folder',group:'Business'},{k:'brandGuidelinesLink',label:'Brand guidelines',group:'Business'},
-    {k:'serviceType',label:'Primary service',req:true,group:'Contract'},{k:'serviceIds',label:'Services (select all that apply)',type:'multiref',coll:'services',group:'Contract'},{k:'monthlyRetainer',label:'Monthly retainer',type:'number',group:'Contract'},
+    {k:'serviceType',label:'Primary service',req:true,type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},{k:'monthlyRetainer',label:'Monthly retainer',type:'number',group:'Contract'},
     {k:'billingCycle',label:'Billing cycle',type:'select',opts:BILLING_CYCLES,group:'Contract'},{k:'contractStartDate',label:'Contract start',type:'date',group:'Contract'},
     {k:'contractEndDate',label:'Contract end',type:'date',group:'Contract'},{k:'renewalDate',label:'Renewal date',type:'date',group:'Contract'},
     {k:'collectionDay',label:'Collection day (1-28)',type:'number',group:'Contract'},{k:'nextCollectionDate',label:'Next collection date',type:'date',group:'Contract'},
