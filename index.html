@@ -121,6 +121,18 @@ input,textarea{font-family:inherit}
 
 .nav{flex:1;overflow-y:auto;padding:14px 12px;min-height:0}
 .nav-group{margin-bottom:6px}
+/* collapsible "More" section (focused nav) */
+.nav-more{margin-top:6px;border-top:1px solid var(--line)}
+.nav-more>summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
+  font-size:9.5px;letter-spacing:.22em;color:var(--ink-3);font-weight:700;
+  padding:14px 12px 12px;text-transform:uppercase;user-select:none;
+}
+.nav-more>summary::-webkit-details-marker{display:none}
+.nav-more>summary::after{content:"";width:6px;height:6px;border-right:1.6px solid var(--ink-4);border-bottom:1.6px solid var(--ink-4);transform:rotate(45deg);transition:.18s;margin-inline-start:auto;margin-inline-end:2px}
+.nav-more[open]>summary::after{transform:rotate(-135deg)}
+.nav-more>summary:hover{color:var(--ink-2)}
+.nav-more[open]>summary{color:var(--ink-2)}
 .nav-label{
   font-size:9.5px;letter-spacing:.22em;color:var(--ink-4);
   font-weight:700;padding:14px 12px 8px;text-transform:uppercase;
@@ -4889,6 +4901,24 @@ function App(){
     {group:'Fun', items:[['leaderboard','Leaderboard','trend'],['arcade','Arcade','bolt']]},
     {group:'System', items:[['users','Users & Permissions','people'],['rolesPermissions','Roles & Permissions','shield'],['backupCenter','Backup Center','download'],['dataHealth','Data Health','pulse'],['systemQA','System QA','check'],['settings','Settings','settings']]},
   ];
+  // FOCUSED NAV: the handful of modules each role uses daily are shown up top; the
+  // rest (that the role can still access) collapse under "More". Keyed by the BASE
+  // permission profile (aliasRole), so all 7 simple roles + legacy names resolve.
+  // This ONLY reorders the display — access is unchanged (same 3 gates still apply).
+  const ROLE_PRIMARY = {
+    Admin:['dashboard','clients','projects','tasks','approvalCenter','invoices','employees'],
+    'Project Manager':['dashboard','projects','tasks','approvalCenter','clients','workload','deliverables'],
+    Sales:['dashboard','leads','clients','campaigns','proposals','tasks'],
+    Designer:['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
+    'Video Editor':['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
+    'Social Media':['dashboard','tasks','deliverables','calendar','campaigns','clientAssets'],
+    'Marketing Director':['dashboard','campaigns','leads','clients','calendar','reports'],
+    'Art Director':['dashboard','projects','tasks','deliverables','calendar','approvalCenter'],
+    Accountant:['dashboard','invoices','payments','collections','expenses','profitability'],
+    HR:['dashboard','employees','candidates','attendance','leaves','requests'],
+    Client:['dashboard','projects','deliverables','approvalCenter'],
+    _default:['dashboard','tasks','deliverables','clientAssets','calendar','requests'],
+  };
   const go = (r)=>{ setRoute(r); if(canvasRef.current) canvasRef.current.scrollTop=0; };
 
   // Notifications a user should see:
@@ -4944,14 +4974,32 @@ function App(){
         <button class="icon-btn nav-close" onClick=${()=>setNavOpen(false)} title="Close menu"><span style=${{fontSize:18}}>×</span></button>
       </div>
       <nav class="nav">
-        ${NAVGROUPS.map(g=>{ const items=g.items.filter(it=>canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role)); if(!items.length) return null;
-          return html`<div class="nav-group" key=${g.group}>
-            <div class="nav-label">${t(g.group)}</div>
-            ${items.map(it=>html`<button key=${it[0]} class="nav-item ${route===it[0]?'active':''}" onClick=${()=>goM(it[0])} title=${it[3]==='new'?'New feature':''}>
+        ${(()=>{
+          const allowed = it=>canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role);
+          const navItem = it=>html`<button key=${it[0]} class="nav-item ${route===it[0]?'active':''}" onClick=${()=>goM(it[0])} title=${it[3]==='new'?'New feature':''}>
               ${React.createElement(Icon[it[2]]||Icon.command)}<span>${t(it[0])!==it[0]?t(it[0]):it[1]}</span>
               ${it[3]==='new'&&html`<span class="new-badge">${lang==='ar'?'جديد':'New'}</span>`}
-              ${it[0]==='notifications'&&unread>0&&html`<span class="badge">${unread}</span>`}</button>`)}</div>`;
-        })}
+              ${it[0]==='notifications'&&unread>0&&html`<span class="badge">${unread}</span>`}</button>`;
+          // all items this user may see, kept in NAVGROUPS order
+          const all=[]; NAVGROUPS.forEach(g=>g.items.forEach(it=>{ if(allowed(it)) all.push(it); }));
+          const primaryKeys = ROLE_PRIMARY[aliasRole(role)] || ROLE_PRIMARY._default;
+          const primary = primaryKeys.map(k=>all.find(it=>it[0]===k)).filter(Boolean);
+          const pset = new Set(primary.map(it=>it[0]));
+          const moreGroups = NAVGROUPS.map(g=>({group:g.group, items:g.items.filter(it=>allowed(it)&&!pset.has(it[0]))})).filter(g=>g.items.length);
+          const activeInMore = moreGroups.some(g=>g.items.some(it=>it[0]===route));
+          if(!primary.length){ // fallback: no curated set -> show everything grouped (old behaviour)
+            return moreGroups.map(g=>html`<div class="nav-group" key=${g.group}><div class="nav-label">${t(g.group)}</div>${g.items.map(navItem)}</div>`);
+          }
+          return html`
+            <div class="nav-group">
+              <div class="nav-label">${lang==='ar'?'الأساسية':'Main'}</div>
+              ${primary.map(navItem)}
+            </div>
+            ${moreGroups.length?html`<details class="nav-more" open=${activeInMore}>
+              <summary>${lang==='ar'?'المزيد':'More'}</summary>
+              ${moreGroups.map(g=>html`<div class="nav-group" key=${g.group}><div class="nav-label">${t(g.group)}</div>${g.items.map(navItem)}</div>`)}
+            </details>`:''}`;
+        })()}
       </nav>
       <div class="side-foot">
         <div class="user" onClick=${()=>setProfileOpen(true)} style=${{cursor:'pointer'}}><${Avatar} name=${user.name} src=${user.account&&user.account.avatar}/>
@@ -5399,15 +5447,19 @@ function DashboardView({ ctx, byBrand }){
       </div></div>`;
   }
 
-  // EMPLOYEE (Designer/Video Editor) dashboard
-  if(role==='Designer'||role==='Video Editor'){
+  // CREATIVE dashboard (Designer / Content Creator / Video / Reel / Social / Art Director)
+  // Uses aliasRole so all creative role names — incl. the new "Creative" role — land here
+  // (was an exact role==='Designer' check, so "Creative" fell through to the admin view).
+  if(['Designer','Video Editor','Social Media','Art Director'].includes(aliasRole(role))){
     const myTasks = (db.tasks||[]).filter(t=>t.assignedTo===user.id||t.assignedTo===user.name);
+    const myDlv = (db.deliverables||[]).filter(d=>d.assignedTo===user.id||d.assignedTo===user.name);
     return html`<div class="view">
-      <${Head} eyebrow="My Work" title=${'Hello, '+user.name} desc="Your assigned tasks and deadlines."/>
-      <div class="grid g-3 stagger" style=${{marginBottom:18}}>
-        <${KPI} label="Active tasks" value=${myTasks.filter(t=>t.status!=='Done').length} icon="check"/>
-        <${KPI} label="Overdue" value=${myTasks.filter(t=>t.status!=='Done'&&isOverdue(t.dueDate)).length} icon="alert"/>
-        <${KPI} label="Done" value=${myTasks.filter(t=>t.status==='Done').length} icon="trend"/>
+      <${Head} eyebrow="My Work" title=${(ctx.lang==='ar'?'أهلاً، ':'Hello, ')+(user.name||user.fullName||'')} desc=${ctx.lang==='ar'?'شغلك ومواعيدك النهاردة.':'Your assigned tasks and deadlines.'}/>
+      <div class="grid g-4 stagger" style=${{marginBottom:18}}>
+        <${KPI} label=${ctx.lang==='ar'?'مهامي المستحقة النهاردة':'Due today'} value=${myTasks.filter(t=>t.status!=='Done'&&t.dueDate===todayISO()).length} icon="clock"/>
+        <${KPI} label=${ctx.lang==='ar'?'مهام نشطة':'Active tasks'} value=${myTasks.filter(t=>t.status!=='Done').length} icon="check"/>
+        <${KPI} label=${ctx.lang==='ar'?'متأخرة':'Overdue'} value=${myTasks.filter(t=>t.status!=='Done'&&isOverdue(t.dueDate)).length} icon="alert"/>
+        <${KPI} label=${ctx.lang==='ar'?'تسليمات مطلوبة':'Deliverables to submit'} value=${myDlv.filter(d=>!['Approved','Delivered','Client Review'].includes(d.status)).length} icon="docs"/>
       </div>
       <div style=${{marginBottom:18}}><${QuickTimeOff} ctx=${ctx}/></div>
       <${Panel} title="My tasks" pad=${false}>
@@ -5433,8 +5485,8 @@ function DashboardView({ ctx, byBrand }){
       <${ProfitabilityView} ctx=${ctx} asDashboard=${true} embedded=${true}/></div>`;
   }
 
-  // SALES dashboard
-  if(role==='Sales'){
+  // SALES dashboard (Sales + Account Manager, via aliasRole)
+  if(aliasRole(role)==='Sales'){
     const pipe = leads.filter(l=>!['Won','Lost'].includes(l.status));
     return html`<div class="view">
       <${Head} eyebrow="Sales" title="Pipeline" desc="Your leads and deals."/>
@@ -5447,6 +5499,29 @@ function DashboardView({ ctx, byBrand }){
       <${Panel} title="Pipeline by stage">${ST.leadStage.filter(s=>!['Won','Lost','Follow-up Later'].includes(s)).map(s=>{const c=leads.filter(l=>l.status===s);if(!c.length)return null;
         return html`<div class="lrow" key=${s}><div class="li-t"><b style=${{fontWeight:600}}>${s}</b><span>${c.length} lead(s)</span></div>
           <span class="li-meta lime">${money(c.reduce((a,l)=>a+(+l.value||0),0))}</span></div>`;})}<//></div>`;
+  }
+
+  // HR dashboard (people-focused home)
+  if(aliasRole(role)==='HR'){
+    const empsAll=(db.employees||[]).filter(e=>!['Archived','Resigned','Terminated'].includes(e.status));
+    const cands=(db.candidates||[]).filter(c=>!['Hired','Rejected','Declined'].includes(c.stage||c.status));
+    const pendingReqs=(db.approvalRequests||[]).filter(r=>['Pending','Submitted','Open'].includes(r.status));
+    const onLeave=empsAll.filter(e=>e.status==='On Leave').length;
+    return html`<div class="view">
+      <${Head} eyebrow="People" title=${ctx.lang==='ar'?'الموارد البشرية':'HR'} desc=${ctx.lang==='ar'?'فريقك، الحضور، الإجازات والتوظيف.':'Your team, attendance, leaves and hiring.'}/>
+      <div class="grid g-4 stagger" style=${{marginBottom:18}}>
+        <${KPI} label=${ctx.lang==='ar'?'موظفين نشطين':'Active employees'} value=${empsAll.length} icon="people"/>
+        <${KPI} label=${ctx.lang==='ar'?'في إجازة':'On leave'} value=${onLeave} icon="calendar"/>
+        <${KPI} label=${ctx.lang==='ar'?'مرشحين':'Open candidates'} value=${cands.length} icon="target"/>
+        <${KPI} label=${ctx.lang==='ar'?'طلبات معلّقة':'Pending requests'} value=${pendingReqs.length} icon="shield"/>
+      </div>
+      <div style=${{marginBottom:18}}><${QuickTimeOff} ctx=${ctx}/></div>
+      <${Panel} title=${ctx.lang==='ar'?'مسار التوظيف':'Recruitment pipeline'}>
+        ${cands.slice(0,8).map(c=>html`<div class="lrow" key=${c.id}>
+          <div class="li-ic">${React.createElement(Icon.people)}</div>
+          <div class="li-t"><b>${c.fullName||c.name||'—'}</b><span>${(c.position||'')+' · '+(c.stage||c.status||'New')}</span></div></div>`)}
+        ${cands.length===0&&html`<div class="muted" style=${{fontSize:12}}>${ctx.lang==='ar'?'مفيش مرشحين حالياً.':'No candidates yet.'}</div>`}
+      <//></div>`;
   }
 
   // ADMIN / PM full dashboard
@@ -6713,7 +6788,13 @@ function TasksView({ ctx, visible, ce }){
       <select class="sel" value=${view} onChange=${e=>setView(e.target.value)}>${Object.keys(VIEWS).map(v=>html`<option key=${v} value=${v}>${v}</option>`)}</select>
       <div class="seg"><button class=${layout==='board'?'on':''} onClick=${()=>setLayout('board')}>Board</button><button class=${layout==='list'?'on':''} onClick=${()=>setLayout('list')}>List</button></div>
       ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})}>${React.createElement(Icon.plus)} New task</button>`}<//>
-    ${layout==='board'
+    ${rows.length===0
+      ? html`<${EmptyState} icon="check"
+          title=${ctx.lang==='ar'?'مفيش تاسكات هنا':'No tasks here'}
+          text=${ctx.lang==='ar'?'مفيش تاسكات في العرض ده دلوقتي — جرّب عرض تاني من القايمة فوق، أو استنى ما يتسند ليك شغل.':'No tasks in this view yet — try another view above, or wait for work to be assigned to you.'}
+          actionLabel=${ce?(ctx.lang==='ar'?'تاسك جديد':'New task'):null}
+          onAction=${ce?(()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})):null}/>`
+      : layout==='board'
       ? html`<${Kanban} items=${rows} columns=${ST.task.filter(s=>s!=='Cancelled')} field="status"
           canMove=${ce}
           onMove=${(id,s)=>ctx.updateRecord('tasks',id,{status:s})} onCard=${t=>setSel(t)}
