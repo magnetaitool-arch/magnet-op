@@ -1845,7 +1845,13 @@ function canManagePermissions(role){
 }
 
 const OPEN_SECTIONS = ['leaderboard','arcade']; // fun/engagement modules visible to everyone
-const canView    = (section, role) => OPEN_SECTIONS.includes(section) || (VIEW[aliasRole(role)]||[]).includes(section);
+// SYSTEM-CONFIG modules only the Owner/Admin may ever see. Regular staff must not be
+// able to open Settings (cloud config, enabled modules, currency), export/restore all
+// data, or touch users/roles/diagnostics. Hard-locked below (not grantable per-user).
+const ADMIN_ONLY_SECTIONS = ['settings','backupCenter','dataHealth','systemQA','users','rolesPermissions'];
+const isAdminRole = (role)=> role==='Owner' || aliasRole(role)==='Admin';
+const canView    = (section, role) => ADMIN_ONLY_SECTIONS.includes(section) ? isAdminRole(role)
+  : (OPEN_SECTIONS.includes(section) || (VIEW[aliasRole(role)]||[]).includes(section));
 const canEdit    = (section, role) => (EDIT[aliasRole(role)]||[]).includes(section);
 // Delete is allowed for anyone who can edit a section — EXCEPT protected finance records.
 const PROTECTED_DELETE = ['invoices','payments'];
@@ -1855,6 +1861,7 @@ const canDelete  = (section, role) => !PROTECTED_DELETE.includes(section) && (al
 function userAccessMap(user){ return (user && user.access) || {}; }
 function userSeesModule(user, key, role){
   if(MODULE_ALWAYS_ON.includes(key)) return true;
+  if(ADMIN_ONLY_SECTIONS.includes(key)) return isAdminRole(role); // system config: Owner/Admin only, not overridable
   if(user && (user.role==='Owner' || aliasRole(user.role)==='Admin')) return canView(key, role);
   const a = userAccessMap(user)[key];
   if(a==='hidden') return false;
