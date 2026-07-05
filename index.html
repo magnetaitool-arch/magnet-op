@@ -1734,26 +1734,42 @@ const EDIT = {
 // section-level VIEW/EDIT keeps working without a rewrite (non-breaking).
 // The agency's real job positions (shown in every role dropdown). Each maps via
 // ROLE_ALIAS to a base permission profile in VIEW/EDIT.
-const BUSINESS_ROLES = ['Owner','Admin','Manager','HR','Marketing Director','Art Director','Account Manager','Sales','Social Media Specialist','Content Creator','Graphic Designer','Reel Creator','Video Editor','Finance','Client'];
+// SIMPLE role list (7 clear roles) shown when assigning a user. Every old role name
+// still resolves via ROLE_ALIAS below, so existing team members are UNCHANGED — this
+// only makes NEW assignments simpler. Pick one role per person; it decides everything.
+const BUSINESS_ROLES = ['Owner','Manager','HR','Sales','Creative','Finance','Client'];
+// All role names that still resolve (for legacy/back-compat + the defensive dropdown).
+const ALL_ROLE_NAMES = ['Owner','Admin','Manager','HR','Sales','Creative','Finance','Client',
+  'Marketing Director','Art Director','Account Manager','Social Media Specialist',
+  'Content Creator','Graphic Designer','Designer','Reel Creator','Video Editor','Project Manager','Accountant','Viewer','Media Buyer'];
 const ROLE_ALIAS = {
-  Owner:'Admin', Admin:'Admin',
-  Manager:'Admin', 'Project Manager':'Project Manager',
+  // ---- the 7 simple roles ----
+  Owner:'Admin', Manager:'Admin',
   HR:'HR',
+  Sales:'Sales',
+  Creative:'Designer',                 // one creative profile: tasks/deliverables/assets, NO finance/HR/salaries
+  Finance:'Accountant',
+  Client:'Client',
+  // ---- legacy / detailed names kept mapping so existing accounts still resolve ----
+  Admin:'Admin', 'Project Manager':'Project Manager',
   'Marketing Director':'Marketing Director',
   'Art Director':'Art Director',
-  'Account Manager':'Sales', Sales:'Sales',
+  'Account Manager':'Sales',
   'Social Media Specialist':'Social Media',
   'Content Creator':'Designer', 'Graphic Designer':'Designer', Designer:'Designer',
   'Reel Creator':'Video Editor', 'Video Editor':'Video Editor',
-  Finance:'Accountant', Accountant:'Accountant',
-  Client:'Client', Viewer:'Client',
-  // legacy names kept mapping so old saved records still resolve
+  Accountant:'Accountant',
+  Viewer:'Client',
   'Media Buyer':'Marketing Director',
 };
+// Dropdown options that ALWAYS include a user's current role even if it's an older
+// name not in the simple 7 — so nothing ever looks mis-selected for existing staff.
+const roleOptions = (current) => (current && BUSINESS_ROLES.indexOf(current)<0) ? [current, ...BUSINESS_ROLES] : BUSINESS_ROLES.slice();
 const aliasRole = (role) => ROLE_ALIAS[role] || role;
 const ROLE_RESPONSIBILITIES = {
   Owner:'Full system control. Manage settings, roles, and permissions. Approve sensitive actions. View everything. Export, import, and reset data.',
   Manager:'Full access — sees and manages everything, same as the Owner (for the agency partners/managers).',
+  Creative:'Designers, content creators, video/reel editors. See and work on their tasks, deliverables, client assets, calendar and revisions. Submit work for review. NO access to finance, salaries, or HR.',
   HR:'Manage recruitment (candidates pipeline), employees, attendance, leaves, onboarding/offboarding and performance reviews. Convert hired candidates into employees.',
   'Account Manager':'Create and manage clients, client tasks, and notes. Create proposals. View client assets. Coordinate the team. Cannot approve final work unless allowed.',
   'Project Manager':'Assign tasks, track deadlines, review workload, move tasks between statuses, escalate overdue work. Cannot mark invoices paid.',
@@ -3627,9 +3643,10 @@ function Modal({ title, onClose, children, wide }) {
 
 function Field({ f, value, onChange, db, rec }) {
   const set = v => onChange(f.k, v);
-  if(f.type==='select') return html`<label class="fld"><span>${f.label}</span>
+  if(f.type==='select'){ const _opts=(value && (f.opts||[]).indexOf(value)<0) ? [value, ...(f.opts||[])] : (f.opts||[]); // keep an existing off-list value visible (e.g. an older role name)
+    return html`<label class="fld"><span>${f.label}</span>
     <select value=${value||''} onChange=${e=>set(e.target.value)}><option value="">—</option>
-      ${(f.opts||[]).map(o=>html`<option value=${o} key=${o}>${o}</option>`)}</select></label>`;
+      ${_opts.map(o=>html`<option value=${o} key=${o}>${o}</option>`)}</select></label>`; }
   if(f.type==='ref'){ const opts=(db[f.coll]||[]).filter(r=> f.filterBy?f.filterBy(r,rec||{},db):true);
     return html`<label class="fld"><span>${f.label}</span>
     <select value=${value||''} onChange=${e=>set(e.target.value)}><option value="">—</option>
@@ -4960,7 +4977,7 @@ function App(){
           <button class="lang-toggle" onClick=${()=>applyAppSettings({language: lang==='ar'?'en':'ar'})} title="Language">${lang==='ar'?'EN':'ع'}</button>
           <button class="icon-btn" onClick=${()=>applyAppSettings({theme:(appSettings.theme==='light'?'dark':'light')})} title=${appSettings.theme==='light'?(lang==='ar'?'الوضع الداكن':'Dark mode'):(lang==='ar'?'الوضع الفاتح':'Light mode')}>${React.createElement(appSettings.theme==='light'?Icon.moon:Icon.sun)}</button>
           ${isOwner&&html`<select class="sel" value=${role} onChange=${e=>setRoleOverride(e.target.value===baseRole?null:e.target.value)} title="Switch role for testing (Owner only)">
-            ${BUSINESS_ROLES.map(r=>html`<option key=${r} value=${r}>${t(r)!==r?t(r):r}</option>`)}
+            ${roleOptions(role).map(r=>html`<option key=${r} value=${r}>${t(r)!==r?t(r):r}</option>`)}
           </select>`}
           <button class="user-chip" onClick=${()=>setProfileOpen(true)} title=${t('Current User')}>
             <${Avatar} name=${user.name} size=${28} src=${user.account&&user.account.avatar}/><span class="uc-role">${t(role)!==role?t(role):role}</span></button>
@@ -7739,7 +7756,7 @@ function UserForm({ user, ar, onClose, onSave }){
       <label class="fld"><span>${ar?'البريد':'Email'}</span><input type="email" value=${f.email||''} onChange=${e=>set('email',e.target.value)}/></label>
       <label class="fld"><span>${ar?'الهاتف':'Phone'}</span><input value=${f.phone||''} onChange=${e=>set('phone',e.target.value)}/></label>
       <label class="fld"><span>${ar?'المسمى الوظيفي':'Job title'}</span><input value=${f.jobTitle||''} onChange=${e=>set('jobTitle',e.target.value)}/></label>
-      <label class="fld"><span>${ar?'الدور':'Role'}</span><select value=${f.role||'Viewer'} onChange=${e=>set('role',e.target.value)}>${BUSINESS_ROLES.map(r=>html`<option key=${r} value=${r}>${r}</option>`)}</select></label>
+      <label class="fld"><span>${ar?'الدور':'Role'}</span><select value=${f.role||'Creative'} onChange=${e=>set('role',e.target.value)}>${roleOptions(f.role).map(r=>html`<option key=${r} value=${r}>${r}</option>`)}</select></label>
       <label class="fld"><span>${ar?'الحالة':'Status'}</span><select value=${f.status||'Active'} onChange=${e=>set('status',e.target.value)}><option>Active</option><option>Inactive</option></select></label>
       ${isNew&&html`<label class="fld"><span>${ar?'كلمة المرور':'Password'}</span><input type="password" value=${f._pw||''} onChange=${e=>set('_pw',e.target.value)}/></label>`}
       ${isNew&&html`<label class="fld"><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" value=${f._pw2||''} onChange=${e=>set('_pw2',e.target.value)}/></label>`}
