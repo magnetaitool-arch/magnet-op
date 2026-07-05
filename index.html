@@ -3153,8 +3153,10 @@ function syncQueueChip(){
 }
 window.__syncQueue = { size:()=>syncQueueLoad().length, list:syncQueueLoad, drain:syncQueueDrain };
 try {
-  window.addEventListener('online', function(){ syncQueueDrain(); });
-  setInterval(function(){ if(syncQueueLoad().length) syncQueueDrain(); }, 30000);
+  window.addEventListener('online', function(){ syncQueueDrain(); });          // network came back
+  window.addEventListener('focus', function(){ if(syncQueueLoad().length) syncQueueDrain(); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && syncQueueLoad().length) syncQueueDrain(); });
+  setInterval(function(){ if(syncQueueLoad().length) syncQueueDrain(); }, 8000); // backup retry every 8s
   setTimeout(function(){ syncQueueChip(); if(syncQueueLoad().length) syncQueueDrain(); }, 2500);
 } catch(e){}
 
@@ -4453,6 +4455,11 @@ function App(){
             COLLECTIONS.forEach(k=>{ if(!collSame(prev[k],m[k])){ next[k]=m[k]; changed=true; } });
             return changed?next:prev; }); // no re-render when nothing changed
         }
+        // The poll just SUCCEEDED, so the connection is alive right now — flush any
+        // writes that failed earlier (network drop). This makes offline edits reach
+        // the cloud within one poll (~5s) of the connection coming back, with no data
+        // loss and nothing for the user to do.
+        try { syncQueueDrain(); } catch(e){}
       } catch(e){}
       busy=false;
     };
