@@ -4913,7 +4913,7 @@ function App(){
   // permission profile (aliasRole), so all 7 simple roles + legacy names resolve.
   // This ONLY reorders the display — access is unchanged (same 3 gates still apply).
   const ROLE_PRIMARY = {
-    Admin:['dashboard','clients','projects','tasks','approvalCenter','invoices','employees'],
+    Admin:['dashboard','clients','projects','tasks','approvalCenter','invoices'],
     'Project Manager':['dashboard','projects','tasks','approvalCenter','clients','workload','deliverables'],
     Sales:['dashboard','leads','clients','campaigns','proposals','tasks'],
     Designer:['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
@@ -5663,7 +5663,7 @@ function InvoicesView({ ctx, visible, ce }){
     <${Head} eyebrow="Finance" title="Invoices">
       ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),tax:5})}>${React.createElement(Icon.plus)} New invoice</button>`}<//>
     <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('invoices',r)):null}
-      cols=${[{k:'invoiceNumber',label:'Invoice'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'status',label:'Status',tag:true},
+      cols=${[{k:'invoiceNumber',label:'Invoice'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'issueDate',label:'Issued',date:true},{k:'status',label:'Status',tag:true},
         {k:'total',label:'Total',num:true,render:(r)=>money(ctx.invTotal(r))},{k:'paid',label:'Paid',num:true,render:(r)=>money(ctx.invPaid(r))},
         {k:'bal',label:'Balance',num:true,render:(r)=>{const b=ctx.invTotal(r)-ctx.invPaid(r);return html`<span style=${{color:b>0?'var(--warn)':'var(--pos)'}}>${money(b)}</span>`;}},
         {k:'dueDate',label:'Due',date:true}]}/></div>`;
@@ -5864,7 +5864,7 @@ function FixedCostsView({ ctx, ce }){
       onEdit=${ce?(r=>ctx.openModal('fixedCosts',r)):null}
       onDelete=${canDel?(r=>ctx.delRec('fixedCosts',r.id,r.name)):null}
       extraActions=${r=>(ce&&!r.settled&&partners.some(p=>p.name===r.paidBy))?html`<button class="mini" onClick=${()=>setSettle(r)}>Settle</button>`:''}
-      cols=${[{k:'name',label:'Name'},{k:'kind',label:'Type',tag:true},{k:'category',label:'Category'},{k:'amount',label:'Amount',num:true,money:true},{k:'cycle',label:'Cycle'},{k:'paidBy',label:'Paid by',render:r=>r.settled?html`<span class="vpill ok">Both ✓</span>`:(r.paidBy||'—')},{k:'status',label:'Status',tag:true}]}
+      cols=${[{k:'name',label:'Name'},{k:'kind',label:'Type',tag:true},{k:'category',label:'Category'},{k:'amount',label:'Amount',num:true,money:true},{k:'cycle',label:'Cycle'},{k:'startDate',label:'Start date',date:true},{k:'paidBy',label:'Paid by',render:r=>r.settled?html`<span class="vpill ok">Both ✓</span>`:(r.paidBy||'—')},{k:'status',label:'Status',tag:true}]}
       empty=${{title:'No fixed costs yet',text:'Add rent, subscriptions and fixed costs so they appear in the partner accounting.',icon:'finance'}}/>
     ${settle&&html`<${SettleForm} ctx=${ctx} item=${(db.fixedCosts||[]).find(x=>x.id===settle.id)||settle} coll="fixedCosts" onClose=${()=>setSettle(null)}/>`}
   </div>`;
