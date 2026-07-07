@@ -1110,7 +1110,7 @@ a.mini{text-decoration:none;display:inline-block}
     if(!__as.currency){ __as.currency='EGP'; localStorage.setItem(__ASK, JSON.stringify(__as)); }
     // migrate: ensure newer CRM modules appear for existing installs (no manual toggle needed)
     if(Array.isArray(__as.enabledModules)){
-      ["leads","campaigns","briefs","invoices","payments","expenses","fixedCosts","partners","profitability","plans","requests","approvalCenter","collections","rolesPermissions","teams"].forEach(function(k){ if(__as.enabledModules.indexOf(k)<0) __as.enabledModules.push(k); });
+      ["accounts","leads","campaigns","briefs","invoices","payments","expenses","fixedCosts","partners","profitability","plans","requests","approvalCenter","collections","rolesPermissions","teams"].forEach(function(k){ if(__as.enabledModules.indexOf(k)<0) __as.enabledModules.push(k); });
       localStorage.setItem(__ASK, JSON.stringify(__as));
     }
   } catch(e){}
@@ -1597,7 +1597,7 @@ const money = (n, code) => formatCurrency(n, code, getAppSettings().language);
 /* ============================ i18n ============================ */
 const I18N = {
   // navigation + module names
-  dashboard:'لوحة التحكم', leads:'العملاء المحتملون', clients:'العملاء', projects:'المشاريع', tasks:'المهام',
+  dashboard:'لوحة التحكم', accounts:'إدارة الحسابات', leads:'العملاء المحتملون', clients:'العملاء', projects:'المشاريع', tasks:'المهام',
   deliverables:'المخرجات', contacts:'جهات الاتصال', salesActivities:'أنشطة المبيعات', proposals:'العروض',
   quotations:'عروض الأسعار', contracts:'العقود', invoices:'الفواتير', payments:'المدفوعات', expenses:'المصروفات',
   profitability:'الربحية', employees:'الموظفون', freelancers:'المستقلون', departments:'الأقسام', workload:'حجم العمل',
@@ -1695,7 +1695,7 @@ const nameById = (arr,id,f='name') => { const r=byId(arr,id); return r ? (r[f]||
 const ROLES = ['Admin','Sales','Project Manager','Designer','Video Editor','Accountant','Client','HR','Marketing Director','Art Director','Social Media'];
 
 // section keys used by the sidebar + permission checks
-const SECTIONS = ['dashboard','leads','clients','projects','tasks','deliverables',
+const SECTIONS = ['dashboard','accounts','leads','clients','projects','tasks','deliverables',
   'contacts','salesActivities','proposals','quotations','contracts',
   'invoices','payments','expenses','profitability','fixedCosts','partners','collections','plans','campaigns','briefs',
   'employees','freelancers','departments','workload','availability','attendance','leaves','candidates',
@@ -1711,8 +1711,8 @@ const CREATIVE_SECTIONS = ['tasks','deliverables','files','comments'];
 // view matrix: which sections each role can open
 const VIEW = {
   Admin: SECTIONS,
-  Sales: ['dashboard','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
-  'Project Manager': ['dashboard','plans','clients','projects','tasks','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
+  Sales: ['dashboard','accounts','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
+  'Project Manager': ['dashboard','accounts','plans','clients','projects','tasks','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
   Designer: ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
   'Video Editor': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
   Accountant: ['dashboard','clients','invoices','payments','expenses','profitability','fixedCosts','partners','collections','requests','approvalCenter','agents','documents','employees','chat','meetings','files','comments','activityLogs','notifications','reports','settings'],
@@ -1722,15 +1722,15 @@ const VIEW = {
   // Social Media — creative execution + content calendar + campaigns/briefs.
   'Social Media': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams','campaigns','briefs'],
   // Marketing Director — marketing strategy + content + reports.
-  'Marketing Director': ['dashboard','plans','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','contracts','calendar','clientAssets','shareCenter','meetings','requests','approvalCenter','agents','automations','reports','documents','files','comments','activityLogs','notifications','teams','workload','settings'],
+  'Marketing Director': ['dashboard','accounts','plans','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','contracts','calendar','clientAssets','shareCenter','meetings','requests','approvalCenter','agents','automations','reports','documents','files','comments','activityLogs','notifications','teams','workload','settings'],
   // Art Director — leads the creative team.
   'Art Director': ['dashboard','projects','tasks','deliverables','calendar','clientAssets','revisionsHub','requests','approvalCenter','files','comments','notifications','sops','employees','availability','leaves','teams','reports','settings'],
 };
 // edit matrix: which sections each role can create/edit
 const EDIT = {
   Admin: SECTIONS,
-  Sales: ['leads','campaigns','briefs','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
-  'Project Manager': ['plans','clients','projects','tasks','deliverables','revisions','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
+  Sales: ['accounts','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
+  'Project Manager': ['accounts','plans','clients','projects','tasks','deliverables','revisions','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
   Designer: ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   'Video Editor': ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   Accountant: ['invoices','payments','expenses','fixedCosts','partners','collections','comments','requests','chat'],
@@ -1882,7 +1882,7 @@ const canSeeFinance = (role) => { const a=aliasRole(role); return a==='Admin' ||
    Settings → Modules. Dashboard + Settings are always on so you can never lock
    yourself out. appSettings.enabledModules = null (or missing) means "show all". ---- */
 const MODULE_CATALOG = [
-  {group:'Main', items:[['dashboard','Dashboard'],['plans','Plans & Goals'],['leads','CRM / Leads'],['clients','Clients'],['projects','Projects'],['tasks','Tasks'],['deliverables','Deliverables']]},
+  {group:'Main', items:[['dashboard','Dashboard'],['accounts','Accounts'],['plans','Plans & Goals'],['leads','CRM / Leads'],['clients','Clients'],['projects','Projects'],['tasks','Tasks'],['deliverables','Deliverables']]},
   {group:'Content & Ops', items:[['calendar','Content Calendar'],['clientAssets','Client Assets'],['revisionsHub','Revision Control'],['workflow','Workflow'],['requests','Requests'],['approvalCenter','Approval Center'],['meetings','Meeting Notes'],['chat','Chat'],['shareCenter','Share Center']]},
   {group:'Sales', items:[['campaigns','Campaigns'],['briefs','Client Briefs'],['contacts','Contacts'],['salesActivities','Sales Activities'],['proposals','Proposals'],['quotations','Quotations'],['contracts','Contracts'],['documents','Document Center']]},
   {group:'Finance', items:[['invoices','Invoices'],['payments','Payments'],['collections','Collections'],['expenses','Expenses'],['fixedCosts','Fixed Costs & Subscriptions'],['partners','Partners & Settlement'],['profitability','Profitability']]},
@@ -1894,7 +1894,7 @@ const MODULE_CATALOG = [
 ];
 const MODULE_ALWAYS_ON = ['dashboard','settings'];
 // A lean default for a content/delivery-focused agency team.
-const FOCUSED_DEFAULT = ['dashboard','plans','leads','campaigns','briefs','clients','projects','tasks','deliverables','calendar','clientAssets',
+const FOCUSED_DEFAULT = ['dashboard','accounts','plans','leads','campaigns','briefs','clients','projects','tasks','deliverables','calendar','clientAssets',
   'teams','candidates','employees','availability','freelancers','departments','workload','attendance','leaves',
   'requests','approvalCenter',
   'invoices','payments','collections','expenses','fixedCosts','partners','profitability',
@@ -4898,7 +4898,7 @@ function App(){
 
   /* ---- nav (role-filtered) ---- */
   const NAVGROUPS = [
-    {group:'Main', items:[['dashboard','Dashboard','command'],['plans','Plans & Goals','target'],['leads','CRM / Leads','target'],['clients','Clients','layers'],['projects','Projects','briefcase'],['tasks','Tasks','check'],['deliverables','Deliverables','docs']]},
+    {group:'Main', items:[['dashboard','Dashboard','command'],['accounts','Accounts','people'],['plans','Plans & Goals','target'],['leads','CRM / Leads','target'],['clients','Clients','layers'],['projects','Projects','briefcase'],['tasks','Tasks','check'],['deliverables','Deliverables','docs']]},
     {group:'Operations', items:[['workflow','Workflow','target'],['requests','Requests','shield'],['approvalCenter','Approval Center','check'],['clientAssets','Client Assets','grid'],['calendar','Content Calendar','calendar'],['revisionsHub','Revision Control','refresh'],['meetings','Meeting Notes','mail'],['chat','Chat','mail'],['shareCenter','Share Center','arrowUp']]},
     {group:'Intelligence', items:[['automations','Automations','bolt'],['agents','AI Agents','spark']]},
     {group:'Sales', items:[['campaigns','Campaigns','spark'],['briefs','Client Briefs','fileText'],['contacts','Contacts','people'],['salesActivities','Sales Activities','pulse'],['proposals','Proposals','fileText'],['quotations','Quotations','scale'],['contracts','Contracts','shield'],['documents','Document Center','fileText']]},
@@ -4913,9 +4913,9 @@ function App(){
   // permission profile (aliasRole), so all 7 simple roles + legacy names resolve.
   // This ONLY reorders the display — access is unchanged (same 3 gates still apply).
   const ROLE_PRIMARY = {
-    Admin:['dashboard','clients','projects','tasks','approvalCenter','invoices'],
+    Admin:['dashboard','accounts','clients','projects','tasks','approvalCenter','invoices'],
     'Project Manager':['dashboard','projects','tasks','approvalCenter','clients','workload','deliverables'],
-    Sales:['dashboard','leads','clients','campaigns','proposals','tasks'],
+    Sales:['dashboard','accounts','leads','clients','campaigns','proposals','tasks'],
     Designer:['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
     'Video Editor':['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
     'Social Media':['dashboard','tasks','deliverables','calendar','campaigns','clientAssets'],
@@ -5253,6 +5253,7 @@ function renderRoute(route, ctx, x){
   }
   switch(route){
     case 'dashboard': return html`<${DashboardView} ctx=${ctx} byBrand=${x.byBrand}/>`;
+    case 'accounts': return html`<${AccountsView} ctx=${ctx} visible=${x.visible} byBrand=${x.byBrand} ce=${ce('accounts')}/>`;
 
     case 'leads': return html`<div class="view">
       <${Head} eyebrow="CRM" title="Leads & Pipeline" desc="Drag across stages; move to Won then convert to a client.">
@@ -5405,6 +5406,187 @@ function QuickTimeOff({ ctx }){
     <div class="muted" style=${{fontSize:12,marginTop:8}}>${ar?'هيتبعت لمديرك للموافقة، وهيوصلك إشعار بالنتيجة.':'Sent to your manager for approval; you’ll be notified of the result.'}</div>
   <//>`;
 }
+/* ============================================================================
+   ACCOUNTS — unified account-management command center. ONE tab = the whole
+   process, on the SAME records model (single source of truth): clients +
+   contracts + collections/payments + deliverables + activityLogs. NO new tables.
+   Money is admin-only (canSeeFinance). Adds the genuine gaps: auto payment
+   schedule from a contract, WhatsApp reminders (wa.me, Arabic), 7-day follow-up
+   flags, onboarding checklist (stored on the client), and a monthly report.
+   ============================================================================ */
+const ONBOARDING_STEPS = ['Contract signed','Brief collected','Brand assets received','Kickoff meeting','Credentials collected'];
+const cNameOf = (c)=> (c&&(c.brandName||c.name||c.company))||'—';
+const cleanPhone = (p)=>{ let s=String(p||'').replace(/[^0-9]/g,''); if(s.startsWith('00')) s=s.slice(2); if(s.startsWith('0')) s='20'+s.slice(1); return s; };
+const waLink = (num,msg)=> 'https://wa.me/'+cleanPhone(num)+'?text='+encodeURIComponent(msg);
+const acctPipe = (c)=>{ const s=c.status||'Lead';
+  if(['Lead','Prospect','New Lead'].includes(s)) return 'Lead';
+  if(s==='Onboarding') return 'Onboarding';
+  if(['Paused','On Hold'].includes(s)) return 'Paused';
+  if(['Churned','Lost','Archived'].includes(s)) return 'Churned';
+  return 'Active'; };
+const clientActivities = (db,c)=> (db.activityLogs||[]).filter(a=>a.entityId===c.id||a.clientId===c.id);
+const lastActivityAt = (db,c)=>{ const a=clientActivities(db,c).map(x=>x.createdAt||x.date).filter(Boolean).sort(); return a.length?a[a.length-1]:(c.updatedAt||c.createdAt||''); };
+const needsFollowup = (db,c)=>{ const la=lastActivityAt(db,c); if(!la) return true; return daysBetween(la, todayISO())>=7; };
+const monthsBetween = (a,b)=>{ if(!a||!b) return 0; const x=new Date(a),y=new Date(b); const n=(y.getFullYear()-x.getFullYear())*12+(y.getMonth()-x.getMonth()); return n>0?n:0; };
+function accountMonthlyReport(c, db, ctx){
+  const ar=ctx.lang==='ar'; const m=thisMonth(); const nm=cNameOf(c);
+  const e=s=>String(s==null?'':s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const dlv=(db.deliverables||[]).filter(d=>d.clientId===c.id && ['Approved','Delivered'].includes(d.status) && monthOf(d.updatedAt||d.createdAt)===m);
+  const acts=(db.activityLogs||[]).filter(a=>(a.entityId===c.id||a.clientId===c.id) && monthOf(a.createdAt)===m);
+  const rows=dlv.map(d=>'<tr><td>'+e(d.title||'—')+'</td><td>'+e(d.type||'')+'</td><td>'+e(d.status)+'</td></tr>').join('')||'<tr><td colspan="3" style="color:#888">'+(ar?'مفيش تسليمات مكتملة الشهر ده.':'No deliverables completed this month.')+'</td></tr>';
+  const actRows=acts.slice(0,25).map(a=>'<li>'+e(fmtDate(a.createdAt))+' — '+e(a.message||a.type||'')+'</li>').join('')||'<li style="color:#888">'+(ar?'مفيش نشاط مسجّل.':'No activity logged this month.')+'</li>';
+  const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>'+e(nm)+' — Report</title>'
+   +'<style>body{background:#070807;color:#f3f5ef;font-family:system-ui,Arial,sans-serif;max-width:760px;margin:0 auto;padding:44px}'
+   +'h1{color:#c8f31e;letter-spacing:.14em;font-size:20px;margin:0}h2{margin-top:26px;font-size:14px;color:#c8f31e}'
+   +'table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border-bottom:1px solid #23261f;padding:9px;text-align:'+(ar?'right':'left')+';font-size:13px}'
+   +'th{color:#9a9a98;font-weight:600;font-size:11px;text-transform:uppercase}ul{padding-'+(ar?'right':'left')+':18px;line-height:1.7;font-size:13px}.muted{color:#9a9a98}'
+   +'@media print{body{background:#fff;color:#111}h1,h2{color:#5b7d00}}</style></head><body>'
+   +'<div style="display:flex;justify-content:space-between;align-items:center"><h1>MAGNET</h1><span class="muted" style="font-size:11px">'+e(new Date().toDateString())+'</span></div>'
+   +'<h2>'+e(nm)+' — '+(ar?'تقرير الشهر':'Monthly report')+'</h2>'
+   +'<h2>'+(ar?'التسليمات المكتملة':'Deliverables completed')+'</h2><table><thead><tr><th>Item</th><th>Type</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
+   +'<h2>'+(ar?'ملخص النشاط':'Activity summary')+'</h2><ul>'+actRows+'</ul>'
+   +'<p class="muted" style="margin-top:34px;font-size:11px">Magnet OS · '+e(nm)+'</p></body></html>';
+  try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){ }
+}
+
+function AccountsView({ ctx, visible, byBrand, ce }){
+  const { db, role, lang } = ctx; const ar=lang==='ar'; const fin=canSeeFinance(role);
+  const [layout,setLayout]=useState('board'); const [sel,setSel]=useState(null);
+  const clients=byBrand(db.clients||[]); const m=thisMonth();
+  const wk=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+  const soon2=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
+  const activeN=clients.filter(c=>acctPipe(c)==='Active').length;
+  const followN=clients.filter(c=>needsFollowup(db,c)&&!['Churned','Lost','Archived'].includes(c.status)).length;
+  const dlvAll=db.deliverables||[];
+  const dueWeek=dlvAll.filter(d=>d.dueDate&&d.dueDate>=todayISO()&&d.dueDate<=wk&&!['Approved','Delivered'].includes(d.status)).length;
+  const dlvOverdue=dlvAll.filter(d=>d.dueDate&&d.dueDate<todayISO()&&!['Approved','Delivered'].includes(d.status)).length;
+  const cols=db.collections||[]; const pend=cols.filter(x=>(x.status||'Pending')==='Pending');
+  const expectedM=pend.filter(x=>monthOf(x.dueDate)===m).reduce((s,x)=>s+(+x.amount||0),0);
+  const collectedM=cols.filter(x=>x.status==='Collected'&&monthOf(x.collectedDate||x.updatedAt)===m).reduce((s,x)=>s+(+x.amount||0),0);
+  const overdueP=pend.filter(x=>x.dueDate&&x.dueDate<todayISO());
+  const upcoming=pend.filter(x=>x.dueDate&&x.dueDate>=todayISO()).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||'')).slice(0,5);
+  const items=clients.map(c=>Object.assign({},c,{_pipe:acctPipe(c)}));
+  return html`<div class="view">
+    <${Head} eyebrow=${ar?'إدارة':'Accounts'} title=${ar?'إدارة الحسابات':'Accounts'} desc=${ar?'كل عملية إدارة العملاء في مكان واحد — مصدر واحد للحقيقة.':'The whole client process in one place — single source of truth.'}>
+      <div class="seg"><button class=${layout==='board'?'on':''} onClick=${()=>setLayout('board')}>${ar?'بورد':'Board'}</button><button class=${layout==='list'?'on':''} onClick=${()=>setLayout('list')}>${ar?'قائمة':'List'}</button></div>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('clients',{status:'Lead'})}>${React.createElement(Icon.plus)} ${ar?'عميل جديد':'New client'}</button>`}
+    <//>
+    <div class="grid g-4 stagger" style=${{marginBottom:16}}>
+      <${KPI} label=${ar?'عملاء نشطين':'Active clients'} value=${activeN} icon="layers"/>
+      <${KPI} label=${ar?'محتاج متابعة':'Needs follow-up'} value=${followN} icon="alert"/>
+      <${KPI} label=${ar?'تسليمات هذا الأسبوع':'Due this week'} value=${dueWeek} icon="clock"/>
+      <${KPI} label=${ar?'تسليمات متأخرة':'Overdue deliverables'} value=${dlvOverdue} icon="alert"/>
+    </div>
+    ${fin?html`<div style=${{marginBottom:16}}><${Panel} title=${ar?'المالية — للإدارة فقط':'Money — admin only'} sub=${ar?'محسوبة من الدفعات والتحصيلات الفعلية':'live from payments & collections'}>
+      <div class="grid g-4" style=${{marginBottom:upcoming.length?12:0}}>
+        <${KPI} label=${ar?'متوقع هذا الشهر':'Expected this month'} value=${money(expectedM)} icon="calendar"/>
+        <${KPI} label=${ar?'تم تحصيله':'Collected this month'} value=${money(collectedM)} icon="wallet"/>
+        <${KPI} label=${ar?'متأخرات':'Overdue payments'} value=${money(overdueP.reduce((s,x)=>s+(+x.amount||0),0))} icon="alert" sub=${overdueP.length+' '+(ar?'بند':'item(s)')}/>
+        <${KPI} label=${ar?'أقرب استحقاق':'Next due'} value=${upcoming.length?fmtDate(upcoming[0].dueDate):'—'} icon="clock"/>
+      </div>
+      ${upcoming.length?html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>${ar?'العميل':'Client'}</th><th class="right">${ar?'المبلغ':'Amount'}</th><th>${ar?'الاستحقاق':'Due'}</th><th></th></tr></thead><tbody>
+        ${upcoming.map(u=>{ const c=byId(clients,u.clientId)||{}; const s3=u.dueDate<=new Date(Date.now()+3*86400000).toISOString().slice(0,10); return html`<tr key=${u.id}>
+          <td data-label="Client"><b>${cNameOf(c)}</b></td><td data-label="Amount" class="right mono">${money(u.amount)}</td>
+          <td data-label="Due"><span style=${{color:s3?'var(--lime)':'var(--ink-2)'}}>${fmtDate(u.dueDate)}</span></td>
+          <td class="right">${(c.whatsapp||c.phone)?html`<a class="mini" href=${waLink(c.whatsapp||c.phone,(ar?'تذكير من Magnet: مستحق دفعة بقيمة ':'Reminder from Magnet: payment of ')+money(u.amount)+(ar?' بتاريخ ':' due ')+fmtDate(u.dueDate))} target="_blank" rel="noopener">${ar?'تذكير واتساب':'WhatsApp'}</a>`:''}</td>
+        </tr>`; })}</tbody></table></div>`:''}
+    <//></div>`:''}
+    ${layout==='board'
+      ? html`<${Kanban} items=${items} columns=${['Lead','Onboarding','Active','Paused','Churned']} field="_pipe" canMove=${ce}
+          onMove=${(id,s)=>ctx.updateRecord('clients',id,{status:s})} onCard=${c=>setSel(c)}
+          render=${c=>html`<div style=${{cursor:'pointer'}}>
+            <div class="flex between center"><b style=${{fontSize:12.5,fontWeight:600}}>${cNameOf(c)}</b>
+              ${needsFollowup(db,c)?html`<span class="mono" style=${{fontSize:9,color:'var(--warn)'}}>${ar?'متابعة':'follow-up'}</span>`:''}</div>
+            <div class="muted" style=${{fontSize:11,marginTop:5}}>${c.serviceType||(Array.isArray(c.services)?c.services.join(', '):'')||'—'}</div>
+            ${fin?(()=>{ const od=(db.collections||[]).filter(x=>x.clientId===c.id&&(x.status||'Pending')==='Pending'&&x.dueDate&&x.dueDate<=soon2); return od.length?html`<div class="mono" style=${{fontSize:10,color:'var(--lime)',marginTop:6}}>${money(od.reduce((s,x)=>s+(+x.amount||0),0))} ${ar?'مستحق قريباً':'due soon'}</div>`:''; })():''}
+          </div>`}/>`
+      : html`<${DataTable} db=${db} rows=${clients} extraActions=${c=>html`<button class="mini" onClick=${()=>setSel(c)}>${ar?'فتح':'Open'}</button>`}
+          cols=${[{k:'name',label:ar?'العميل':'Client',render:cNameOf},{k:'status',label:ar?'الحالة':'Status',tag:true},{k:'serviceType',label:ar?'الخدمة':'Service'},{k:'_fu',label:ar?'متابعة':'Follow-up',render:c=>needsFollowup(db,c)?html`<span class="vpill warn">${ar?'محتاج':'Needs'}</span>`:'—'}]}/>`}
+    ${sel&&html`<${AccountDrawer} ctx=${ctx} client=${byId(clients,sel.id)||sel} fin=${fin} ce=${ce} onClose=${()=>setSel(null)}/>`}
+  </div>`;
+}
+
+function AccountDrawer({ ctx, client, fin, ce, onClose }){
+  const { db, lang }=ctx; const ar=lang==='ar'; const c=client;
+  const [tab,setTab]=useState(fin?'payments':'onboarding'); const [note,setNote]=useState('');
+  const acts=clientActivities(db,c).slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  const dlv=(db.deliverables||[]).filter(d=>d.clientId===c.id);
+  const contracts=(db.contracts||[]).filter(k=>k.clientId===c.id);
+  const clientCols=(db.collections||[]).filter(x=>x.clientId===c.id).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+  const ob=(Array.isArray(c.onboarding)&&c.onboarding.length)?c.onboarding:ONBOARDING_STEPS.map(s=>({item:s,done:false}));
+  const obDone=ob.filter(s=>s.done).length; const obPct=Math.round(obDone/ob.length*100);
+  const toggleOb=(i)=>{ if(!ce)return; ctx.updateRecord('clients',c.id,{onboarding:ob.map((s,idx)=>idx===i?Object.assign({},s,{done:!s.done}):s)}); };
+  const addNote=()=>{ if(!note.trim())return; ctx.createRecord('activityLogs',{entityType:'clients',entityId:c.id,clientId:c.id,type:'note',message:note.trim(),by:ctx.user.name}); setNote(''); };
+  const genSchedule=(k)=>{ const val=+k.value||0; if(!val){ alert(ar?'حط قيمة العقد الأول (value).':'Set a contract value first.'); return; }
+    const months=Math.max(1,k.durationMonths||monthsBetween(k.startDate,k.endDate)||3); const per=Math.round(val/months); const start=k.startDate||todayISO();
+    if((db.collections||[]).some(x=>x.contractId===k.id)){ if(!confirm(ar?'العقد ده ليه جدول دفعات بالفعل. أزوّد كمان؟':'This contract already has a schedule. Add more?')) return; }
+    for(let i=0;i<months;i++){ const d=new Date(start); d.setMonth(d.getMonth()+i); ctx.createRecord('collections',{clientId:c.id,contractId:k.id,title:(k.title||k.contractNumber||'Contract')+' '+(i+1)+'/'+months,amount:per,dueDate:d.toISOString().slice(0,10),status:'Pending'}); }
+    showProPopup('savedNotes',months+(ar?' دفعات اتولّدت':' payments generated')); };
+  const markPaid=(x)=>{ ctx.updateRecord('collections',x.id,{status:'Collected',collectedDate:todayISO()}); ctx.createRecord('payments',{clientId:c.id,amount:+x.amount||0,date:todayISO(),method:x.method||'Bank',collectionId:x.id,notes:'Accounts payment'}); showProPopup('paymentReceived',money(x.amount)); };
+  const total=contracts.reduce((s,k)=>s+(+k.value||0),0);
+  const paid=clientCols.filter(x=>x.status==='Collected').reduce((s,x)=>s+(+x.amount||0),0);
+  const remaining=total-paid;
+  const nm=cNameOf(c);
+  const stOf=(x)=> x.status==='Collected'?'Collected':(x.dueDate&&x.dueDate<todayISO()?'Overdue':'Pending');
+  const tabs=[fin?['payments',ar?'العقود والدفعات':'Contracts & Payments']:null,['onboarding',ar?'الأونبوردنج':'Onboarding'],['deliverables',ar?'التسليمات':'Deliverables'],['activity',ar?'النشاط':'Activity']].filter(Boolean);
+  return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" dir=${ar?'rtl':'ltr'} onClick=${e=>e.stopPropagation()}>
+    <div class="cdrawer-h">
+      <div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>${ar?'حساب':'Account'} · ${c.status||'—'}</div>
+        <h3 style=${{margin:'3px 0 0',fontSize:18}}>${nm}</h3>
+        <div class="muted" style=${{fontSize:12,marginTop:3}}>${c.contactPerson||''}${(c.contactPerson&&(c.whatsapp||c.phone))?' · ':''}${c.whatsapp||c.phone||''}</div></div>
+      <button class="mini" onClick=${onClose}>×</button></div>
+    <div class="cdrawer-b">
+      <div class="flex gap8" style=${{flexWrap:'wrap',marginBottom:14}}>
+        ${(c.whatsapp||c.phone)?html`<a class="btn btn-pri" style=${{padding:'8px 14px'}} href=${waLink(c.whatsapp||c.phone,(ar?'أهلاً ':'Hi ')+(c.contactPerson||nm)+(ar?'، حابين نطمّن على الشغل ونسمع رأيك. — Magnet':', checking in on your project — Magnet'))} target="_blank" rel="noopener">${ar?'متابعة واتساب':'WhatsApp follow-up'}</a>`:''}
+        <button class="btn btn-ghost" onClick=${()=>accountMonthlyReport(c,db,ctx)}>${ar?'تقرير شهري':'Monthly report'}</button>
+        ${ce?html`<button class="btn btn-ghost" onClick=${()=>ctx.openModal('clients',c)}>${ar?'تعديل العميل':'Edit client'}</button>`:''}
+      </div>
+      <div class="seg" style=${{marginBottom:14,flexWrap:'wrap'}}>${tabs.map(t=>html`<button key=${t[0]} class=${tab===t[0]?'on':''} onClick=${()=>setTab(t[0])}>${t[1]}</button>`)}</div>
+
+      ${tab==='onboarding'?html`<div>
+        <div class="flex between center" style=${{marginBottom:8}}><b style=${{fontSize:13}}>${ar?'قائمة التهيئة':'Onboarding checklist'}</b><span class="mono lime" style=${{fontSize:12}}>${obPct}%</span></div>
+        <div style=${{height:6,background:'rgba(255,255,255,.08)',borderRadius:6,overflow:'hidden',marginBottom:12}}><div style=${{width:obPct+'%',height:'100%',background:'var(--lime)'}}></div></div>
+        ${ob.map((s,i)=>html`<label class="flex center" key=${i} style=${{gap:10,padding:'8px 0',cursor:ce?'pointer':'default',borderBottom:'1px solid var(--line)'}}>
+          <input type="checkbox" checked=${s.done} disabled=${!ce} onChange=${()=>toggleOb(i)} style=${{width:16,height:16,accentColor:'var(--lime)'}}/>
+          <span style=${{fontSize:13,color:s.done?'var(--ink-3)':'var(--ink)',textDecoration:s.done?'line-through':'none'}}>${s.item}</span></label>`)}
+      </div>`:''}
+
+      ${tab==='payments'&&fin?html`<div>
+        <div class="grid g-3" style=${{marginBottom:14}}>
+          <${KPI} label=${ar?'إجمالي العقود':'Total'} value=${money(total)} icon="finance"/>
+          <${KPI} label=${ar?'مدفوع':'Paid'} value=${money(paid)} icon="wallet"/>
+          <${KPI} label=${ar?'المتبقي':'Remaining'} value=${money(remaining)} icon="trendDown"/>
+        </div>
+        <b style=${{fontSize:13}}>${ar?'العقود':'Contracts'}</b>
+        ${contracts.length?contracts.map(k=>html`<div class="lrow" key=${k.id}>
+          <div class="li-t"><b>${k.title||k.contractNumber||'Contract'}</b><span>${money(k.value)} · ${k.startDate?fmtDate(k.startDate):''}</span></div>
+          ${ce?html`<button class="mini pri" onClick=${()=>genSchedule(k)}>${ar?'ولّد الدفعات':'Generate schedule'}</button>`:''}</div>`):html`<div class="muted" style=${{fontSize:12,padding:'6px 0'}}>${ar?'مفيش عقود. اعمل عقد من موديول Contracts.':'No contracts yet — add one in Contracts.'}</div>`}
+        <b style=${{fontSize:13,display:'block',marginTop:14}}>${ar?'جدول الدفعات':'Payment schedule'}</b>
+        ${clientCols.length?html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>${ar?'البند':'Item'}</th><th class="right">${ar?'المبلغ':'Amount'}</th><th>${ar?'الاستحقاق':'Due'}</th><th>${ar?'الحالة':'Status'}</th><th></th></tr></thead><tbody>
+          ${clientCols.map(x=>{ const st=stOf(x); return html`<tr key=${x.id}>
+            <td data-label="Item">${x.title||'—'}</td><td data-label="Amount" class="right mono">${money(x.amount)}</td>
+            <td data-label="Due">${fmtDate(x.dueDate)}</td>
+            <td data-label="Status"><${Tag} type=${st==='Collected'?'ok':st==='Overdue'?'warn':undefined}>${st}<//></td>
+            <td class="right">${(st!=='Collected'&&ce)?html`<div class="flex gap8" style=${{justifyContent:'flex-end'}}><button class="mini pri" onClick=${()=>markPaid(x)}>${ar?'دُفعت':'Paid'}</button>${(c.whatsapp||c.phone)?html`<a class="mini" href=${waLink(c.whatsapp||c.phone,(ar?'تذكير دفعة ':'Payment reminder ')+money(x.amount)+(ar?' مستحقة ':' due ')+fmtDate(x.dueDate)+' — Magnet')} target="_blank" rel="noopener">WA</a>`:''}</div>`:''}</td>
+          </tr>`; })}</tbody></table></div>`:html`<div class="muted" style=${{fontSize:12,padding:'6px 0'}}>${ar?'مفيش دفعات. ولّدها من العقد فوق.':'No payments yet — generate them from a contract above.'}</div>`}
+      </div>`:''}
+
+      ${tab==='deliverables'?html`<div>
+        ${dlv.length?dlv.map(d=>html`<div class="lrow" key=${d.id}>
+          <div class="li-ic">${React.createElement(Icon.docs)}</div>
+          <div class="li-t"><b>${d.title||'—'}</b><span>${(d.type||'')+' · '+(d.status||'')}</span></div>
+          <span class="li-meta">${d.dueDate?fmtDate(d.dueDate):''}</span></div>`):html`<div class="muted" style=${{fontSize:12}}>${ar?'مفيش تسليمات للعميل ده.':'No deliverables for this client.'}</div>`}
+      </div>`:''}
+
+      ${tab==='activity'?html`<div>
+        ${ce?html`<div class="flex gap8" style=${{marginBottom:12}}><input class="inp" style=${{flex:1}} value=${note} onInput=${e=>setNote(e.target.value)} placeholder=${ar?'سجّل مكالمة / رسالة / ملاحظة...':'Log a call / message / note...'} onKeyDown=${e=>e.key==='Enter'&&addNote()}/><button class="btn btn-pri" onClick=${addNote}>${ar?'إضافة':'Add'}</button></div>`:''}
+        ${acts.length?acts.slice(0,40).map(a=>html`<div class="lrow" key=${a.id}>
+          <div class="li-t"><b style=${{fontWeight:600}}>${a.message||a.action||a.type||'—'}</b><span>${(a.by||'')+' · '+fmtDateTime(a.createdAt)}</span></div></div>`):html`<div class="muted" style=${{fontSize:12}}>${ar?'مفيش نشاط مسجّل بعد.':'No activity logged yet.'}</div>`}
+      </div>`:''}
+    </div>
+  </div></div>`;
+}
+
 function DashboardView({ ctx, byBrand }){
   const { db, role, user } = ctx;
   const leads = byBrand(db.leads||[]);
