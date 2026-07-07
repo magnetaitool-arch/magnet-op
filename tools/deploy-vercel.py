@@ -42,12 +42,13 @@ def collect():
                           'sha': hashlib.sha1(data).hexdigest(), 'size': len(data)})
     return files
 
-def api(method, path, body=None, raw=None, ctype='application/json'):
+def api(method, path, body=None, raw=None, ctype='application/json', digest=None):
     url = 'https://api.vercel.com' + path + (('&' if '?' in path else '?') + 'teamId=' + TEAM if TEAM else '')
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header('Authorization', 'Bearer ' + TOKEN)
     req.add_header('Content-Type', ctype)
+    if digest: req.add_header('x-vercel-digest', digest)
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
             return json.loads(r.read() or '{}')
@@ -58,7 +59,7 @@ def main():
     files = collect()
     print(f'Uploading {len(files)} files to Vercel project "{PROJECT}"…')
     for fobj in files:
-        api('POST', '/v2/files', raw=fobj['data'], ctype='application/octet-stream')
+        api('POST', '/v2/files', raw=fobj['data'], ctype='application/octet-stream', digest=fobj['sha'])
     payload = {
         'name': PROJECT,
         'project': PROJECT,

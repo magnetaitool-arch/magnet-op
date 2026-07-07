@@ -4633,9 +4633,9 @@ function App(){
     return out;
   };
   const deleteRecord = (coll, id) => {
-    // Defense in depth: invoices/payments can never be deleted, even if a future
-    // code path calls this directly (the UI already hides the button via canDelete).
-    if(PROTECTED_DELETE.includes(coll)){ console.warn('Blocked delete of protected collection:', coll); return; }
+    // Defense in depth: protected finance collections (invoices/payments) may only be
+    // deleted by Owner/Admin. Regular roles are blocked even if a button somehow renders.
+    if(PROTECTED_DELETE.includes(coll) && !isAdminRole(role)){ console.warn('Blocked delete of protected collection:', coll); return; }
     setDb(d=>({...d,[coll]:(d[coll]||[]).filter(x=>x.id!==id)}));
     // Write a TOMBSTONE (not a hard delete) so the deletion propagates through the
     // 5s poll on every device and can never resurrect from a stale local copy.
