@@ -7336,7 +7336,7 @@ function ClientAssetsView({ ctx, visible, ce }){
     <div class="flex gap8" style=${{marginBottom:16,flexWrap:'wrap'}}>
       <select class="sel" value=${cl} onChange=${e=>setCl(e.target.value)}><option value="">All clients</option>${(db.clients||[]).map(c=>html`<option key=${c.id} value=${c.id}>${c.brandName||c.name}</option>`)}</select>
       ${Object.keys(GROUPS).map(g=>html`<button key=${g} class="mini ${grp===g?'pri':''}" onClick=${()=>setGrp(g)}>${g}</button>`)}</div>
-    <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('clientAssets',r)):null} onDelete=${role==='Admin'?(r=>ctx.deleteRecord('clientAssets',r.id)):null}
+    <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('clientAssets',r)):null} onDelete=${ctx.canDelete('clientAssets')?(r=>ctx.delRec('clientAssets',r.id,r.title)):null}
       cols=${[{k:'title',label:'Asset'},{k:'assetType',label:'Type'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'accessStatus',label:'Access',tag:true},{k:'visibility',label:'Visibility'},
         {k:'link',label:'',render:r=>{const l=r.driveLink||r.fileLink||r.folderLink;return l?html`<a class="mini" href=${l} target="_blank" rel="noopener">Open</a>`:'—';}}]}/>
   </div>`;
