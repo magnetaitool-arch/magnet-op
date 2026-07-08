@@ -362,6 +362,8 @@ input,textarea{font-family:inherit}
 .gap8{gap:8px}.gap12{gap:12px}.gap16{gap:16px}
 .mt8{margin-top:8px}.mt16{margin-top:16px}.mt24{margin-top:24px}
 .pos{color:var(--pos)}.neg{color:var(--neg)}.lime{color:var(--lime)}
+.lnk{color:var(--lime);text-decoration:none;border-bottom:1px solid rgba(200,243,30,.35);word-break:break-all;transition:.14s}
+.lnk:hover{border-bottom-color:var(--lime);opacity:.85}
 
 /* ============================================================================
    LIGHT THEME  —  applied via <body class="theme-light">. Toggle in Settings.
@@ -1686,6 +1688,12 @@ const fmtDate = (d) => { if(!d) return '—'; const x = _isBareDate(d) ? new Dat
 const fmtDateTime = (d) => { if(!d) return '—'; const x=new Date(d); return isNaN(x)? d : x.toLocaleString(undefined,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
 const monthOf = (d) => (d||'').slice(0,7);
 const thisMonth = () => todayISO().slice(0,7);
+// Clickable links: any value that looks like a URL/domain becomes an <a> that
+// opens in a new tab — never copy-paste. `Ln` renders a labelled clickable link.
+const isUrl = (v) => typeof v==='string' && /^(https?:\/\/|www\.|mailto:|tel:)|\.[a-z]{2,}(\/|$)/i.test(v.trim()) && !/\s/.test(v.trim());
+const normUrl = (v) => { v=String(v||'').trim(); if(/^(https?:\/\/|mailto:|tel:)/i.test(v)) return v; return 'https://'+v.replace(/^\/+/,''); };
+const shortUrl = (v) => String(v||'').replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/$/,'').slice(0,42);
+const Ln = ({ href, children, cls }) => href ? html`<a class=${cls||'lnk'} href=${normUrl(href)} target="_blank" rel="noopener noreferrer" onClick=${e=>e.stopPropagation()}>${children||shortUrl(href)}</a>` : html`<span>—</span>`;
 const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
 const isOverdue = (d) => d && new Date(d) < new Date(todayISO());
 const byId = (arr,id) => (arr||[]).find(x=>x.id===id) || null;
@@ -1849,6 +1857,9 @@ const OPEN_SECTIONS = ['leaderboard','arcade']; // fun/engagement modules visibl
 // able to open Settings (cloud config, enabled modules, currency), export/restore all
 // data, or touch users/roles/diagnostics. Hard-locked below (not grantable per-user).
 const ADMIN_ONLY_SECTIONS = ['settings','backupCenter','dataHealth','systemQA','users','rolesPermissions'];
+// Merged into another module — hidden from the sidebar but the route + modal still
+// work. Clients now lives entirely inside Accounts (add/edit/report from there).
+const HIDDEN_NAV = ['clients'];
 const isAdminRole = (role)=> role==='Owner' || aliasRole(role)==='Admin';
 const canView    = (section, role) => ADMIN_ONLY_SECTIONS.includes(section) ? isAdminRole(role)
   : (OPEN_SECTIONS.includes(section) || (VIEW[aliasRole(role)]||[]).includes(section));
@@ -3704,7 +3715,7 @@ function Field({ f, value, onChange, db, rec }) {
   if(f.type==='checkbox') return html`<label class="fld" style=${{flexDirection:'row',alignItems:'center',gap:9}}>
     <input type="checkbox" checked=${!!value} onChange=${e=>set(e.target.checked)} style=${{width:16,height:16,accentColor:'var(--lime)'}}/>
     <span style=${{textTransform:'none',letterSpacing:0,fontSize:13,color:'var(--ink-2)'}}>${f.label}</span></label>`;
-  return html`<label class="fld ${f.full?'full':''}"><span>${f.label}</span>
+  return html`<label class="fld ${f.full?'full':''}"><span>${f.label}${isUrl(value)?html` · <${Ln} href=${value}>${'فتح ↗'}<//>`:''}</span>
     <input type=${f.type||'text'} value=${value==null?'':value}
       onChange=${e=>{ const v=e.target.value; set(f.type==='number' ? (v===''?'':Number(v)) : v); }} /></label>`;
 }
@@ -3721,12 +3732,18 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const save = ()=>{ const missing=(allowed.filter(f=>f.req && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]===''))); if(missing.length){ setErr('Required: '+missing.map(f=>f.label).join(', ')); return; } onSave(rec); };
   // group fields if any have a `group`
   const hasGroups = allowed.some(f=>f.group);
+  const ar = getAppSettings().language==='ar';
+  const COLLAPSE = new Set(['Advanced','More','متقدّم']);
+  const GL = {Basic:'الأساسي',Contact:'التواصل',Contract:'العقد',Account:'الحساب',Plan:'الخطة الشهرية (كام في الشهر)',Links:'الروابط',Advanced:'تفاصيل إضافية (اختياري)',Notes:'ملاحظات',Business:'بيانات',Other:'أخرى',Work:'الشغل',Compensation:'الرواتب',Performance:'الأداء',Access:'الدخول',Documents:'مستندات',Asset:'الأصل',Meeting:'الاجتماع'};
+  const gl = (g)=> ar ? (GL[g]||g) : g;
   const body = hasGroups
     ? (()=>{ const groups=[]; const seen={};
         allowed.forEach(f=>{ const g=f.group||'Other'; if(!seen[g]){seen[g]=[];groups.push(g);} seen[g].push(f); });
-        return groups.map(g=>html`<div key=${g} style=${{marginBottom:6}}>
-          <div class="eyebrow" style=${{margin:'10px 0 10px'}}>${g}</div>
-          <div class="form-grid">${seen[g].map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div></div>`); })()
+        const grp=(g)=>html`<div key=${g} style=${{marginBottom:6}}>
+          <div class="eyebrow" style=${{margin:'10px 0 10px'}}>${gl(g)}</div>
+          <div class="form-grid">${seen[g].map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div></div>`;
+        const ess=groups.filter(g=>!COLLAPSE.has(g)); const adv=groups.filter(g=>COLLAPSE.has(g));
+        return html`<div>${ess.map(grp)}${adv.length?html`<details style=${{marginTop:4}}><summary style=${{cursor:'pointer',fontSize:12,color:'var(--lime)',padding:'8px 0',listStyle:'none'}}>${ar?'▸ تفاصيل إضافية (اختياري)':'▸ More details (optional)'}</summary>${adv.map(grp)}</details>`:''}</div>`; })()
     : html`<div class="form-grid">${allowed.map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div>`;
   return html`<div>
     <div style=${{maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>${body}</div>
@@ -3964,6 +3981,7 @@ function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions
         c.date ? fmtDate(r[c.k]) :
         c.tag ? html`<${Tag}>${r[c.k]||'—'}<//>` :
         c.ref ? nameById(db[c.coll], r[c.k], c.f) :
+        isUrl(r[c.k]) ? html`<${Ln} href=${r[c.k]}/>` :
         (r[c.k]==null||r[c.k]===''?'—':r[c.k])
       }</td>`)}
       ${(onEdit||onDelete||extraActions)&&html`<td class="right cell-actions" data-label="Actions" style=${{whiteSpace:'nowrap'}}>
@@ -4985,7 +5003,7 @@ function App(){
       </div>
       <nav class="nav">
         ${(()=>{
-          const allowed = it=>canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role);
+          const allowed = it=>!HIDDEN_NAV.includes(it[0])&&canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role);
           const navItem = it=>html`<button key=${it[0]} class="nav-item ${route===it[0]?'active':''}" onClick=${()=>goM(it[0])} title=${it[3]==='new'?'New feature':''}>
               ${React.createElement(Icon[it[2]]||Icon.command)}<span>${t(it[0])!==it[0]?t(it[0]):it[1]}</span>
               ${it[3]==='new'&&html`<span class="new-badge">${lang==='ar'?'جديد':'New'}</span>`}
@@ -5059,7 +5077,7 @@ function App(){
           exportJSON, importJSON, clearLocal, seedDemo, restoreSnapshot, setBackupPrefs, pullFromCloud })}
       </div>
       ${(()=>{ // mobile bottom navigation (5 slots; last opens the More sheet)
-        const primary=[['dashboard','Dashboard','command'],['clients','Clients','layers'],['tasks','Tasks','check'],['approvalCenter','Approvals','shield']].filter(it=>canView(it[0],role));
+        const primary=[['dashboard','Dashboard','command'],['accounts','Accounts','people'],['tasks','Tasks','check'],['approvalCenter','Approvals','shield']].filter(it=>canView(it[0],role));
         return html`<nav class="bottom-nav">
           ${primary.map(it=>html`<button key=${it[0]} class="bn-item ${route===it[0]?'on':''}" onClick=${()=>goM(it[0])}>
             ${React.createElement(Icon[it[2]]||Icon.command)}<span>${it[1]}</span></button>`)}
@@ -5107,22 +5125,29 @@ const FORM_SCHEMAS = {
     {k:'ownerId',label:'Owner (HR)',type:'ref',coll:'employees',group:'Pipeline'},{k:'notes',label:'Notes',type:'textarea',group:'Pipeline'},
   ],
   clients:[
-    {k:'brandName',label:'Brand name',req:true,group:'Basic'},{k:'legalName',label:'Legal name',group:'Basic'},{k:'industry',label:'Industry',group:'Basic'},
+    // Essentials — what you actually need to add a client
+    {k:'brandName',label:'Brand name',req:true,group:'Basic'},{k:'industry',label:'Industry',group:'Basic'},
     {k:'brand',label:'Brand',type:'select',opts:BRANDS,group:'Basic'},{k:'clientType',label:'Client type',type:'select',opts:CLIENT_TYPES,group:'Basic'},
-    {k:'status',label:'Status',type:'select',opts:ST.client,group:'Basic'},{k:'priority',label:'Priority',type:'select',opts:CLIENT_PRIORITIES,group:'Basic'},
-    {k:'source',label:'Source',group:'Basic'},{k:'website',label:'Website',group:'Basic'},{k:'instagram',label:'Instagram',group:'Basic'},
-    {k:'mainContactName',label:'Main contact',req:true,group:'Contact'},{k:'mainContactRole',label:'Contact role',group:'Contact'},
+    {k:'status',label:'Status',type:'select',opts:ST.client,group:'Basic'},
+    {k:'mainContactName',label:'Main contact',req:true,group:'Contact'},
     {k:'mainContactPhone',label:'Phone',req:true,group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
-    {k:'location',label:'Location',group:'Business'},{k:'targetAudience',label:'Target audience',group:'Business'},{k:'brandTone',label:'Brand tone',group:'Business'},
-    {k:'competitors',label:'Competitors',group:'Business'},{k:'googleDriveFolder',label:'Drive folder',group:'Business'},{k:'brandGuidelinesLink',label:'Brand guidelines',group:'Business'},
-    {k:'serviceType',label:'Primary service',req:true,type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},{k:'monthlyRetainer',label:'Monthly retainer',type:'number',group:'Contract'},
-    {k:'billingCycle',label:'Billing cycle',type:'select',opts:BILLING_CYCLES,group:'Contract'},{k:'contractStartDate',label:'Contract start',type:'date',group:'Contract'},
-    {k:'contractEndDate',label:'Contract end',type:'date',group:'Contract'},{k:'renewalDate',label:'Renewal date',type:'date',group:'Contract'},
-    {k:'collectionDay',label:'Collection day (1-28)',type:'number',group:'Contract'},{k:'nextCollectionDate',label:'Next collection date',type:'date',group:'Contract'},
-    {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',req:true,group:'Account'},{k:'projectManagerId',label:'Project manager',type:'ref',coll:'employees',group:'Account'},{k:'primaryTeamId',label:'Primary Team',type:'ref',coll:'teams',group:'Account'},{k:'assignedTeamIds',label:'Assigned Teams',type:'multiref',coll:'teams',group:'Account'},
-    {k:'communicationChannel',label:'Channel',type:'select',opts:COMM_CHANNELS,group:'Account'},{k:'whatsappGroupLink',label:'WhatsApp group',group:'Account'},
-    {k:'meetingFrequency',label:'Meeting frequency',group:'Account'},{k:'nextMeetingDate',label:'Next meeting',type:'date',group:'Account'},
-    {k:'satisfactionScore',label:'Satisfaction (0-100)',type:'number',group:'Account'},
+    {k:'serviceType',label:'Primary service',req:true,type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},
+    {k:'monthlyRetainer',label:'Monthly retainer',type:'number',group:'Contract'},{k:'billingCycle',label:'Billing cycle',type:'select',opts:BILLING_CYCLES,group:'Contract'},{k:'collectionDay',label:'Collection day (1-28)',type:'number',group:'Contract'},
+    {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',req:true,group:'Account'},{k:'projectManagerId',label:'Project manager',type:'ref',coll:'employees',group:'Account'},
+    // Monthly plan — how many of each per month (feeds the client report)
+    {k:'planPosts',label:'Posts / month',type:'number',group:'Plan'},{k:'planReels',label:'Reels / month',type:'number',group:'Plan'},
+    {k:'planCarousels',label:'Carousels / month',type:'number',group:'Plan'},{k:'planStories',label:'Stories / month',type:'number',group:'Plan'},
+    // Links — all clickable
+    {k:'website',label:'Website',group:'Links'},{k:'instagram',label:'Instagram',group:'Links'},{k:'googleDriveFolder',label:'Drive folder',group:'Links'},
+    {k:'brandGuidelinesLink',label:'Brand guidelines',group:'Links'},{k:'whatsappGroupLink',label:'WhatsApp group',group:'Links'},
+    // Advanced — optional, collapsed by default
+    {k:'legalName',label:'Legal name',group:'Advanced'},{k:'priority',label:'Priority',type:'select',opts:CLIENT_PRIORITIES,group:'Advanced'},{k:'source',label:'Source',group:'Advanced'},
+    {k:'mainContactRole',label:'Contact role',group:'Advanced'},{k:'location',label:'Location',group:'Advanced'},{k:'targetAudience',label:'Target audience',group:'Advanced'},
+    {k:'brandTone',label:'Brand tone',group:'Advanced'},{k:'competitors',label:'Competitors',group:'Advanced'},
+    {k:'contractStartDate',label:'Contract start',type:'date',group:'Advanced'},{k:'contractEndDate',label:'Contract end',type:'date',group:'Advanced'},{k:'renewalDate',label:'Renewal date',type:'date',group:'Advanced'},
+    {k:'nextCollectionDate',label:'Next collection date',type:'date',group:'Advanced'},{k:'primaryTeamId',label:'Primary Team',type:'ref',coll:'teams',group:'Advanced'},{k:'assignedTeamIds',label:'Assigned Teams',type:'multiref',coll:'teams',group:'Advanced'},
+    {k:'communicationChannel',label:'Channel',type:'select',opts:COMM_CHANNELS,group:'Advanced'},{k:'meetingFrequency',label:'Meeting frequency',group:'Advanced'},{k:'nextMeetingDate',label:'Next meeting',type:'date',group:'Advanced'},
+    {k:'satisfactionScore',label:'Satisfaction (0-100)',type:'number',group:'Advanced'},
     {k:'notes',label:'Notes',type:'textarea',group:'Notes'},
   ],
   contacts:[{k:'name',label:'Full name',req:true},{k:'role',label:'Role'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'preferredChannel',label:'Channel',type:'select',opts:['Email','WhatsApp','Call']}],
@@ -5433,9 +5458,14 @@ const needsFollowup = (db,c)=>{ const la=lastActivityAt(db,c); if(!la) return tr
 const monthsBetween = (a,b)=>{ if(!a||!b) return 0; const x=new Date(a),y=new Date(b); const n=(y.getFullYear()-x.getFullYear())*12+(y.getMonth()-x.getMonth()); return n>0?n:0; };
 // Plan (cadence) + this-month actual counts per content type, computed live from
 // the content calendar. Returns {plan, actual} keyed by posts/reels/carousels/stories.
-const REPORT_PLAN_TYPES = [['posts','Post','بوستات','Posts'],['reels','Reel','ريلز','Reels'],['carousels','Carousel','كاروسيلز','Carousels'],['stories','Story','ستوريز','Stories']];
+// Monthly plan is stored as flat fields on the client (planPosts / planReels /
+// planCarousels / planStories) so it can be set in the client form AND edited in
+// the Report tab from one source. Legacy c.report.plan is read as a fallback.
+const REPORT_PLAN_TYPES = [['planPosts','Post','بوستات','Posts'],['planReels','Reel','ريلز','Reels'],['planCarousels','Carousel','كاروسيلز','Carousels'],['planStories','Story','ستوريز','Stories']];
+const LEGACY_PLAN = {planPosts:'posts',planReels:'reels',planCarousels:'carousels',planStories:'stories'};
+const planVal = (c,k)=> +(c[k]!=null && c[k]!=='' ? c[k] : ((c.report&&c.report.plan&&c.report.plan[LEGACY_PLAN[k]])||0)) || 0;
 function reportPlanActual(c, db){
-  const m=thisMonth(); const plan=(c.report&&c.report.plan)||{};
+  const m=thisMonth(); const plan={}; REPORT_PLAN_TYPES.forEach(([k])=>{ plan[k]=planVal(c,k); });
   const items=(db.contentCalendar||[]).filter(x=>x.clientId===c.id && monthOf(x.scheduledDate||x.deadline||x.createdAt)===m);
   const actual={}; REPORT_PLAN_TYPES.forEach(([k,ct])=>{ actual[k]=items.filter(x=>x.contentType===ct).length; });
   return { plan, actual };
@@ -5578,6 +5608,8 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
   const [hi,setHi]=useState(''); const [ns,setNs]=useState('');
   const acts=clientActivities(db,c).slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   const dlv=(db.deliverables||[]).filter(d=>d.clientId===c.id);
+  const clientProjects=(db.projects||[]).filter(p=>p.clientId===c.id);
+  const clientTasks=(db.tasks||[]).filter(t=>t.clientId===c.id || clientProjects.some(p=>p.id===t.projectId));
   const contracts=(db.contracts||[]).filter(k=>k.clientId===c.id);
   const clientCols=(db.collections||[]).filter(x=>x.clientId===c.id).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
   const ob=(Array.isArray(c.onboarding)&&c.onboarding.length)?c.onboarding:ONBOARDING_STEPS.map(s=>({item:s,done:false}));
@@ -5597,11 +5629,11 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
   const remaining=total-paid;
   const nm=cNameOf(c);
   // ---- Report & Handover state (stored on the client record as c.report jsonb) ----
-  const rep=c.report||{}; const repPlan=rep.plan||{};
+  const rep=c.report||{};
   const missing=reportMissing(c,db,ar);
   const {actual:repActual}=reportPlanActual(c,db);
   const saveReport=(patch)=>{ if(!ce)return; ctx.updateRecord('clients',c.id,{report:Object.assign({plan:{},highlights:[],nextSteps:[],handover:''},rep,patch)}); };
-  const setPlan=(k,v)=>saveReport({plan:Object.assign({},repPlan,{[k]:Math.max(0,parseInt(v,10)||0)})});
+  const setPlan=(k,v)=>{ if(!ce)return; ctx.updateRecord('clients',c.id,{[k]:Math.max(0,parseInt(v,10)||0)}); };
   const addToList=(key,val,clear)=>{ if(!val.trim())return; saveReport({[key]:[...(rep[key]||[]),{t:val.trim()}]}); clear(''); };
   const delFromList=(key,i)=>saveReport({[key]:(rep[key]||[]).filter((_,idx)=>idx!==i)});
   const clientAssets=(db.clientAssets||[]).filter(a=>a.clientId===c.id);
@@ -5609,7 +5641,7 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
   const empById=(id)=>{ const r=(db.employees||[]).find(x=>x.id===id); return r?(r.fullName||r.displayName||r.name||'—'):'—'; };
   const assetColor=(s)=> s==='Available'?'var(--pos)':(s==='Missing'?'var(--warn)':'var(--ink-3)');
   const stOf=(x)=> x.status==='Collected'?'Collected':(x.dueDate&&x.dueDate<todayISO()?'Overdue':'Pending');
-  const tabs=[['report',ar?'التقرير والهاند-أوفر':'Report & Handover'],fin?['payments',ar?'العقود والدفعات':'Contracts & Payments']:null,['onboarding',ar?'الأونبوردنج':'Onboarding'],['deliverables',ar?'التسليمات':'Deliverables'],['activity',ar?'النشاط':'Activity']].filter(Boolean);
+  const tabs=[['report',ar?'التقرير والهاند-أوفر':'Report & Handover'],['work',ar?'المشاريع والتاسكات':'Projects & Tasks'],fin?['payments',ar?'العقود والدفعات':'Contracts & Payments']:null,['onboarding',ar?'الأونبوردنج':'Onboarding'],['deliverables',ar?'التسليمات':'Deliverables'],['activity',ar?'النشاط':'Activity']].filter(Boolean);
   return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" dir=${ar?'rtl':'ltr'} onClick=${e=>e.stopPropagation()}>
     <div class="cdrawer-h">
       <div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>${ar?'حساب':'Account'} · ${c.status||'—'}</div>
@@ -5637,9 +5669,9 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
         ${REPORT_PLAN_TYPES.map(([k,ct,la,le])=>html`<div class="flex between center" key=${k} style=${{gap:10,padding:'7px 0',borderBottom:'1px solid var(--line)'}}>
           <span style=${{fontSize:13}}>${ar?la:le}</span>
           <div class="flex center" style=${{gap:10}}>
-            <span class="mono" style=${{fontSize:11,color:(repActual[k]||0)>=(+repPlan[k]||0)&&(+repPlan[k]||0)>0?'var(--pos)':'var(--ink-3)'}}>${ar?'منفّذ':'done'} ${repActual[k]||0}</span>
+            <span class="mono" style=${{fontSize:11,color:(repActual[k]||0)>=planVal(c,k)&&planVal(c,k)>0?'var(--pos)':'var(--ink-3)'}}>${ar?'منفّذ':'done'} ${repActual[k]||0}</span>
             <span class="muted" style=${{fontSize:11}}>${ar?'خطة':'plan'}</span>
-            <input type="number" min="0" disabled=${!ce} value=${+repPlan[k]||0} onChange=${e=>setPlan(k,e.target.value)} class="inp" style=${{width:60,textAlign:'center'}}/>
+            <input type="number" min="0" disabled=${!ce} value=${planVal(c,k)} onChange=${e=>setPlan(k,e.target.value)} class="inp" style=${{width:60,textAlign:'center'}}/>
           </div></div>`)}
 
         <div class="flex between center" style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'الإعداد (Setup)':'Setup done'}</b><span class="mono lime" style=${{fontSize:12}}>${obPct}%</span></div>
@@ -5664,6 +5696,10 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
 
         <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'لقطة الحساب':'Account snapshot'}</b></div>
         ${[[ar?'الكونتاكت':'Main contact', c.mainContactName||c.contactPerson],[ar?'هاتف / واتساب':'Phone / WhatsApp', c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone],[ar?'أكونت مانجر':'Account manager', c.accountManagerId?empById(c.accountManagerId):''],[ar?'بروجيكت مانجر':'Project manager', c.projectManagerId?empById(c.projectManagerId):''],[ar?'الخدمات':'Services', Array.isArray(c.services)?c.services.join(', '):c.serviceType],[ar?'الريتينر / الفوترة':'Retainer / Billing', (c.monthlyRetainer?money(c.monthlyRetainer):'')+(c.billingCycle?(' · '+c.billingCycle):'')]].filter(r=>r[1]).map((r,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'5px 0',borderBottom:'1px solid var(--line)'}}><span class="muted" style=${{fontSize:12}}>${r[0]}</span><span style=${{fontSize:12.5,textAlign:ar?'left':'right'}}>${r[1]}</span></div>`)}
+
+        ${(()=>{ const links=[[ar?'الموقع':'Website',c.website],[ar?'إنستجرام':'Instagram',c.instagram],[ar?'مجلد درايف':'Drive folder',c.googleDriveFolder],[ar?'دليل الهوية':'Brand guidelines',c.brandGuidelinesLink],[ar?'جروب واتساب':'WhatsApp group',c.whatsappGroupLink]].filter(r=>r[1]); return links.length?html`
+        <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'الروابط':'Links'}</b> <span class="muted" style=${{fontSize:10.5}}>${ar?'اضغط يفتح':'tap to open'}</span></div>
+        ${links.map((r,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'5px 0',borderBottom:'1px solid var(--line)'}}><span class="muted" style=${{fontSize:12}}>${r[0]}</span><${Ln} href=${r[1]}/></div>`)}`:''; })()}
 
         <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'أبرز الإنجازات':'Highlights'}</b></div>
         ${(rep.highlights||[]).map((x,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'6px 0',borderBottom:'1px solid var(--line)'}}><span style=${{fontSize:12.5}}>${x.t||''}</span>${ce?html`<button class="mini danger" onClick=${()=>delFromList('highlights',i)}>×</button>`:''}</div>`)}
@@ -5712,6 +5748,22 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
             <td data-label="Status"><${Tag} type=${st==='Collected'?'ok':st==='Overdue'?'warn':undefined}>${st}<//></td>
             <td class="right">${(st!=='Collected'&&ce)?html`<div class="flex gap8" style=${{justifyContent:'flex-end'}}><button class="mini pri" onClick=${()=>markPaid(x)}>${ar?'دُفعت':'Paid'}</button>${(c.whatsapp||c.phone)?html`<a class="mini" href=${waLink(c.whatsapp||c.phone,(ar?'تذكير دفعة ':'Payment reminder ')+money(x.amount)+(ar?' مستحقة ':' due ')+fmtDate(x.dueDate)+' — Magnet')} target="_blank" rel="noopener">WA</a>`:''}</div>`:''}</td>
           </tr>`; })}</tbody></table></div>`:html`<div class="muted" style=${{fontSize:12,padding:'6px 0'}}>${ar?'مفيش دفعات. ولّدها من العقد فوق.':'No payments yet — generate them from a contract above.'}</div>`}
+      </div>`:''}
+
+      ${tab==='work'?html`<div>
+        <div class="flex between center" style=${{marginBottom:8}}><b style=${{fontSize:13}}>${ar?'مشاريع العميل':'Client projects'}</b>
+          ${ce?html`<button class="mini pri" onClick=${()=>ctx.openModal('projects',{clientId:c.id,status:'Not Started'})}>${ar?'+ مشروع جديد':'+ New project'}</button>`:''}</div>
+        ${clientProjects.length?clientProjects.map(p=>{ const pt=clientTasks.filter(t=>t.projectId===p.id); const doneN=pt.filter(t=>['Done','Completed','Approved'].includes(t.status)).length;
+          return html`<div class="lrow" key=${p.id} style=${{cursor:ce?'pointer':'default'}} onClick=${()=>ce&&ctx.openModal('projects',p)}>
+          <div class="li-ic">${React.createElement(Icon.projects||Icon.folder||Icon.docs)}</div>
+          <div class="li-t"><b>${p.projectName||p.name||'—'}</b><span>${(p.projectType||p.type||'')+(p.status?(' · '+p.status):'')+(pt.length?(' · '+doneN+'/'+pt.length+(ar?' تاسك':' tasks')):'')}</span></div>
+          <span class="li-meta">${p.dueDate?fmtDate(p.dueDate):(p.deadline?fmtDate(p.deadline):'')}</span></div>`; }):html`<div class="muted" style=${{fontSize:12,padding:'4px 0'}}>${ar?'مفيش مشاريع للعميل ده. اعمل مشروع من فوق.':'No projects yet — add one above.'}</div>`}
+
+        <div style=${{margin:'16px 0 8px'}}><b style=${{fontSize:13}}>${ar?'التاسكات':'Tasks'}</b> <span class="muted" style=${{fontSize:11}}>${clientTasks.length?('· '+clientTasks.filter(t=>['Done','Completed','Approved'].includes(t.status)).length+'/'+clientTasks.length):''}</span></div>
+        ${clientTasks.length?clientTasks.slice(0,20).map(t=>html`<div class="flex between center" key=${t.id} style=${{gap:10,padding:'6px 0',borderBottom:'1px solid var(--line)'}}>
+          <div class="li-t"><b style=${{fontSize:12.5,fontWeight:500}}>${t.title||t.name||'—'}</b><span style=${{fontSize:11}}>${(t.assignee||t.assignedToName||'')||nameById(db.employees,t.assignedTo)||''}</span></div>
+          <span class="mono" style=${{fontSize:10,color:['Done','Completed','Approved'].includes(t.status)?'var(--pos)':(t.dueDate&&t.dueDate<todayISO()?'var(--warn)':'var(--ink-3)')}}>${t.status||''}</span>
+        </div>`):html`<div class="muted" style=${{fontSize:12,padding:'4px 0'}}>${ar?'مفيش تاسكات.':'No tasks.'}</div>`}
       </div>`:''}
 
       ${tab==='deliverables'?html`<div>
