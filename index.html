@@ -1240,12 +1240,20 @@ body.theme-light .tbl thead th{background:#fff}
       ml.rel="manifest"; ml.href=URL.createObjectURL(mb); document.head.appendChild(ml);
     }
     if("serviceWorker" in navigator && location.protocol!=="file:"){
-      // hosted: register the real external serviceworker.js (falls back silently)
-      navigator.serviceWorker.register("/serviceworker.js").then(function(r){ try{ r.update(); }catch(e){} }).catch(function(){});
-      // Purge any stale caches from older versions so old data/code can't linger.
-      try{ if(window.caches) caches.keys().then(function(ks){ ks.forEach(function(k){ if(k!=="magnet-os-v5") caches.delete(k); }); }); }catch(e){}
-      // If an EXISTING controlling worker gets replaced by a new version, reload once
-      // to pick up fresh code (fresh installs have no controller, so they don't reload).
+      // hosted: register the real external serviceworker.js (falls back silently).
+      // updateViaCache:none => the SW script is always fetched fresh when we check.
+      navigator.serviceWorker.register("/serviceworker.js", {updateViaCache:"none"}).then(function(r){
+        try{ r.update(); }catch(e){}
+        // ALWAYS-LIVE: check for a new deploy every 60s and whenever the tab regains
+        // focus, so an already-open app auto-updates within ~1 min — no hard refresh ever.
+        try{ setInterval(function(){ try{ r.update(); }catch(e){} }, 60000); }catch(e){}
+        try{ document.addEventListener("visibilitychange", function(){ if(!document.hidden){ try{ r.update(); }catch(e){} } }); }catch(e){}
+        try{ window.addEventListener("focus", function(){ try{ r.update(); }catch(e){} }); }catch(e){}
+      }).catch(function(){});
+      // (old caches are purged by the SW's own activate handler — no hardcoded name here)
+      // When a NEW worker takes control (existing controller replaced by a fresh deploy),
+      // reload once to pick up the new code automatically. Fresh installs have no
+      // controller, so first load never reloads.
       try{ var _rl=false, _had=!!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", function(){ if(_rl||!_had) return; _rl=true; location.reload(); }); }catch(e){}
     }
   }catch(e){}
