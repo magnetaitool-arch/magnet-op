@@ -997,6 +997,9 @@ button:focus:not(:focus-visible){outline:none}
 .btn:active,.mini:active{transform:translateY(0) scale(.97)}
 .mini{will-change:transform}
 .mini:hover{background:rgba(255,255,255,.10);color:var(--ink);border-color:var(--line-strong)}
+/* Icons inside compact buttons must stay small (some minis include an svg) */
+.mini svg{width:14px;height:14px;flex:0 0 auto;vertical-align:middle;display:inline-block}
+.mini{display:inline-flex;align-items:center;gap:6px}
 .btn-pri:active{transform:translateY(0) scale(.98)}
 /* List rows & kanban cards: soft hover lift */
 .lrow{transition:background .15s var(--ease),transform .15s var(--ease);border-radius:10px;padding-left:8px;padding-right:8px;margin-left:-8px;margin-right:-8px}
@@ -6126,6 +6129,36 @@ function DashboardView({ ctx, byBrand }){
     ${(()=>{ const m=getBackupMeta(); const days=m.lastDownloadAt?((Date.now()-m.lastDownloadAt)/86400000):999;
       return days>7?html`<div class="backup-banner"><span>${ctx.lang==='ar'?'يُنصح بأخذ نسخة احتياطية. قم بتصدير بياناتك للحفاظ عليها.':'Backup recommended. Export your data to keep it safe.'}</span>
         <button class="mini pri" onClick=${()=>ctx.go('backupCenter')}>${ctx.lang==='ar'?'النسخ الاحتياطي':'Backup'}</button></div>`:null; })()}
+    ${(()=>{ const arr=ctx.lang==='ar'; const today=todayISO();
+      const acts=[];
+      if(canEdit('clients',role)) acts.push([arr?'عميل جديد':'New client',()=>{ctx.go('accounts');ctx.openModal('clients',{status:'Lead'});}]);
+      if(canCreateTasks(role)) acts.push([arr?'تاسك جديد':'New task',()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})]);
+      if(canEdit('projects',role)) acts.push([arr?'مشروع جديد':'New project',()=>ctx.openModal('projects',{status:'Not Started'})]);
+      if(canEdit('invoices',role)&&fin) acts.push([arr?'فاتورة':'New invoice',()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:today,tax:5})]);
+      const myTasks=(db.tasks||[]).filter(tk=>(tk.assignedTo===user.id||tk.assignedTo===user.name)&&!['Done','Completed','Approved'].includes(tk.status)&&(tk.dueDate===today||isOverdue(tk.dueDate)));
+      const approvals=(db.approvalRequests||[]).filter(r=>r.status==='Pending Approval');
+      const meetings=(db.meetings||[]).filter(mt=>(mt.date||'').slice(0,10)===today&&mt.status!=='Cancelled');
+      const recent=[...(db.clients||[]).map(x=>({t:'accounts',n:cNameOf(x),u:x.updatedAt,ic:'people',rec:x,coll:'clients'})),
+        ...(db.projects||[]).map(x=>({t:'projects',n:x.projectName||x.name,u:x.updatedAt,ic:'briefcase',rec:x,coll:'projects'})),
+        ...(db.tasks||[]).map(x=>({t:'tasks',n:x.title||x.name,u:x.updatedAt,ic:'check',rec:x,coll:'tasks'}))]
+        .filter(x=>x.u&&x.n).sort((a,b)=>(b.u||'').localeCompare(a.u||'')).slice(0,5);
+      const card=(title,count,accent,children)=>html`<${Panel} className="lift"><div style=${{padding:'14px 16px'}}>
+        <div class="flex between center" style=${{marginBottom:10}}><b style=${{fontSize:13}}>${title}</b><span class="mono" style=${{fontSize:12,color:count?accent:'var(--ink-4)'}}>${count}</span></div>${children}</div><//>`;
+      return html`<div style=${{marginBottom:18}}>
+        <div class="flex between center" style=${{margin:'2px 0 12px',flexWrap:'wrap',gap:10}}>
+          <div class="eyebrow">${arr?'شغلك النهاردة':'Your work today'}</div>
+          <div class="flex gap8" style=${{flexWrap:'wrap'}}>${acts.map(a=>html`<button key=${a[0]} class="mini pri" onClick=${a[1]}>${React.createElement(Icon.plus)} ${a[0]}</button>`)}</div>
+        </div>
+        <div class="grid g-3 stagger">
+          ${card(arr?'مهامي النهاردة':'My tasks today', myTasks.length, 'var(--lime)', myTasks.length?myTasks.slice(0,5).map(tk=>html`<div class="lrow" key=${tk.id} style=${{cursor:'pointer'}} onClick=${()=>ctx.go('tasks')}><div class="li-t"><b style=${{fontWeight:500,fontSize:12.5}}>${tk.title||tk.name}</b><span style=${{fontSize:11,color:isOverdue(tk.dueDate)?'var(--warn)':'var(--ink-3)'}}>${tk.dueDate?fmtDate(tk.dueDate):''}${isOverdue(tk.dueDate)?(arr?' · متأخرة':' · overdue'):''}</span></div></div>`):html`<div class="muted" style=${{fontSize:12,padding:'4px 0'}}>${arr?'مفيش مهام مستحقة عليك النهاردة ✓':'Nothing due for you today ✓'}</div>`)}
+          ${card(arr?'موافقات معلّقة':'Pending approvals', approvals.length, 'var(--warn)', approvals.length?approvals.slice(0,5).map(r=>html`<div class="lrow" key=${r.id} style=${{cursor:'pointer'}} onClick=${()=>ctx.go('approvalCenter')}><div class="li-t"><b style=${{fontWeight:500,fontSize:12.5}}>${r.title}</b><span style=${{fontSize:11}}>${r.requestType||''}</span></div></div>`):html`<div class="muted" style=${{fontSize:12,padding:'4px 0'}}>${arr?'مفيش حاجة مستنية موافقة ✓':'Nothing awaiting approval ✓'}</div>`)}
+          ${card(arr?'اجتماعات النهاردة':'Meetings today', meetings.length, 'var(--info,#7fb6f0)', meetings.length?meetings.slice(0,5).map(mt=>html`<div class="lrow" key=${mt.id} style=${{cursor:'pointer'}} onClick=${()=>ctx.go('meetings')}><div class="li-t"><b style=${{fontWeight:500,fontSize:12.5}}>${mt.title}</b><span style=${{fontSize:11}}>${(mt.type||'')+(mt.clientId?(' · '+nameById(db.clients,mt.clientId)):'')}</span></div>${mt.meetingLink?html`<${Ln} href=${mt.meetingLink}>${arr?'انضم':'Join'}<//>`:''}</div>`):html`<div class="muted" style=${{fontSize:12,padding:'4px 0'}}>${arr?'مفيش اجتماعات النهاردة':'No meetings today'}</div>`)}
+        </div>
+        ${recent.length?html`<div style=${{marginTop:14}}>
+          <div class="eyebrow" style=${{marginBottom:8}}>${arr?'إكمِل شغلك':'Continue working'}</div>
+          <div class="flex gap8" style=${{flexWrap:'wrap'}}>${recent.map((r,idx)=>html`<button key=${idx} class="mini" style=${{display:'inline-flex',alignItems:'center',gap:7}} onClick=${()=>{ if(r.coll==='tasks'||r.coll==='projects') ctx.openModal(r.coll,r.rec); else ctx.go(r.t); }}>${React.createElement(Icon[r.ic]||Icon.command)} ${r.n}</button>`)}</div>
+        </div>`:''}
+      </div>`; })()}
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
       <${KPI} label="New leads (month)" value=${leads.filter(l=>monthOf(l.createdAt)===m).length} icon="target"/>
       <${KPI} label="Won deals" value=${leads.filter(l=>l.status==='Won').length} icon="check"/>
