@@ -1045,6 +1045,30 @@ body.theme-light .tbl thead th{background:#fff}
 .qc-menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:0;color:var(--ink-2);font-size:13px;padding:9px 11px;border-radius:8px;cursor:pointer;transition:.12s}
 .qc-menu button:hover{background:var(--panel-hi);color:var(--ink)}
 .qc-menu button svg{width:15px;height:15px;color:var(--ink-3)}
+/* Magnet Radio player */
+.radio-pop{position:absolute;top:calc(100% + 8px);right:0;width:300px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:16px;box-shadow:0 24px 60px -20px rgba(0,0,0,.7);padding:16px;z-index:60;animation:cmdk-pop .16s var(--ease-spring)}
+[dir="rtl"] .radio-pop{right:auto;left:0}
+.radio-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.radio-h b{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--lime);font-weight:700}
+.radio-np{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.radio-sub{font-size:11px;color:var(--ink-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.radio-ctrls{display:flex;align-items:center;justify-content:center;gap:16px;margin:14px 0}
+.radio-ctrls button{background:transparent;border:0;color:var(--ink-2);cursor:pointer;display:grid;place-items:center;transition:transform .14s var(--ease-spring),color .14s}
+.radio-ctrls button:hover{color:var(--ink);transform:scale(1.12)}
+.radio-ctrls button:active{transform:scale(.94)}
+.radio-ctrls svg{width:19px;height:19px}
+.radio-play{width:46px;height:46px;border-radius:50%;background:var(--lime)!important;color:#0c0e08!important;box-shadow:0 8px 22px -8px var(--lime-glow)}
+.radio-play:hover{background:var(--lime-bright)!important}
+.radio-play svg{width:22px;height:22px}
+.radio-vol{width:100%;accent-color:var(--lime);height:4px;cursor:pointer}
+.radio-stations{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.radio-st{font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid var(--line);background:transparent;color:var(--ink-3);cursor:pointer;transition:.14s}
+.radio-st:hover{border-color:var(--line-strong);color:var(--ink-2)}
+.radio-st.on{background:var(--lime-glow);border-color:rgba(200,243,30,.4);color:var(--lime)}
+.radio-toggles{display:flex;gap:8px;margin-top:12px}
+.radio-tg{flex:1;font-size:11px;padding:7px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink-3);cursor:pointer;transition:.14s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.radio-tg svg{width:14px;height:14px}
+.radio-tg.on{background:var(--lime-glow);border-color:rgba(200,243,30,.4);color:var(--lime)}
 /* Multi-step form stepper — shows which stage you're on */
 .stepper{display:flex;gap:5px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid var(--line);scrollbar-width:none}
 .stepper::-webkit-scrollbar{display:none}
@@ -1593,6 +1617,12 @@ const Icon = {
   flame:_I(['M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5Z']),
   star:_I(['M12 2l3 7 7 .5-5.5 4.5 2 7L12 17l-6.5 4 2-7L2 9.5 9 9l3-7Z']),
   play:_I(['M6 4l14 8-14 8V4Z']),
+  playFill:_I(['M6 4l14 8-14 8V4Z'], true),
+  pauseFill:_I(['M7 4h3.5v16H7z','M13.5 4H17v16h-3.5z'], true),
+  skipBack:_I(['M13 5 4 12l9 7V5z','M22 5l-9 7 9 7V5z'], true),
+  skipForward:_I(['M11 5l9 7-9 7V5z','M2 5l9 7-9 7V5z'], true),
+  shuffle:_I(['M16 3h5v5','m4 20 17-17','M21 16v5h-5','m15 15 6 6','m4 4 5 5']),
+  repeat:_I(['m17 2 4 4-4 4','M3 11v-1a4 4 0 0 1 4-4h14','m7 22-4-4 4-4','M21 13v1a4 4 0 0 1-4 4H3']),
   gamepad:_I(['M6 11h4','M8 9v4','M15 12h.01','M18 10h.01','M17.3 5H6.7a4 4 0 0 0-4 3.6c-.3 2-.5 3.3-.5 4.4 0 1.8.2 2.6.7 3.8A2.5 2.5 0 0 0 5.5 18c.9 0 1.7-.4 2.3-1.1L9 15.5h6l1.2 1.4c.6.7 1.4 1.1 2.3 1.1a2.5 2.5 0 0 0 2.3-1.2c.5-1.2.7-2 .7-3.8 0-1.1-.2-2.4-.5-4.4A4 4 0 0 0 17.3 5Z']),
 };
 window.Icon = Icon;
@@ -4557,6 +4587,28 @@ function App(){
   const [notifOpen, setNotifOpen] = useState(false);
   const [musicOn, setMusicOn] = useState(()=>{ try{ return localStorage.getItem('magnet_music')!=='off'; }catch(e){ return true; } });
   const ytRef = useRef(null);
+  // ===== Magnet Radio (YouTube-backed) =====
+  const RADIO_STATIONS = [
+    {key:'focus', name:'Deep Focus', seed:'JBZ8UVfUM7Y'},
+    {key:'lofi',  name:'Lo-Fi',      seed:'2Nhs3Fqr1ME'},
+    {key:'synth', name:'Synthwave',  seed:'Kj_fAx-IsZA'},
+    {key:'code',  name:'Coding',     seed:'6pUPGG7LLEc'},
+    {key:'mkt',   name:'Marketing',  seed:'vqj2aIzGM_I'},
+    {key:'crea',  name:'Creative',   seed:'GHLNwkmqz_A'},
+    {key:'night', name:'Late Night', seed:'QymQa3sD_Yk'},
+  ];
+  const [radioOpen, setRadioOpen] = useState(false);
+  const [station, setStation] = useState(()=>{ try{ return localStorage.getItem('magnet_station')||'focus'; }catch(e){ return 'focus'; } });
+  const [vol, setVol] = useState(()=>{ try{ return Math.max(0,Math.min(100, parseInt(localStorage.getItem('magnet_vol')||'16',10))); }catch(e){ return 16; } });
+  const [np, setNp] = useState({title:'',author:''});
+  const [shuffleOn, setShuffleOn] = useState(false);
+  const [repeatOn, setRepeatOn] = useState(true);
+  const loadStation = (key)=>{ const idx=RADIO_STATIONS.findIndex(x=>x.key===key); try{ localStorage.setItem('magnet_station',key); }catch(e){} setStation(key);
+    try{ if(ytRef.current&&ytRef.current.playVideoAt){ ytRef.current.playVideoAt(idx<0?0:idx); setTimeout(()=>{try{ytRef.current.setVolume(vol); ytRef.current.playVideo();}catch(x){}},250); if(!musicOn){ setMusicOn(true); try{localStorage.setItem('magnet_music','on');}catch(e){} } } }catch(x){} };
+  const radioCtl = (fn)=>{ try{ if(ytRef.current&&ytRef.current[fn]) ytRef.current[fn](); }catch(x){} };
+  const setRadioVol = (v)=>{ v=Math.max(0,Math.min(100,v)); setVol(v); try{localStorage.setItem('magnet_vol',String(v));}catch(e){} try{ if(ytRef.current)ytRef.current.setVolume(v); }catch(x){} };
+  const toggleShuffle = ()=>{ setShuffleOn(s=>{ const n=!s; try{ if(ytRef.current)ytRef.current.setShuffle(n);}catch(x){} return n; }); };
+  const toggleRepeat = ()=>{ setRepeatOn(s=>{ const n=!s; try{ if(ytRef.current)ytRef.current.setLoop(n);}catch(x){} return n; }); };
   // Auth: real login gate backed by the local user store (crm-auth.js).
   const [authUser, setAuthUser] = useState(()=>getSessionUser());
   const [authReady, setAuthReady] = useState(false);
@@ -4638,12 +4690,14 @@ function App(){
   };
   const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
 
-  // System background music — a 2-track YouTube playlist, low volume, with a topbar toggle.
+  // Magnet Radio — endless YouTube "radio" mix per station, low volume, topbar player.
   const musicGetOn = ()=>{ try { return localStorage.getItem('magnet_music')!=='off'; } catch(e){ return true; } };
   const toggleMusic = ()=>{ setMusicOn(on=>{ const nv=!on; try{ localStorage.setItem('magnet_music', nv?'on':'off'); }catch(e){} try{ if(ytRef.current){ nv?ytRef.current.playVideo():ytRef.current.pauseVideo(); } }catch(x){} return nv; }); };
   useEffect(()=>{
     if(!authUser) return;
-    const TRACKS=['Z4ZoaNX3oNY','VPX31OZnPrk']; let player=null, killed=false;
+    const TRACKS=RADIO_STATIONS.map(s=>s.seed);
+    const startIdx=Math.max(0, RADIO_STATIONS.findIndex(s=>s.key===(()=>{try{return localStorage.getItem('magnet_station')||'focus';}catch(e){return 'focus';}})()));
+    let player=null, killed=false, npTimer=null;
     const make=()=>{
       if(killed) return;
       if(!(window.YT && window.YT.Player)){
@@ -4651,14 +4705,16 @@ function App(){
         const prev=window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady=function(){ if(prev){try{prev();}catch(e){}} make(); }; return;
       }
       let host=document.getElementById('sysmusic'); if(!host){ host=document.createElement('div'); host.id='sysmusic'; host.style.cssText='position:fixed;left:-9999px;top:-9999px;width:1px;height:1px'; document.body.appendChild(host); }
-      try { player=new YT.Player('sysmusic',{ videoId:TRACKS[0], playerVars:{autoplay:1,controls:0,loop:1,playlist:TRACKS.join(','),modestbranding:1,playsinline:1,rel:0},
-        events:{ onReady:e=>{ try{e.target.setVolume(16);}catch(x){} ytRef.current=e.target; if(musicGetOn()){try{e.target.playVideo();}catch(x){}} },
-          onStateChange:e=>{ if(window.YT && e.data===YT.PlayerState.ENDED){ try{e.target.playVideo();}catch(x){} } } } }); } catch(e){}
+      try { player=new YT.Player('sysmusic',{ videoId:TRACKS[startIdx], playerVars:{autoplay:1,controls:0,loop:1,playlist:TRACKS.join(','),index:startIdx,modestbranding:1,playsinline:1,rel:0},
+        events:{ onReady:e=>{ try{e.target.setVolume((function(){try{return parseInt(localStorage.getItem('magnet_vol')||'16',10);}catch(x){return 16;}})());}catch(x){} ytRef.current=e.target; try{e.target.setLoop(true);}catch(x){} if(musicGetOn()){try{e.target.playVideo();}catch(x){}} },
+          onStateChange:e=>{ try{ const d=e.target.getVideoData&&e.target.getVideoData(); if(d&&d.title) setNp({title:d.title,author:d.author||''}); }catch(x){} } } }); } catch(e){}
+      // poll now-playing title so the radio panel shows the real current song
+      npTimer=setInterval(()=>{ try{ if(ytRef.current&&ytRef.current.getVideoData){ const d=ytRef.current.getVideoData(); if(d&&d.title) setNp(p=>p.title===d.title?p:{title:d.title,author:d.author||''}); } }catch(x){} }, 3000);
     };
     make();
     const onTap=()=>{ if(ytRef.current && musicGetOn()){ try{ const st=ytRef.current.getPlayerState?ytRef.current.getPlayerState():1; if(st!==1&&st!==3) ytRef.current.playVideo(); }catch(x){} } };
     window.addEventListener('pointerdown', onTap, {passive:true});
-    return ()=>{ killed=true; window.removeEventListener('pointerdown', onTap); try{ if(player&&player.destroy) player.destroy(); }catch(e){} ytRef.current=null; const h=document.getElementById('sysmusic'); if(h) h.remove(); };
+    return ()=>{ killed=true; if(npTimer)clearInterval(npTimer); window.removeEventListener('pointerdown', onTap); try{ if(player&&player.destroy) player.destroy(); }catch(e){} ytRef.current=null; const h=document.getElementById('sysmusic'); if(h) h.remove(); };
   },[authUser]);
 
   useEffect(()=>{ store.set(KEY, JSON.stringify(db)); }, [db]);
@@ -5234,7 +5290,30 @@ function App(){
               <div class="qc-menu">${quickCreate.map(a=>html`<button key=${a.label} onClick=${()=>{setQcOpen(false);a.action();}}>${React.createElement(Icon[a.icon]||Icon.plus)}<span>${a.label}</span></button>`)}</div>
             <//>`}
           </div>`:''}
-          <button class="icon-btn" title="Background music" onClick=${toggleMusic} style=${{color:musicOn?'var(--lime)':'var(--ink-4)'}}>${React.createElement(musicOn?Icon.volume:Icon.volumeOff)}</button>
+          <div class="qc-wrap">
+            <button class="icon-btn" title=${lang==='ar'?'راديو ماجنت':'Magnet Radio'} onClick=${()=>setRadioOpen(o=>!o)} style=${{color:musicOn?'var(--lime)':'var(--ink-4)'}}>${React.createElement(musicOn?Icon.volume:Icon.volumeOff)}</button>
+            ${radioOpen&&html`<${React.Fragment}>
+              <div style=${{position:'fixed',inset:0,zIndex:55}} onClick=${()=>setRadioOpen(false)}></div>
+              <div class="radio-pop" onClick=${e=>e.stopPropagation()}>
+                <div class="radio-h"><b>${lang==='ar'?'راديو ماجنت':'Magnet Radio'}</b><button class="icon-btn" style=${{width:26,height:26}} onClick=${()=>setRadioOpen(false)}><span style=${{fontSize:15}}>×</span></button></div>
+                <div class="radio-np">${np.title || (RADIO_STATIONS.find(s=>s.key===station)||{}).name+' Radio'}</div>
+                <div class="radio-sub">${np.author || (lang==='ar'?'ماجنت راديو · يوتيوب':'Magnet Radio · YouTube')}</div>
+                <div class="radio-ctrls">
+                  <button title=${lang==='ar'?'السابق':'Previous'} onClick=${()=>radioCtl('previousVideo')}>${React.createElement(Icon.skipBack)}</button>
+                  <button class="radio-play" title=${musicOn?(lang==='ar'?'إيقاف':'Pause'):(lang==='ar'?'تشغيل':'Play')} onClick=${toggleMusic}>${React.createElement(musicOn?Icon.pauseFill:Icon.playFill)}</button>
+                  <button title=${lang==='ar'?'التالي':'Next'} onClick=${()=>radioCtl('nextVideo')}>${React.createElement(Icon.skipForward)}</button>
+                </div>
+                <div class="flex center" style=${{gap:8}}>${React.createElement(Icon.volumeOff,{style:{width:14,height:14,color:'var(--ink-4)',flex:'0 0 auto'}})}
+                  <input class="radio-vol" type="range" min="0" max="100" value=${vol} onInput=${e=>setRadioVol(+e.target.value)}/>
+                  ${React.createElement(Icon.volume,{style:{width:14,height:14,color:'var(--ink-4)',flex:'0 0 auto'}})}</div>
+                <div class="radio-toggles">
+                  <button class="radio-tg ${shuffleOn?'on':''}" onClick=${toggleShuffle}>${React.createElement(Icon.shuffle)} ${lang==='ar'?'عشوائي':'Shuffle'}</button>
+                  <button class="radio-tg ${repeatOn?'on':''}" onClick=${toggleRepeat}>${React.createElement(Icon.repeat)} ${lang==='ar'?'تكرار':'Repeat'}</button>
+                </div>
+                <div class="radio-stations">${RADIO_STATIONS.map(s=>html`<button key=${s.key} class="radio-st ${station===s.key?'on':''}" onClick=${()=>loadStation(s.key)}>${s.name}</button>`)}</div>
+              </div>
+            <//>`}
+          </div>
           <button class="icon-btn" title="Alert sound" onClick=${()=>applyAppSettings({soundAlerts:appSettings.soundAlerts===false})} style=${{color:appSettings.soundAlerts!==false?'var(--lime)':'var(--ink-4)'}}>${React.createElement(appSettings.soundAlerts!==false?Icon.bell:Icon.volumeOff)}</button>
           <span class="tag ${cloudOn?'ok':''}"><span class="d"></span>${cloudOn?'Cloud':'Local'}</span>
           <div style=${{position:'relative'}}>
