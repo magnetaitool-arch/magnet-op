@@ -8397,13 +8397,14 @@ function RolesPermissionsView({ ctx }){
         ${editing&&getPermOverrides()[sel]&&html`<button class="mini" style=${{marginTop:12}} onClick=${resetRole}>${ar?'إعادة للوضع الافتراضي':'Reset to defaults'}</button>`}
       <//>
     </div>
-    ${(function(){ const cnt=(fn)=>SECTIONS.filter(k=>k!=='rolesPermissions'&&fn(k)).length;
-      const nE=sel==='Owner'?SECTIONS.length:cnt(k=>canEdit(k,sel));
-      const nV=sel==='Owner'?SECTIONS.length:cnt(k=>!canEdit(k,sel)&&canView(k,sel));
+    ${(function(){ const total=SECTIONS.filter(k=>k!=='rolesPermissions').length; const cnt=(fn)=>SECTIONS.filter(k=>k!=='rolesPermissions'&&fn(k)).length;
+      const nE=cnt(k=>canEdit(k,sel));
+      const nV=cnt(k=>!canEdit(k,sel)&&canView(k,sel));
+      const nH=Math.max(0, total-nE-nV);
       return html`<div class="grid g-3 stagger" style=${{marginBottom:16}}>
         <${KPI} label=${ar?'يعدّل':'Can edit'} value=${nE} icon="check"/>
         <${KPI} label=${ar?'يشوف فقط':'View only'} value=${nV} icon="eye"/>
-        <${KPI} label=${ar?'مخفي':'Hidden'} value=${SECTIONS.length-1-nE-nV} icon="lock"/>
+        <${KPI} label=${ar?'مخفي':'Hidden'} value=${nH} icon="lock"/>
       </div>`; })()}
     <${Panel} title=${ar?'وصول الموديولات':'Module access'} sub=${(t(sel)!==sel?t(sel):sel)} pad=${false}>
       <div style=${{padding:'4px 0 10px'}}>
