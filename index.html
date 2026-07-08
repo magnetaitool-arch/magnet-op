@@ -4034,16 +4034,35 @@ function EmptyState({ title, text, actionLabel, onAction, icon }){
 }
 
 // generic table view
-function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions, empty }){
-  if((!rows||rows.length===0) && empty){
-    return html`<${Panel}><${EmptyState} ...${empty}/><//>`;
-  }
+function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions, empty, loading, searchable }){
+  const [q,setQ]=useState(''); const [sort,setSort]=useState({k:null,dir:1});
+  rows=rows||[];
+  const ar=getAppSettings().language==='ar';
+  const sortVal=(r,c)=>{ if(!c) return ''; if(c.money||c.num) return +r[c.k]||0; if(c.date) return r[c.k]||''; if(c.ref) return (nameById(db[c.coll],r[c.k],c.f)||'').toString(); return (r[c.k]==null?'':r[c.k]).toString().toLowerCase(); };
+  const rowText=(r)=> cols.map(c=> c.ref?nameById(db[c.coll],r[c.k],c.f):(c.render?'':r[c.k])).join(' ').toLowerCase()+' '+Object.values(r).filter(v=>typeof v==='string').join(' ').toLowerCase();
+  const ql=q.trim().toLowerCase();
+  let list = ql ? rows.filter(r=>rowText(r).includes(ql)) : rows;
+  if(sort.k){ const c=cols.find(x=>x.k===sort.k); list=[...list].sort((a,b)=>{ const va=sortVal(a,c),vb=sortVal(b,c); return (typeof va==='number'&&typeof vb==='number'?(va-vb):String(va).localeCompare(String(vb)))*sort.dir; }); }
+  const toggleSort=(c)=>{ if(c.render&&!c.k) return; setSort(s=> s.k===c.k ? (s.dir===1?{k:c.k,dir:-1}:{k:null,dir:1}) : {k:c.k,dir:1}); };
+  const showSearch = searchable!==false && rows.length>8;
+  const arrow=(k)=> sort.k===k ? (sort.dir===1?' ▲':' ▼') : '';
+  // Skeleton while loading
+  if(loading){ return html`<${Panel} pad=${false}><div style=${{padding:16}}>
+    ${Array.from({length:6}).map((_,i)=>html`<div key=${i} class="flex" style=${{gap:16,padding:'10px 0',alignItems:'center'}}>
+      ${cols.slice(0,Math.min(cols.length,5)).map((c,j)=>html`<span key=${j} class="sk sk-row" style=${{flex:j===0?2:1}}></span>`)}
+    </div>`)}
+  </div><//>`; }
+  if(rows.length===0 && empty){ return html`<${Panel}><${EmptyState} ...${empty}/><//>`; }
   // data-label on each cell powers the mobile table-to-cards transform (CSS only).
   return html`<${Panel} pad=${false}>
+    ${showSearch&&html`<div class="flex between center" style=${{padding:'10px 14px',borderBottom:'1px solid var(--line)',gap:10,flexWrap:'wrap'}}>
+      <div class="search" style=${{width:260,maxWidth:'100%'}}>${React.createElement(Icon.search)}<input placeholder=${ar?'بحث…':'Search…'} value=${q} onInput=${e=>setQ(e.target.value)}/></div>
+      <span class="muted mono" style=${{fontSize:11}}>${list.length}${list.length!==rows.length?(' / '+rows.length):''}</span>
+    </div>`}
     <div class="tbl-wrap"><table class="tbl tbl-cards"><thead><tr>
-      ${cols.map(c=>html`<th key=${c.k} class=${c.num?'right':''}>${c.label}</th>`)}
+      ${cols.map(c=>html`<th key=${c.k} class=${c.num?'right':''} onClick=${()=>toggleSort(c)} style=${{cursor:'pointer',userSelect:'none'}} title=${ar?'رتّب':'Sort'}>${c.label}${arrow(c.k)}</th>`)}
       ${(onEdit||onDelete||extraActions)&&html`<th></th>`}</tr></thead>
-    <tbody>${rows.map(r=>html`<tr key=${r.id}>
+    <tbody>${list.map(r=>html`<tr key=${r.id}>
       ${cols.map(c=>html`<td key=${c.k} class=${c.num?'num':''} data-label=${c.label||''}>${
         c.render ? c.render(r,db) :
         c.money ? money(r[c.k]) :
@@ -4058,7 +4077,7 @@ function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions
         ${onEdit&&canEditFlag&&html`<button class="mini" onClick=${()=>onEdit(r)}>Edit</button>`}
         ${onDelete&&canEditFlag&&html`<button class="mini" onClick=${()=>onDelete(r)}>Del</button>`}</td>`}
     </tr>`)}
-    ${rows.length===0&&html`<tr><td colspan=${cols.length+1} class="muted" style=${{padding:'28px',textAlign:'center'}}>No records yet.</td></tr>`}
+    ${list.length===0&&html`<tr><td colspan=${cols.length+1} class="muted" style=${{padding:'28px',textAlign:'center'}}>${ql?(ar?'مفيش نتايج':'No matches'):(ar?'مفيش سجلات':'No records yet.')}</td></tr>`}
     </tbody></table></div><//>`;
 }
 
