@@ -1960,7 +1960,14 @@ function filterRecordsByRole(coll, records, role, user){
   if(coll==='chatMessages'){
     return records.filter(r=>r.visibility!=='Client Visible' || true); // staff see internal + client-visible
   }
-  if((role==='Designer'||role==='Video Editor') && (coll==='tasks'||coll==='deliverables')){
+  // Tasks: every non-manager sees ONLY the tasks assigned to them. Managers (PM /
+  // Marketing Director / Art Director) and Admin/Owner see everyone's tasks.
+  const TASK_MANAGERS = ['Project Manager','Marketing Director','Art Director'];
+  if(coll==='tasks' && !TASK_MANAGERS.includes(role)){
+    return records.filter(r=>r.assignedTo===user.id || r.assignedTo===user.name);
+  }
+  // Deliverables stay scoped to their owner for the pure creative roles (unchanged).
+  if((role==='Designer'||role==='Video Editor') && coll==='deliverables'){
     return records.filter(r=>r.assignedTo===user.id || r.assignedTo===user.name);
   }
   return records;
