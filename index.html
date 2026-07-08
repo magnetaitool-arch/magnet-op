@@ -1042,6 +1042,20 @@ body.theme-light .tbl thead th{background:#fff}
 .qc-menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:0;color:var(--ink-2);font-size:13px;padding:9px 11px;border-radius:8px;cursor:pointer;transition:.12s}
 .qc-menu button:hover{background:var(--panel-hi);color:var(--ink)}
 .qc-menu button svg{width:15px;height:15px;color:var(--ink-3)}
+/* Multi-step form stepper — shows which stage you're on */
+.stepper{display:flex;gap:5px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid var(--line);scrollbar-width:none}
+.stepper::-webkit-scrollbar{display:none}
+.step{display:flex;align-items:center;gap:8px;padding:6px 11px;border-radius:10px;white-space:nowrap;opacity:.5;transition:opacity .16s var(--ease),background .16s var(--ease)}
+.step.on{opacity:1;background:var(--panel-hi)}
+.step.done{opacity:.95;cursor:pointer}
+.step.done:hover{background:var(--panel-hi)}
+.step-dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink-2);transition:.16s var(--ease-spring)}
+.step.on .step-dot{background:var(--lime);color:#0c0e08;border-color:var(--lime);transform:scale(1.05)}
+.step.done .step-dot{background:rgba(200,243,30,.16);color:var(--lime);border-color:rgba(200,243,30,.45)}
+.step-lab{font-size:12px;color:var(--ink-2);font-weight:600}
+.step.on .step-lab{color:var(--ink)}
+.step-prog{height:3px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;margin:0 0 2px}
+.step-prog i{display:block;height:100%;background:var(--lime);border-radius:3px;transition:width .3s var(--ease)}
 
 </style></head>
 <body>
@@ -3791,35 +3805,67 @@ function Field({ f, value, onChange, db, rec }) {
 function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const [rec, setRec] = useState(initial||{});
   const [err, setErr] = useState('');
+  const [step, setStep] = useState(0);
   const set = (k,v)=>setRec(r=>({...r,[k]:v}));
+  const ar = getAppSettings().language==='ar';
   // hide admin-only / finance-only fields when the role isn't allowed
   const allowed = (schema||[]).filter(f=>{
     if(f.admin && !(role==='Admin')) return false;
     if(f.finance && !(role==='Admin'||role==='Accountant')) return false;
     return true;
   });
-  const save = ()=>{ const missing=(allowed.filter(f=>f.req && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]===''))); if(missing.length){ setErr('Required: '+missing.map(f=>f.label).join(', ')); return; } onSave(rec); };
-  // group fields if any have a `group`
-  const hasGroups = allowed.some(f=>f.group);
-  const ar = getAppSettings().language==='ar';
   const COLLAPSE = new Set(['Advanced','More','متقدّم']);
   const GL = {Basic:'الأساسي',Contact:'التواصل',Contract:'العقد',Account:'الحساب',Plan:'الخطة الشهرية (كام في الشهر)',Links:'الروابط',Advanced:'تفاصيل إضافية (اختياري)',Notes:'ملاحظات',Business:'بيانات',Other:'أخرى',Work:'الشغل',Compensation:'الرواتب',Performance:'الأداء',Access:'الدخول',Documents:'مستندات',Asset:'الأصل',Meeting:'الاجتماع'};
   const gl = (g)=> ar ? (GL[g]||g) : g;
+  const hasGroups = allowed.some(f=>f.group);
+  // build ordered groups
+  const groups=[]; const seen={};
+  allowed.forEach(f=>{ const g=f.group||'Other'; if(!seen[g]){seen[g]=[];groups.push(g);} seen[g].push(f); });
+  const ess=groups.filter(g=>!COLLAPSE.has(g)); const adv=groups.filter(g=>COLLAPSE.has(g));
+  const renderGroup=(g)=>html`<div key=${g} style=${{marginBottom:6}}>
+    <div class="eyebrow" style=${{margin:'2px 0 12px'}}>${gl(g)}</div>
+    <div class="form-grid">${seen[g].map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div></div>`;
+  const isMissing=(f)=> f.req && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]==='');
+  const missingIn=(gnames)=> allowed.filter(f=>gnames.includes(f.group||'Other') && isMissing(f));
+  const allMissing=()=> allowed.filter(isMissing);
+  const reqLbl=(m)=> (ar?'محتاج تملأ: ':'Required: ')+m.map(f=>f.label).join('، ');
+  // MULTI-STEP when there are 3+ essential groups: one step per group + an optional
+  // "More details" step for the collapsed advanced fields.
+  const multi = hasGroups && ess.length>=3;
+  if(multi){
+    const steps=[...ess.map(g=>({key:g,groups:[g],label:gl(g)})), ...(adv.length?[{key:'__more',groups:adv,label:(ar?'تفاصيل إضافية':'More')}]:[])];
+    const cur=steps[Math.min(step,steps.length-1)];
+    const doSave=()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); const idx=steps.findIndex(s=>s.groups.some(g=>m.some(f=>(f.group||'Other')===g))); if(idx>=0)setStep(idx); return; } onSave(rec); };
+    const next=()=>{ const m=missingIn(cur.groups); if(m.length){ setErr(reqLbl(m)); return; } setErr(''); setStep(s=>Math.min(s+1,steps.length-1)); };
+    const back=()=>{ setErr(''); setStep(s=>Math.max(s-1,0)); };
+    const pct=Math.round(((step+1)/steps.length)*100);
+    return html`<div>
+      <div class="stepper">${steps.map((s,i)=>html`<div key=${s.key} class="step ${i===step?'on':''} ${i<step?'done':''}" onClick=${()=>i<step&&setStep(i)}>
+        <span class="step-dot">${i<step?'✓':(i+1)}</span><span class="step-lab">${s.label}</span></div>`)}</div>
+      <div class="step-prog"><i style=${{width:pct+'%'}}></i></div>
+      <div style=${{maxHeight:'50vh',overflowY:'auto',paddingRight:4,marginTop:14}}>${cur.groups.map(renderGroup)}</div>
+      ${err&&html`<div class="neg" style=${{fontSize:12,marginTop:10}}>${err}</div>`}
+      <div class="form-foot" style=${{alignItems:'center'}}>
+        <button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button>
+        <div style=${{flex:1}}></div>
+        <span class="muted mono" style=${{fontSize:11}}>${(ar?'خطوة ':'Step ')+(step+1)+' / '+steps.length}</span>
+        ${step>0&&html`<button class="btn btn-ghost" onClick=${back}>${ar?'رجوع':'Back'}</button>`}
+        ${step<steps.length-1
+          ? html`<button class="btn btn-pri" onClick=${next}>${ar?'التالي':'Next'}</button>`
+          : html`<button class="btn btn-pri" onClick=${doSave}>${ar?'حفظ':'Save'}</button>`}
+      </div></div>`;
+  }
+  // SINGLE-STEP (small forms) — unchanged behavior
+  const save = ()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); return; } onSave(rec); };
   const body = hasGroups
-    ? (()=>{ const groups=[]; const seen={};
-        allowed.forEach(f=>{ const g=f.group||'Other'; if(!seen[g]){seen[g]=[];groups.push(g);} seen[g].push(f); });
-        const grp=(g)=>html`<div key=${g} style=${{marginBottom:6}}>
-          <div class="eyebrow" style=${{margin:'10px 0 10px'}}>${gl(g)}</div>
-          <div class="form-grid">${seen[g].map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div></div>`;
-        const ess=groups.filter(g=>!COLLAPSE.has(g)); const adv=groups.filter(g=>COLLAPSE.has(g));
-        return html`<div>${ess.map(grp)}${adv.length?html`<details style=${{marginTop:4}}><summary style=${{cursor:'pointer',fontSize:12,color:'var(--lime)',padding:'8px 0',listStyle:'none'}}>${ar?'▸ تفاصيل إضافية (اختياري)':'▸ More details (optional)'}</summary>${adv.map(grp)}</details>`:''}</div>`; })()
+    ? html`<div>${ess.map(renderGroup)}${adv.length?html`<details style=${{marginTop:4}}><summary style=${{cursor:'pointer',fontSize:12,color:'var(--lime)',padding:'8px 0',listStyle:'none'}}>${ar?'▸ تفاصيل إضافية (اختياري)':'▸ More details (optional)'}</summary>${adv.map(renderGroup)}</details>`:''}</div>`
     : html`<div class="form-grid">${allowed.map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div>`;
   return html`<div>
     <div style=${{maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>${body}</div>
     ${err&&html`<div class="neg" style=${{fontSize:12,marginTop:12}}>${err}</div>`}
     <div class="form-foot">
-      <button class="btn btn-ghost" onClick=${onClose}>Cancel</button>
-      <button class="btn btn-pri" onClick=${save}>Save</button></div></div>`;
+      <button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button>
+      <button class="btn btn-pri" onClick=${save}>${ar?'حفظ':'Save'}</button></div></div>`;
 }
 
 /* ---- Trello-style board: colored labels, due dates, checklists, and
