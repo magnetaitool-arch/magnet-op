@@ -1737,7 +1737,7 @@ const VIEW = {
 // edit matrix: which sections each role can create/edit
 const EDIT = {
   Admin: SECTIONS,
-  Sales: ['accounts','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
+  Sales: ['accounts','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
   'Project Manager': ['accounts','plans','clients','projects','tasks','deliverables','revisions','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
   Designer: ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   'Video Editor': ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
@@ -1861,6 +1861,10 @@ const ADMIN_ONLY_SECTIONS = ['settings','backupCenter','dataHealth','systemQA','
 // work. Clients now lives entirely inside Accounts (add/edit/report from there).
 const HIDDEN_NAV = ['clients'];
 const isAdminRole = (role)=> role==='Owner' || aliasRole(role)==='Admin';
+// Who manages tasks: sees everyone's tasks AND can create/assign them. Regular
+// employees can still move/update their own tasks, just not create new ones.
+const TASK_MANAGERS = ['Sales','Project Manager','Marketing Director','Art Director'];
+const canCreateTasks = (role)=> isAdminRole(role) || TASK_MANAGERS.includes(aliasRole(role));
 const canView    = (section, role) => ADMIN_ONLY_SECTIONS.includes(section) ? isAdminRole(role)
   : (OPEN_SECTIONS.includes(section) || (VIEW[aliasRole(role)]||[]).includes(section));
 const canEdit    = (section, role) => (EDIT[aliasRole(role)]||[]).includes(section);
@@ -1960,9 +1964,8 @@ function filterRecordsByRole(coll, records, role, user){
   if(coll==='chatMessages'){
     return records.filter(r=>r.visibility!=='Client Visible' || true); // staff see internal + client-visible
   }
-  // Tasks: every non-manager sees ONLY the tasks assigned to them. Managers (PM /
-  // Marketing Director / Art Director) and Admin/Owner see everyone's tasks.
-  const TASK_MANAGERS = ['Sales','Project Manager','Marketing Director','Art Director'];
+  // Tasks: every non-manager sees ONLY the tasks assigned to them. Managers
+  // (Sales/PM/Marketing Director/Art Director) and Admin/Owner see everyone's.
   if(coll==='tasks' && !TASK_MANAGERS.includes(role)){
     return records.filter(r=>r.assignedTo===user.id || r.assignedTo===user.name);
   }
@@ -7161,6 +7164,7 @@ function ProjectProfile({ ctx, project, ce, onClose }){
 /* ============================ TASKS ============================ */
 function TasksView({ ctx, visible, ce }){
   const { db, role, user } = ctx;
+  const cc = ce && canCreateTasks(role); // only managers / account managers create tasks
   const [view,setView]=useState('All Tasks'); const [layout,setLayout]=useState('board'); const [sel,setSel]=useState(null);
   const all=visible('tasks');
   const wk=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
@@ -7180,13 +7184,13 @@ function TasksView({ ctx, visible, ce }){
     <${Head} eyebrow="Delivery" title="Tasks" desc="Drag across the workflow, or open a task for full detail.">
       <select class="sel" value=${view} onChange=${e=>setView(e.target.value)}>${Object.keys(VIEWS).map(v=>html`<option key=${v} value=${v}>${v}</option>`)}</select>
       <div class="seg"><button class=${layout==='board'?'on':''} onClick=${()=>setLayout('board')}>Board</button><button class=${layout==='list'?'on':''} onClick=${()=>setLayout('list')}>List</button></div>
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})}>${React.createElement(Icon.plus)} New task</button>`}<//>
+      ${cc&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})}>${React.createElement(Icon.plus)} New task</button>`}<//>
     ${rows.length===0
       ? html`<${EmptyState} icon="check"
           title=${ctx.lang==='ar'?'مفيش تاسكات هنا':'No tasks here'}
-          text=${ctx.lang==='ar'?'مفيش تاسكات في العرض ده دلوقتي — جرّب عرض تاني من القايمة فوق، أو استنى ما يتسند ليك شغل.':'No tasks in this view yet — try another view above, or wait for work to be assigned to you.'}
-          actionLabel=${ce?(ctx.lang==='ar'?'تاسك جديد':'New task'):null}
-          onAction=${ce?(()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})):null}/>`
+          text=${ctx.lang==='ar'?(cc?'مفيش تاسكات في العرض ده. اعمل تاسك جديد أو جرّب عرض تاني.':'مفيش تاسكات متسندة ليك دلوقتي — استنى ما يتسند ليك شغل.'):(cc?'No tasks in this view yet — create one or try another view.':'No tasks assigned to you yet — check back when work is assigned.')}
+          actionLabel=${cc?(ctx.lang==='ar'?'تاسك جديد':'New task'):null}
+          onAction=${cc?(()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})):null}/>`
       : layout==='board'
       ? html`<${Kanban} items=${rows} columns=${ST.task.filter(s=>s!=='Cancelled')} field="status"
           canMove=${ce}
