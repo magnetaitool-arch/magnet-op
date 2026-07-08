@@ -2270,7 +2270,7 @@ const COLLECTIONS = ['leads','clients','contacts','salesActivities','proposals',
   'files','comments','activityLogs','notifications','reports','meetings','renewals','gameScores','gameStats','campaigns','briefs','fixedCosts','partnerSettlements','plans','collections'];
 
 /* ============================ CONTENT CALENDAR ============================ */
-const CONTENT_TYPES = ['Post','Reel','Story','Video','Campaign','Ad Creative','Blog','Email','Photoshoot','Meeting','Delivery','Report'];
+const CONTENT_TYPES = ['Post','Reel','Carousel','Story','Video','Campaign','Ad Creative','Blog','Email','Photoshoot','Meeting','Delivery','Report'];
 const CONTENT_PLATFORMS = ['Instagram','Facebook','TikTok','YouTube','LinkedIn','Website','Google Ads','Meta Ads','WhatsApp','Other'];
 const CONTENT_STATUSES = ['Idea','Planned','In Progress','Waiting Review','Approved','Scheduled','Published','Needs Edits','Cancelled'];
 // ISO date helpers (timezone-safe: operate on YYYY-MM-DD strings, no Date parsing drift)
@@ -5431,24 +5431,61 @@ const clientActivities = (db,c)=> (db.activityLogs||[]).filter(a=>a.entityId===c
 const lastActivityAt = (db,c)=>{ const a=clientActivities(db,c).map(x=>x.createdAt||x.date).filter(Boolean).sort(); return a.length?a[a.length-1]:(c.updatedAt||c.createdAt||''); };
 const needsFollowup = (db,c)=>{ const la=lastActivityAt(db,c); if(!la) return true; return daysBetween(la, todayISO())>=7; };
 const monthsBetween = (a,b)=>{ if(!a||!b) return 0; const x=new Date(a),y=new Date(b); const n=(y.getFullYear()-x.getFullYear())*12+(y.getMonth()-x.getMonth()); return n>0?n:0; };
-function accountMonthlyReport(c, db, ctx){
+// Plan (cadence) + this-month actual counts per content type, computed live from
+// the content calendar. Returns {plan, actual} keyed by posts/reels/carousels/stories.
+const REPORT_PLAN_TYPES = [['posts','Post','بوستات','Posts'],['reels','Reel','ريلز','Reels'],['carousels','Carousel','كاروسيلز','Carousels'],['stories','Story','ستوريز','Stories']];
+function reportPlanActual(c, db){
+  const m=thisMonth(); const plan=(c.report&&c.report.plan)||{};
+  const items=(db.contentCalendar||[]).filter(x=>x.clientId===c.id && monthOf(x.scheduledDate||x.deadline||x.createdAt)===m);
+  const actual={}; REPORT_PLAN_TYPES.forEach(([k,ct])=>{ actual[k]=items.filter(x=>x.contentType===ct).length; });
+  return { plan, actual };
+}
+// Client-facing "Monthly report" (mode='client') or internal "Handover sheet"
+// (mode='handover', adds account snapshot + assets/access + handover notes).
+function accountMonthlyReport(c, db, ctx, mode){
+  mode=mode||'client'; const handover=mode==='handover';
   const ar=ctx.lang==='ar'; const m=thisMonth(); const nm=cNameOf(c);
   const e=s=>String(s==null?'':s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const rep=c.report||{}; const {plan,actual}=reportPlanActual(c,db);
   const dlv=(db.deliverables||[]).filter(d=>d.clientId===c.id && ['Approved','Delivered'].includes(d.status) && monthOf(d.updatedAt||d.createdAt)===m);
-  const acts=(db.activityLogs||[]).filter(a=>(a.entityId===c.id||a.clientId===c.id) && monthOf(a.createdAt)===m);
-  const rows=dlv.map(d=>'<tr><td>'+e(d.title||'—')+'</td><td>'+e(d.type||'')+'</td><td>'+e(d.status)+'</td></tr>').join('')||'<tr><td colspan="3" style="color:#888">'+(ar?'مفيش تسليمات مكتملة الشهر ده.':'No deliverables completed this month.')+'</td></tr>';
-  const actRows=acts.slice(0,25).map(a=>'<li>'+e(fmtDate(a.createdAt))+' — '+e(a.message||a.type||'')+'</li>').join('')||'<li style="color:#888">'+(ar?'مفيش نشاط مسجّل.':'No activity logged this month.')+'</li>';
-  const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>'+e(nm)+' — Report</title>'
+  const nameById=(coll,id)=>{ const r=(db[coll]||[]).find(x=>x.id===id); return r?(r.fullName||r.displayName||r.name||r.title||'—'):'—'; };
+  // Plan vs actual table
+  const planRows=REPORT_PLAN_TYPES.map(([k,ct,la,le])=>{ const pv=+plan[k]||0, av=actual[k]||0; if(!pv&&!av) return ''; return '<tr><td>'+e(ar?la:le)+'</td><td>'+pv+'</td><td>'+av+'</td></tr>'; }).join('')
+    ||'<tr><td colspan="3" style="color:#888">'+(ar?'مفيش خطة أو كونتنت الشهر ده.':'No plan or content this month.')+'</td></tr>';
+  const dlvRows=dlv.map(d=>'<tr><td>'+e(d.title||'—')+'</td><td>'+e(d.type||'')+'</td><td>'+e(d.status)+'</td></tr>').join('')||'<tr><td colspan="3" style="color:#888">'+(ar?'مفيش تسليمات مكتملة الشهر ده.':'No deliverables completed this month.')+'</td></tr>';
+  const listBlock=(title,arr)=>{ const li=(arr||[]).map(x=>'<li>'+e(typeof x==='string'?x:(x.t||''))+'</li>').join(''); return li?'<h2>'+title+'</h2><ul>'+li+'</ul>':''; };
+  let extra='';
+  if(handover){
+    const snap=[[ar?'الكونتاكت':'Main contact', c.mainContactName||c.contactPerson||''],
+      [ar?'الهاتف / واتساب':'Phone / WhatsApp', c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone||''],
+      [ar?'أكونت مانجر':'Account manager', c.accountManagerId?nameById('employees',c.accountManagerId):''],
+      [ar?'بروجيكت مانجر':'Project manager', c.projectManagerId?nameById('employees',c.projectManagerId):''],
+      [ar?'الخدمات':'Services', Array.isArray(c.services)?c.services.join(', '):(c.serviceType||'')],
+      [ar?'الريتينر / الفوترة':'Retainer / Billing', (c.monthlyRetainer?money(c.monthlyRetainer):'—')+(c.billingCycle?(' · '+c.billingCycle):'')],
+      [ar?'تواريخ العقد':'Contract dates', (c.contractStartDate?fmtDate(c.contractStartDate):'—')+' → '+(c.contractEndDate?fmtDate(c.contractEndDate):'—')]];
+    const snapRows=snap.filter(r=>r[1]).map(r=>'<tr><td class="muted">'+e(r[0])+'</td><td>'+e(r[1])+'</td></tr>').join('');
+    const assets=(db.clientAssets||[]).filter(a=>a.clientId===c.id);
+    const aRows=assets.map(a=>'<tr><td>'+e(a.title||'—')+'</td><td>'+e(a.assetType||'')+'</td><td>'+e(a.platform||'')+(a.username?(' · '+e(a.username)):'')+'</td><td>'+e(a.accessStatus||'')+'</td></tr>').join('')
+      ||'<tr><td colspan="4" style="color:#888">'+(ar?'مفيش أصول مسجّلة.':'No assets recorded.')+'</td></tr>';
+    extra+='<h2>'+(ar?'لقطة الحساب':'Account snapshot')+'</h2><table><tbody>'+snapRows+'</tbody></table>';
+    extra+='<h2>'+(ar?'الأصول والوصول (بدون باسوردات)':'Assets & access (no raw passwords)')+'</h2><table><thead><tr><th>'+(ar?'الأصل':'Asset')+'</th><th>'+(ar?'النوع':'Type')+'</th><th>'+(ar?'المنصة/اليوزر':'Platform / User')+'</th><th>'+(ar?'الوصول':'Access')+'</th></tr></thead><tbody>'+aRows+'</tbody></table>';
+    if((rep.handover||'').trim()) extra+='<h2>'+(ar?'ملاحظات الهاند-أوفر':'Handover notes')+'</h2><p style="font-size:13px;line-height:1.7;white-space:pre-wrap">'+e(rep.handover)+'</p>';
+  }
+  const heading = handover?(ar?'شيت الهاند-أوفر':'Handover sheet'):(ar?'التقرير الشهري':'Monthly report');
+  const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>'+e(nm)+' — '+e(heading)+'</title>'
    +'<style>body{background:#070807;color:#f3f5ef;font-family:system-ui,Arial,sans-serif;max-width:760px;margin:0 auto;padding:44px}'
    +'h1{color:#c8f31e;letter-spacing:.14em;font-size:20px;margin:0}h2{margin-top:26px;font-size:14px;color:#c8f31e}'
    +'table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border-bottom:1px solid #23261f;padding:9px;text-align:'+(ar?'right':'left')+';font-size:13px}'
    +'th{color:#9a9a98;font-weight:600;font-size:11px;text-transform:uppercase}ul{padding-'+(ar?'right':'left')+':18px;line-height:1.7;font-size:13px}.muted{color:#9a9a98}'
    +'@media print{body{background:#fff;color:#111}h1,h2{color:#5b7d00}}</style></head><body>'
    +'<div style="display:flex;justify-content:space-between;align-items:center"><h1>MAGNET</h1><span class="muted" style="font-size:11px">'+e(new Date().toDateString())+'</span></div>'
-   +'<h2>'+e(nm)+' — '+(ar?'تقرير الشهر':'Monthly report')+'</h2>'
-   +'<h2>'+(ar?'التسليمات المكتملة':'Deliverables completed')+'</h2><table><thead><tr><th>Item</th><th>Type</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
-   +'<h2>'+(ar?'ملخص النشاط':'Activity summary')+'</h2><ul>'+actRows+'</ul>'
-   +'<p class="muted" style="margin-top:34px;font-size:11px">Magnet OS · '+e(nm)+'</p></body></html>';
+   +'<h2>'+e(nm)+' — '+e(heading)+' · '+e(m)+'</h2>'
+   +'<h2>'+(ar?'الخطة مقابل المُنفّذ':'Plan vs delivered')+'</h2><table><thead><tr><th>'+(ar?'النوع':'Type')+'</th><th>'+(ar?'الخطة':'Plan')+'</th><th>'+(ar?'المُنفّذ':'Delivered')+'</th></tr></thead><tbody>'+planRows+'</tbody></table>'
+   +'<h2>'+(ar?'التسليمات المكتملة':'Deliverables completed')+'</h2><table><thead><tr><th>Item</th><th>Type</th><th>Status</th></tr></thead><tbody>'+dlvRows+'</tbody></table>'
+   +listBlock(ar?'أبرز الإنجازات':'Highlights', rep.highlights)
+   +listBlock(ar?'الخطوات القادمة':'Next steps', rep.nextSteps)
+   +extra
+   +'<p class="muted" style="margin-top:34px;font-size:11px">Magnet OS · '+e(nm)+' · '+e(m)+'</p></body></html>';
   try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){ }
 }
 
@@ -5511,8 +5548,9 @@ function AccountsView({ ctx, visible, byBrand, ce }){
 
 function AccountDrawer({ ctx, client, fin, ce, onClose }){
   const { db, lang }=ctx; const ar=lang==='ar'; const c=client;
-  const [tab,setTab]=useState(fin?'payments':'onboarding'); const [note,setNote]=useState('');
+  const [tab,setTab]=useState('report'); const [note,setNote]=useState('');
   const [nInst,setNInst]=useState(3); const [ivl,setIvl]=useState('Monthly');
+  const [hi,setHi]=useState(''); const [ns,setNs]=useState('');
   const acts=clientActivities(db,c).slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   const dlv=(db.deliverables||[]).filter(d=>d.clientId===c.id);
   const contracts=(db.contracts||[]).filter(k=>k.clientId===c.id);
@@ -5533,8 +5571,19 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
   const paid=clientCols.filter(x=>x.status==='Collected').reduce((s,x)=>s+(+x.amount||0),0);
   const remaining=total-paid;
   const nm=cNameOf(c);
+  // ---- Report & Handover state (stored on the client record as c.report jsonb) ----
+  const rep=c.report||{}; const repPlan=rep.plan||{};
+  const {actual:repActual}=reportPlanActual(c,db);
+  const saveReport=(patch)=>{ if(!ce)return; ctx.updateRecord('clients',c.id,{report:Object.assign({plan:{},highlights:[],nextSteps:[],handover:''},rep,patch)}); };
+  const setPlan=(k,v)=>saveReport({plan:Object.assign({},repPlan,{[k]:Math.max(0,parseInt(v,10)||0)})});
+  const addToList=(key,val,clear)=>{ if(!val.trim())return; saveReport({[key]:[...(rep[key]||[]),{t:val.trim()}]}); clear(''); };
+  const delFromList=(key,i)=>saveReport({[key]:(rep[key]||[]).filter((_,idx)=>idx!==i)});
+  const clientAssets=(db.clientAssets||[]).filter(a=>a.clientId===c.id);
+  const monthCal=(db.contentCalendar||[]).filter(x=>x.clientId===c.id && monthOf(x.scheduledDate||x.deadline||x.createdAt)===thisMonth()).sort((a,b)=>(a.scheduledDate||'').localeCompare(b.scheduledDate||''));
+  const empById=(id)=>{ const r=(db.employees||[]).find(x=>x.id===id); return r?(r.fullName||r.displayName||r.name||'—'):'—'; };
+  const assetColor=(s)=> s==='Available'?'var(--pos)':(s==='Missing'?'var(--warn)':'var(--ink-3)');
   const stOf=(x)=> x.status==='Collected'?'Collected':(x.dueDate&&x.dueDate<todayISO()?'Overdue':'Pending');
-  const tabs=[fin?['payments',ar?'العقود والدفعات':'Contracts & Payments']:null,['onboarding',ar?'الأونبوردنج':'Onboarding'],['deliverables',ar?'التسليمات':'Deliverables'],['activity',ar?'النشاط':'Activity']].filter(Boolean);
+  const tabs=[['report',ar?'التقرير والهاند-أوفر':'Report & Handover'],fin?['payments',ar?'العقود والدفعات':'Contracts & Payments']:null,['onboarding',ar?'الأونبوردنج':'Onboarding'],['deliverables',ar?'التسليمات':'Deliverables'],['activity',ar?'النشاط':'Activity']].filter(Boolean);
   return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" dir=${ar?'rtl':'ltr'} onClick=${e=>e.stopPropagation()}>
     <div class="cdrawer-h">
       <div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>${ar?'حساب':'Account'} · ${c.status||'—'}</div>
@@ -5544,10 +5593,61 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
     <div class="cdrawer-b">
       <div class="flex gap8" style=${{flexWrap:'wrap',marginBottom:14}}>
         ${(c.whatsapp||c.phone)?html`<a class="btn btn-pri" style=${{padding:'8px 14px'}} href=${waLink(c.whatsapp||c.phone,(ar?'أهلاً ':'Hi ')+(c.contactPerson||nm)+(ar?'، حابين نطمّن على الشغل ونسمع رأيك. — Magnet':', checking in on your project — Magnet'))} target="_blank" rel="noopener">${ar?'متابعة واتساب':'WhatsApp follow-up'}</a>`:''}
-        <button class="btn btn-ghost" onClick=${()=>accountMonthlyReport(c,db,ctx)}>${ar?'تقرير شهري':'Monthly report'}</button>
+        <button class="btn btn-ghost" onClick=${()=>accountMonthlyReport(c,db,ctx,'client')}>${ar?'تقرير شهري':'Monthly report'}</button>
+        <button class="btn btn-ghost" onClick=${()=>accountMonthlyReport(c,db,ctx,'handover')}>${ar?'شيت هاند-أوفر':'Handover sheet'}</button>
         ${ce?html`<button class="btn btn-ghost" onClick=${()=>ctx.openModal('clients',c)}>${ar?'تعديل العميل':'Edit client'}</button>`:''}
       </div>
       <div class="seg" style=${{marginBottom:14,flexWrap:'wrap'}}>${tabs.map(t=>html`<button key=${t[0]} class=${tab===t[0]?'on':''} onClick=${()=>setTab(t[0])}>${t[1]}</button>`)}</div>
+
+      ${tab==='report'?html`<div>
+        <div class="muted" style=${{fontSize:11.5,marginBottom:14,lineHeight:1.5}}>${ar?'كل حاجة عن العميل في مكان واحد — جاهزة للملء وللهاند-أوفر. اطبع "تقرير شهري" للعميل أو "شيت هاند-أوفر" للفريق من فوق.':'Everything about this client in one place — ready to fill and to hand over. Print "Monthly report" for the client or "Handover sheet" for the team from the top.'}</div>
+
+        <div class="flex between center" style=${{marginBottom:8}}><b style=${{fontSize:13}}>${ar?'الخطة الشهرية مقابل المُنفّذ':'Monthly plan vs delivered'}</b><span class="muted" style=${{fontSize:11}}>${thisMonth()}</span></div>
+        ${REPORT_PLAN_TYPES.map(([k,ct,la,le])=>html`<div class="flex between center" key=${k} style=${{gap:10,padding:'7px 0',borderBottom:'1px solid var(--line)'}}>
+          <span style=${{fontSize:13}}>${ar?la:le}</span>
+          <div class="flex center" style=${{gap:10}}>
+            <span class="mono" style=${{fontSize:11,color:(repActual[k]||0)>=(+repPlan[k]||0)&&(+repPlan[k]||0)>0?'var(--pos)':'var(--ink-3)'}}>${ar?'منفّذ':'done'} ${repActual[k]||0}</span>
+            <span class="muted" style=${{fontSize:11}}>${ar?'خطة':'plan'}</span>
+            <input type="number" min="0" disabled=${!ce} value=${+repPlan[k]||0} onChange=${e=>setPlan(k,e.target.value)} class="inp" style=${{width:60,textAlign:'center'}}/>
+          </div></div>`)}
+
+        <div class="flex between center" style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'الإعداد (Setup)':'Setup done'}</b><span class="mono lime" style=${{fontSize:12}}>${obPct}%</span></div>
+        <div style=${{height:6,background:'rgba(255,255,255,.08)',borderRadius:6,overflow:'hidden'}}><div style=${{width:obPct+'%',height:'100%',background:'var(--lime)'}}></div></div>
+        <div class="muted" style=${{fontSize:11,marginTop:6}}>${ob.filter(s=>s.done).map(s=>s.item).join(' · ')||(ar?'لسه مفيش خطوات مكتملة — روح تبويب الأونبوردنج.':'No steps done yet — see the Onboarding tab.')}</div>
+
+        <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'كالندر الشهر':'Calendar this month'}</b></div>
+        ${monthCal.length?monthCal.slice(0,12).map(x=>html`<div class="flex between center" key=${x.id} style=${{gap:10,padding:'6px 0',borderBottom:'1px solid var(--line)'}}>
+          <div class="li-t"><b style=${{fontSize:12.5,fontWeight:500}}>${x.title||'—'}</b><span style=${{fontSize:11}}>${x.contentType||''}${x.platform?(' · '+x.platform):''}</span></div>
+          <div class="flex center" style=${{gap:8}}><span class="muted mono" style=${{fontSize:10.5}}>${x.scheduledDate?fmtDate(x.scheduledDate):''}</span><span class="mono" style=${{fontSize:10,color:'var(--ink-3)'}}>${x.status||''}</span></div>
+        </div>`):html`<div class="muted" style=${{fontSize:12,padding:'6px 0'}}>${ar?'مفيش كونتنت متجدول الشهر ده. زوّده من موديول Content Calendar.':'No content scheduled this month — add it in Content Calendar.'}</div>`}
+
+        <div class="flex between center" style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'الأصول والوصول (هاند-أوفر)':'Assets & access (handover)'}</b><span class="muted" style=${{fontSize:10.5}}>${ar?'بدون باسوردات':'no raw passwords'}</span></div>
+        ${clientAssets.length?clientAssets.map(a=>html`<div class="flex between center" key=${a.id} style=${{gap:10,padding:'8px 0',borderBottom:'1px solid var(--line)'}}>
+          <div class="li-t"><b style=${{fontSize:12.5,fontWeight:500}}>${a.title||'—'}</b><span style=${{fontSize:11}}>${a.assetType||''}${a.platform?(' · '+a.platform):''}${a.username?(' · '+a.username):''}</span></div>
+          <div class="flex center" style=${{gap:8}}>
+            <span class="mono" style=${{fontSize:10,color:assetColor(a.accessStatus)}}>${a.accessStatus||'—'}</span>
+            ${(a.driveLink||a.fileLink||a.folderLink)?html`<a class="mini" href=${a.driveLink||a.fileLink||a.folderLink} target="_blank" rel="noopener">${ar?'فتح':'Open'}</a>`:''}
+            ${ctx.canDelete('clientAssets')?html`<button class="mini danger" title=${ar?'حذف':'Delete'} onClick=${()=>ctx.delRec('clientAssets',a.id,a.title)}>×</button>`:''}
+          </div></div>`):html`<div class="muted" style=${{fontSize:12,padding:'6px 0'}}>${ar?'مفيش أصول مسجّلة للعميل ده.':'No assets recorded for this client.'}</div>`}
+        ${ce?html`<button class="mini pri" style=${{marginTop:8}} onClick=${()=>ctx.openModal('clientAssets',{clientId:c.id,accessStatus:'Requested'})}>${ar?'+ إضافة أصل':'+ Add asset'}</button>`:''}
+
+        <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'لقطة الحساب':'Account snapshot'}</b></div>
+        ${[[ar?'الكونتاكت':'Main contact', c.mainContactName||c.contactPerson],[ar?'هاتف / واتساب':'Phone / WhatsApp', c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone],[ar?'أكونت مانجر':'Account manager', c.accountManagerId?empById(c.accountManagerId):''],[ar?'بروجيكت مانجر':'Project manager', c.projectManagerId?empById(c.projectManagerId):''],[ar?'الخدمات':'Services', Array.isArray(c.services)?c.services.join(', '):c.serviceType],[ar?'الريتينر / الفوترة':'Retainer / Billing', (c.monthlyRetainer?money(c.monthlyRetainer):'')+(c.billingCycle?(' · '+c.billingCycle):'')]].filter(r=>r[1]).map((r,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'5px 0',borderBottom:'1px solid var(--line)'}}><span class="muted" style=${{fontSize:12}}>${r[0]}</span><span style=${{fontSize:12.5,textAlign:ar?'left':'right'}}>${r[1]}</span></div>`)}
+
+        <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'أبرز الإنجازات':'Highlights'}</b></div>
+        ${(rep.highlights||[]).map((x,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'6px 0',borderBottom:'1px solid var(--line)'}}><span style=${{fontSize:12.5}}>${x.t||''}</span>${ce?html`<button class="mini danger" onClick=${()=>delFromList('highlights',i)}>×</button>`:''}</div>`)}
+        ${ce?html`<div class="flex gap8" style=${{marginTop:8}}><input class="inp" value=${hi} onInput=${e=>setHi(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter')addToList('highlights',hi,setHi);}} placeholder=${ar?'أضف إنجاز…':'Add a highlight…'} style=${{flex:1}}/><button class="mini pri" onClick=${()=>addToList('highlights',hi,setHi)}>${ar?'إضافة':'Add'}</button></div>`:''}
+
+        <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'الخطوات القادمة':'Next steps'}</b></div>
+        ${(rep.nextSteps||[]).map((x,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'6px 0',borderBottom:'1px solid var(--line)'}}><span style=${{fontSize:12.5}}>${x.t||''}</span>${ce?html`<button class="mini danger" onClick=${()=>delFromList('nextSteps',i)}>×</button>`:''}</div>`)}
+        ${ce?html`<div class="flex gap8" style=${{marginTop:8}}><input class="inp" value=${ns} onInput=${e=>setNs(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter')addToList('nextSteps',ns,setNs);}} placeholder=${ar?'أضف خطوة…':'Add a next step…'} style=${{flex:1}}/><button class="mini pri" onClick=${()=>addToList('nextSteps',ns,setNs)}>${ar?'إضافة':'Add'}</button></div>`:''}
+
+        <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'ملاحظات الهاند-أوفر':'Handover notes'}</b></div>
+        <textarea class="inp" disabled=${!ce} defaultValue=${rep.handover||''} onBlur=${e=>saveReport({handover:e.target.value})} placeholder=${ar?'أي حاجة الأكونت مانجر الجديد لازم يعرفها…':'Anything a new account manager should know…'} style=${{width:'100%',minHeight:70,resize:'vertical'}}></textarea>
+
+        ${fin?html`<div style=${{margin:'18px 0 6px'}}><b style=${{fontSize:13}}>${ar?'ملخص مالي':'Money summary'}</b></div>
+        <div class="flex" style=${{gap:16,fontSize:12.5}}><span>${ar?'الإجمالي':'Total'}: <b>${money(total)}</b></span><span>${ar?'محصّل':'Paid'}: <b class="lime">${money(paid)}</b></span><span>${ar?'متبقي':'Remaining'}: <b style=${{color:remaining>0?'var(--warn)':'var(--pos)'}}>${money(remaining)}</b></span></div>`:''}
+      </div>`:''}
 
       ${tab==='onboarding'?html`<div>
         <div class="flex between center" style=${{marginBottom:8}}><b style=${{fontSize:13}}>${ar?'قائمة التهيئة':'Onboarding checklist'}</b><span class="mono lime" style=${{fontSize:12}}>${obPct}%</span></div>
