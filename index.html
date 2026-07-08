@@ -2061,7 +2061,7 @@ const canSeeEmployeePrivate = (role) => { const a=aliasRole(role); return a==='A
 // Which request types each role may approve
 const FINANCE_REQ = ['Expense Request','Purchase Request','Bonus Request','Salary Adjustment','Client Discount Request','Invoice Approval'];
 const PM_REQ = ['Task Approval','Deliverable Approval','Send to Client Approval','Deadline Change','Project Scope Change','Leave Request','Tool Access Request'];
-const TIMEOFF_REQ = ['Leave Request','Permission Request','Lateness Report'];
+const TIMEOFF_REQ = ['Leave Request','Permission Request','Lateness Report','Early Leave','Half Day'];
 function canApproveRequest(role, reqType){
   const a = aliasRole(role); // resolve business names (Owner→Admin, Manager→PM, …)
   if(a==='Admin') return true;
@@ -2128,7 +2128,7 @@ const ST = {
   availability:['Available','Busy','Overloaded','On Leave','In Meeting','In Shooting','Remote','Offline','Inactive'],
   assetAccess:['Available','Requested','Missing','Expired','Revoked'],
 };
-const REQUEST_TYPES = ['Leave Request','Permission Request','Lateness Report','Expense Request','Purchase Request','Tool Access Request','Deadline Change','Task Approval','Deliverable Approval','Send to Client Approval','Proposal Approval','Quotation Approval','Invoice Approval','Contract Approval','Bonus Request','Salary Adjustment','Client Discount Request','Project Scope Change','Other'];
+const REQUEST_TYPES = ['Leave Request','Permission Request','Lateness Report','Early Leave','Half Day','Expense Request','Purchase Request','Tool Access Request','Deadline Change','Task Approval','Deliverable Approval','Send to Client Approval','Proposal Approval','Quotation Approval','Invoice Approval','Contract Approval','Bonus Request','Salary Adjustment','Client Discount Request','Project Scope Change','Other'];
 const ASSET_TYPES = ['Logo','Brand Guidelines','Fonts','Color Palette','Social Media Account','Website','Google Drive Folder','Contract','Proposal','Quotation','Invoice','Brief','Reference','Design File','Video File','Final Delivery','Ads Account','Meta Business Manager','TikTok Ads','Google Ads','Analytics','Password Manager Link','WhatsApp Group','Meeting Link','Other'];
 const ASSET_VISIBILITY = ['Internal Only','Client Visible','Team Visible'];
 const CHANNEL_TYPES = ['General','Client','Project','Task','Deliverable','Finance','Team'];
