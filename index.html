@@ -4589,6 +4589,7 @@ function App(){
   const ytRef = useRef(null);
   // ===== Magnet Radio (YouTube-backed) =====
   const RADIO_STATIONS = [
+    {key:'legacy',name:'Legacy',     list:'PLs86LVdjQzf5H-YgrQZ10_-afhoFfuAlR'},
     {key:'focus', name:'Deep Focus', seed:'JBZ8UVfUM7Y'},
     {key:'lofi',  name:'Lo-Fi',      seed:'2Nhs3Fqr1ME'},
     {key:'synth', name:'Synthwave',  seed:'Kj_fAx-IsZA'},
@@ -4597,14 +4598,19 @@ function App(){
     {key:'crea',  name:'Creative',   seed:'GHLNwkmqz_A'},
     {key:'night', name:'Late Night', seed:'QymQa3sD_Yk'},
   ];
+  const RADIO_SEEDS = RADIO_STATIONS.filter(s=>s.seed).map(s=>s.seed);
+  const radioLoad = (p,key)=>{ const st=RADIO_STATIONS.find(x=>x.key===key)||RADIO_STATIONS[0];
+    try{ if(st.list){ p.loadPlaylist({list:st.list, listType:'playlist', index:0}); } else { p.loadPlaylist(RADIO_SEEDS, Math.max(0,RADIO_SEEDS.indexOf(st.seed))); } }catch(x){} };
   const [radioOpen, setRadioOpen] = useState(false);
   const [station, setStation] = useState(()=>{ try{ return localStorage.getItem('magnet_station')||'focus'; }catch(e){ return 'focus'; } });
   const [vol, setVol] = useState(()=>{ try{ return Math.max(0,Math.min(100, parseInt(localStorage.getItem('magnet_vol')||'16',10))); }catch(e){ return 16; } });
   const [np, setNp] = useState({title:'',author:''});
   const [shuffleOn, setShuffleOn] = useState(false);
   const [repeatOn, setRepeatOn] = useState(true);
-  const loadStation = (key)=>{ const idx=RADIO_STATIONS.findIndex(x=>x.key===key); try{ localStorage.setItem('magnet_station',key); }catch(e){} setStation(key);
-    try{ if(ytRef.current&&ytRef.current.playVideoAt){ ytRef.current.playVideoAt(idx<0?0:idx); setTimeout(()=>{try{ytRef.current.setVolume(vol); ytRef.current.playVideo();}catch(x){}},250); if(!musicOn){ setMusicOn(true); try{localStorage.setItem('magnet_music','on');}catch(e){} } } }catch(x){} };
+  const loadStation = (key)=>{ try{ localStorage.setItem('magnet_station',key); }catch(e){} setStation(key);
+    const p=ytRef.current; if(!p) return;
+    try{ radioLoad(p,key); setTimeout(()=>{try{ p.setVolume(vol); p.setLoop(repeatOn); if(shuffleOn)p.setShuffle(true); p.playVideo(); }catch(x){}},450);
+      if(!musicOn){ setMusicOn(true); try{localStorage.setItem('magnet_music','on');}catch(e){} } }catch(x){} };
   const radioCtl = (fn)=>{ try{ if(ytRef.current&&ytRef.current[fn]) ytRef.current[fn](); }catch(x){} };
   const setRadioVol = (v)=>{ v=Math.max(0,Math.min(100,v)); setVol(v); try{localStorage.setItem('magnet_vol',String(v));}catch(e){} try{ if(ytRef.current)ytRef.current.setVolume(v); }catch(x){} };
   const toggleShuffle = ()=>{ setShuffleOn(s=>{ const n=!s; try{ if(ytRef.current)ytRef.current.setShuffle(n);}catch(x){} return n; }); };
@@ -4695,8 +4701,8 @@ function App(){
   const toggleMusic = ()=>{ setMusicOn(on=>{ const nv=!on; try{ localStorage.setItem('magnet_music', nv?'on':'off'); }catch(e){} try{ if(ytRef.current){ nv?ytRef.current.playVideo():ytRef.current.pauseVideo(); } }catch(x){} return nv; }); };
   useEffect(()=>{
     if(!authUser) return;
-    const TRACKS=RADIO_STATIONS.map(s=>s.seed);
-    const startIdx=Math.max(0, RADIO_STATIONS.findIndex(s=>s.key===(()=>{try{return localStorage.getItem('magnet_station')||'focus';}catch(e){return 'focus';}})()));
+    const savedKey=(()=>{try{return localStorage.getItem('magnet_station')||'focus';}catch(e){return 'focus';}})();
+    const firstSeed=(RADIO_STATIONS.find(s=>s.seed)||{}).seed;
     let player=null, killed=false, npTimer=null;
     const make=()=>{
       if(killed) return;
@@ -4705,8 +4711,8 @@ function App(){
         const prev=window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady=function(){ if(prev){try{prev();}catch(e){}} make(); }; return;
       }
       let host=document.getElementById('sysmusic'); if(!host){ host=document.createElement('div'); host.id='sysmusic'; host.style.cssText='position:fixed;left:-9999px;top:-9999px;width:1px;height:1px'; document.body.appendChild(host); }
-      try { player=new YT.Player('sysmusic',{ videoId:TRACKS[startIdx], playerVars:{autoplay:1,controls:0,loop:1,playlist:TRACKS.join(','),index:startIdx,modestbranding:1,playsinline:1,rel:0},
-        events:{ onReady:e=>{ try{e.target.setVolume((function(){try{return parseInt(localStorage.getItem('magnet_vol')||'16',10);}catch(x){return 16;}})());}catch(x){} ytRef.current=e.target; try{e.target.setLoop(true);}catch(x){} if(musicGetOn()){try{e.target.playVideo();}catch(x){}} },
+      try { player=new YT.Player('sysmusic',{ videoId:firstSeed, playerVars:{autoplay:1,controls:0,modestbranding:1,playsinline:1,rel:0},
+        events:{ onReady:e=>{ ytRef.current=e.target; try{e.target.setVolume((function(){try{return parseInt(localStorage.getItem('magnet_vol')||'16',10);}catch(x){return 16;}})());}catch(x){} try{radioLoad(e.target,savedKey);}catch(x){} try{e.target.setLoop(true);}catch(x){} setTimeout(()=>{try{ if(musicGetOn())e.target.playVideo(); else e.target.pauseVideo(); }catch(x){}},500); },
           onStateChange:e=>{ try{ const d=e.target.getVideoData&&e.target.getVideoData(); if(d&&d.title) setNp({title:d.title,author:d.author||''}); }catch(x){} } } }); } catch(e){}
       // poll now-playing title so the radio panel shows the real current song
       npTimer=setInterval(()=>{ try{ if(ytRef.current&&ytRef.current.getVideoData){ const d=ytRef.current.getVideoData(); if(d&&d.title) setNp(p=>p.title===d.title?p:{title:d.title,author:d.author||''}); } }catch(x){} }, 3000);
