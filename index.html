@@ -1863,7 +1863,8 @@ const EDIT = {
 // SIMPLE role list (7 clear roles) shown when assigning a user. Every old role name
 // still resolves via ROLE_ALIAS below, so existing team members are UNCHANGED — this
 // only makes NEW assignments simpler. Pick one role per person; it decides everything.
-const BUSINESS_ROLES = ['Owner','Manager','HR','Sales','Creative','Finance','Client'];
+// Real agency job titles — each maps to a permission profile via ROLE_ALIAS below.
+const BUSINESS_ROLES = ['Owner','Manager','Account Manager','Sales','HR','Finance','Designer','Graphic Designer','Content','Video Editor','Production','Client'];
 // All role names that still resolve (for legacy/back-compat + the defensive dropdown).
 const ALL_ROLE_NAMES = ['Owner','Admin','Manager','HR','Sales','Creative','Finance','Client',
   'Marketing Director','Art Director','Account Manager','Social Media Specialist',
@@ -1876,6 +1877,10 @@ const ROLE_ALIAS = {
   Creative:'Designer',                 // one creative profile: tasks/deliverables/assets, NO finance/HR/salaries
   Finance:'Accountant',
   Client:'Client',
+  // ---- real job titles the agency uses (grouped by the access they need) ----
+  Content:'Designer',                  // creative access (tasks/deliverables/assets/calendar)
+  Production:'Designer',               // production/shooting — same creative access
+  // (Designer, Graphic Designer, Video Editor, Account Manager, Sales, HR already mapped below)
   // ---- legacy / detailed names kept mapping so existing accounts still resolve ----
   Admin:'Admin', 'Project Manager':'Project Manager',
   'Marketing Director':'Marketing Director',
@@ -1900,6 +1905,10 @@ const ROLE_RESPONSIBILITIES = {
   'Account Manager':'Create and manage clients, client tasks, and notes. Create proposals. View client assets. Coordinate the team. Cannot approve final work unless allowed.',
   'Project Manager':'Assign tasks, track deadlines, review workload, move tasks between statuses, escalate overdue work. Cannot mark invoices paid.',
   Designer:'View assigned tasks and client assets. Submit work for review. Add comments. Cannot approve own work or access finance unless allowed.',
+  'Graphic Designer':'Design work: assigned tasks, deliverables, client assets, calendar and revisions. Submit work for review. No finance, salaries, or HR.',
+  Content:'Content creation: assigned tasks, deliverables, calendar and client assets. Submit work for review. No finance, salaries, or HR.',
+  'Video Editor':'Video & reel editing: assigned tasks, deliverables, client assets and calendar. Submit work for review. No finance, salaries, or HR.',
+  Production:'Production & shooting: assigned tasks, deliverables, client assets and calendar. Submit work for review. No finance, salaries, or HR.',
   'Content Creator':'View assigned tasks. Create content drafts. Submit work for review. Add comments. Cannot access finance unless allowed.',
   'Media Buyer':'View assigned clients. Add campaign notes and performance updates. Upload reports. Cannot access invoices unless allowed.',
   Finance:'Create and edit invoices. Mark invoices paid. View revenue and payment status. Cannot approve creative tasks.',
@@ -8393,7 +8402,7 @@ function RolesPermissionsView({ ctx }){
         <div>${BUSINESS_ROLES.map(r=>html`<button key=${r} class="chan-row ${sel===r?'on':''}" onClick=${()=>setSel(r)}>${t(r)!==r?t(r):r}${getPermOverrides()[r]?html`<span class="new-badge" style=${{marginLeft:'auto'}}>${ar?'مُعدّل':'Custom'}</span>`:''}</button>`)}</div>
       <//>
       <${Panel} title=${t(sel)!==sel?t(sel):sel}>
-        <div class="muted" style=${{fontSize:13.5,lineHeight:1.7}}>${ROLE_RESPONSIBILITIES[sel]||''}</div>
+        <div class="muted" style=${{fontSize:13.5,lineHeight:1.7}}>${ROLE_RESPONSIBILITIES[sel]||ROLE_RESPONSIBILITIES[aliasRole(sel)]||''}</div>
         ${editing&&getPermOverrides()[sel]&&html`<button class="mini" style=${{marginTop:12}} onClick=${resetRole}>${ar?'إعادة للوضع الافتراضي':'Reset to defaults'}</button>`}
       <//>
     </div>
