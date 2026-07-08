@@ -5133,7 +5133,7 @@ const FORM_SCHEMAS = {
     {k:'mainContactPhone',label:'Phone',req:true,group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
     {k:'serviceType',label:'Primary service',req:true,type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},
     {k:'monthlyRetainer',label:'Monthly retainer',type:'number',group:'Contract'},{k:'billingCycle',label:'Billing cycle',type:'select',opts:BILLING_CYCLES,group:'Contract'},{k:'collectionDay',label:'Collection day (1-28)',type:'number',group:'Contract'},
-    {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',req:true,group:'Account'},{k:'projectManagerId',label:'Project manager',type:'ref',coll:'employees',group:'Account'},
+    {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',req:true,group:'Account'},
     // Monthly plan — how many of each per month (feeds the client report)
     {k:'planPosts',label:'Posts / month',type:'number',group:'Plan'},{k:'planReels',label:'Reels / month',type:'number',group:'Plan'},
     {k:'planCarousels',label:'Carousels / month',type:'number',group:'Plan'},{k:'planStories',label:'Stories / month',type:'number',group:'Plan'},
@@ -5141,6 +5141,7 @@ const FORM_SCHEMAS = {
     {k:'website',label:'Website',group:'Links'},{k:'instagram',label:'Instagram',group:'Links'},{k:'googleDriveFolder',label:'Drive folder',group:'Links'},
     {k:'brandGuidelinesLink',label:'Brand guidelines',group:'Links'},{k:'whatsappGroupLink',label:'WhatsApp group',group:'Links'},
     // Advanced — optional, collapsed by default
+    {k:'projectManagerId',label:'Project manager (optional)',type:'ref',coll:'employees',group:'Advanced'},
     {k:'legalName',label:'Legal name',group:'Advanced'},{k:'priority',label:'Priority',type:'select',opts:CLIENT_PRIORITIES,group:'Advanced'},{k:'source',label:'Source',group:'Advanced'},
     {k:'mainContactRole',label:'Contact role',group:'Advanced'},{k:'location',label:'Location',group:'Advanced'},{k:'targetAudience',label:'Target audience',group:'Advanced'},
     {k:'brandTone',label:'Brand tone',group:'Advanced'},{k:'competitors',label:'Competitors',group:'Advanced'},
