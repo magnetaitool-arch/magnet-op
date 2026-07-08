@@ -5440,6 +5440,29 @@ function reportPlanActual(c, db){
   const actual={}; REPORT_PLAN_TYPES.forEach(([k,ct])=>{ actual[k]=items.filter(x=>x.contentType===ct).length; });
   return { plan, actual };
 }
+// "What's still missing" for a client — the gaps a manager (or a new manager on
+// handover) must close: missing key info, incomplete onboarding, missing assets/
+// access, unmet monthly plan, and overdue collections. Returns an array of strings.
+function reportMissing(c, db, ar){
+  const out=[]; const {plan,actual}=reportPlanActual(c,db);
+  const ob=(Array.isArray(c.onboarding)&&c.onboarding.length)?c.onboarding:ONBOARDING_STEPS.map(s=>({item:s,done:false}));
+  const contracts=(db.contracts||[]).filter(k=>k.clientId===c.id);
+  const assets=(db.clientAssets||[]).filter(a=>a.clientId===c.id);
+  const cols=(db.collections||[]).filter(x=>x.clientId===c.id);
+  const sep=ar?'، ':', ';
+  if(!c.accountManagerId) out.push(ar?'مفيش أكونت مانجر متسنّد':'No account manager assigned');
+  if(!(c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone)) out.push(ar?'مفيش رقم تواصل':'No contact phone/WhatsApp');
+  if(!((Array.isArray(c.services)&&c.services.length)||c.serviceType)) out.push(ar?'مفيش خدمات محددة':'No services selected');
+  if(!contracts.length && !c.monthlyRetainer) out.push(ar?'مفيش عقد ولا ريتينر':'No contract or retainer');
+  const obLeft=ob.filter(s=>!s.done); if(obLeft.length) out.push((ar?'التهيئة ناقصة: ':'Onboarding left: ')+obLeft.map(s=>s.item).join(sep));
+  const miss=assets.filter(a=>a.accessStatus==='Missing'); if(miss.length) out.push((ar?'أصول/أكسسات ناقصة: ':'Missing assets: ')+miss.map(a=>a.title).join(sep));
+  const req=assets.filter(a=>a.accessStatus==='Requested'); if(req.length) out.push((ar?'أكسسات مطلوبة لسه: ':'Access still requested: ')+req.map(a=>a.title).join(sep));
+  const planSet=REPORT_PLAN_TYPES.some(([k])=>+((plan||{})[k])>0);
+  if(!planSet) out.push(ar?'مفيش خطة شهرية متحطّة':'No monthly plan set');
+  else { const behind=REPORT_PLAN_TYPES.filter(([k])=>(actual[k]||0)<(+plan[k]||0)); if(behind.length) out.push((ar?'الخطة لسه ناقصة: ':'Plan not met: ')+behind.map(([k,ct,la,le])=>(ar?la:le)+' '+(actual[k]||0)+'/'+(+plan[k]||0)).join(sep)); }
+  const od=cols.filter(x=>(x.status||'Pending')==='Pending'&&x.dueDate&&x.dueDate<todayISO()); if(od.length) out.push((ar?'تحصيلات متأخرة: ':'Overdue collections: ')+od.length);
+  return out;
+}
 // Client-facing "Monthly report" (mode='client') or internal "Handover sheet"
 // (mode='handover', adds account snapshot + assets/access + handover notes).
 function accountMonthlyReport(c, db, ctx, mode){
@@ -5456,6 +5479,8 @@ function accountMonthlyReport(c, db, ctx, mode){
   const listBlock=(title,arr)=>{ const li=(arr||[]).map(x=>'<li>'+e(typeof x==='string'?x:(x.t||''))+'</li>').join(''); return li?'<h2>'+title+'</h2><ul>'+li+'</ul>':''; };
   let extra='';
   if(handover){
+    const miss=reportMissing(c,db,ar);
+    if(miss.length) extra+='<h2>'+(ar?'الناقص في العميل':'What is missing')+'</h2><ul>'+miss.map(x=>'<li>'+e(x)+'</li>').join('')+'</ul>';
     const snap=[[ar?'الكونتاكت':'Main contact', c.mainContactName||c.contactPerson||''],
       [ar?'الهاتف / واتساب':'Phone / WhatsApp', c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone||''],
       [ar?'أكونت مانجر':'Account manager', c.accountManagerId?nameById('employees',c.accountManagerId):''],
@@ -5573,6 +5598,7 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
   const nm=cNameOf(c);
   // ---- Report & Handover state (stored on the client record as c.report jsonb) ----
   const rep=c.report||{}; const repPlan=rep.plan||{};
+  const missing=reportMissing(c,db,ar);
   const {actual:repActual}=reportPlanActual(c,db);
   const saveReport=(patch)=>{ if(!ce)return; ctx.updateRecord('clients',c.id,{report:Object.assign({plan:{},highlights:[],nextSteps:[],handover:''},rep,patch)}); };
   const setPlan=(k,v)=>saveReport({plan:Object.assign({},repPlan,{[k]:Math.max(0,parseInt(v,10)||0)})});
@@ -5601,6 +5627,11 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
 
       ${tab==='report'?html`<div>
         <div class="muted" style=${{fontSize:11.5,marginBottom:14,lineHeight:1.5}}>${ar?'كل حاجة عن العميل في مكان واحد — جاهزة للملء وللهاند-أوفر. اطبع "تقرير شهري" للعميل أو "شيت هاند-أوفر" للفريق من فوق.':'Everything about this client in one place — ready to fill and to hand over. Print "Monthly report" for the client or "Handover sheet" for the team from the top.'}</div>
+
+        <div style=${{border:'1px solid '+(missing.length?'var(--warn)':'var(--line)'),background:missing.length?'rgba(230,160,30,.06)':'transparent',borderRadius:12,padding:'12px 14px',marginBottom:16}}>
+          <div class="flex between center" style=${{marginBottom:missing.length?8:0}}><b style=${{fontSize:13,color:missing.length?'var(--warn)':'var(--pos)'}}>${missing.length?(ar?'الناقص في العميل':'What is missing'):(ar?'العميل مكتمل ✓':'Client complete ✓')}</b><span class="mono" style=${{fontSize:11,color:missing.length?'var(--warn)':'var(--pos)'}}>${missing.length||''}</span></div>
+          ${missing.map((mLine,i)=>html`<div class="flex" key=${i} style=${{gap:8,padding:'4px 0',fontSize:12,alignItems:'flex-start'}}><span style=${{color:'var(--warn)',lineHeight:1.3}}>•</span><span style=${{lineHeight:1.4}}>${mLine}</span></div>`)}
+        </div>
 
         <div class="flex between center" style=${{marginBottom:8}}><b style=${{fontSize:13}}>${ar?'الخطة الشهرية مقابل المُنفّذ':'Monthly plan vs delivered'}</b><span class="muted" style=${{fontSize:11}}>${thisMonth()}</span></div>
         ${REPORT_PLAN_TYPES.map(([k,ct,la,le])=>html`<div class="flex between center" key=${k} style=${{gap:10,padding:'7px 0',borderBottom:'1px solid var(--line)'}}>
