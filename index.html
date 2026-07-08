@@ -1804,7 +1804,14 @@ const monthOf = (d) => (d||'').slice(0,7);
 const thisMonth = () => todayISO().slice(0,7);
 // Clickable links: any value that looks like a URL/domain becomes an <a> that
 // opens in a new tab — never copy-paste. `Ln` renders a labelled clickable link.
-const isUrl = (v) => typeof v==='string' && /^(https?:\/\/|www\.|mailto:|tel:)|\.[a-z]{2,}(\/|$)/i.test(v.trim()) && !/\s/.test(v.trim());
+// A value is a link only if it has an explicit scheme, starts with www., or is a
+// bare host on a known TLD. File names (brief.pdf) and names (Mr.Kitty) are NOT links.
+const _URL_FILE_EXT = /\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|svg|webp|mp4|mov|avi|mkv|mp3|wav|zip|rar|7z|csv|txt|ai|psd|eps|sketch|fig|key|pages|numbers)$/i;
+const _URL_TLD = /\.(com|net|org|io|co|app|dev|me|ly|so|xyz|info|biz|tv|store|online|site|link|page|cloud|design|gg|eg|sa|ae|uk|us|fr|de)(\/|\?|#|$)/i;
+const isUrl = (v) => { if(typeof v!=='string') return false; v=v.trim(); if(!v || /\s/.test(v)) return false;
+  if(/^(https?:\/\/|mailto:|tel:)/i.test(v)) return true;
+  if(_URL_FILE_EXT.test(v)) return false;
+  return /^www\./i.test(v) || (/^([a-z0-9-]+\.)+[a-z]{2,}(\/|\?|#|$)/i.test(v) && _URL_TLD.test(v)); };
 const normUrl = (v) => { v=String(v||'').trim(); if(/^(https?:\/\/|mailto:|tel:)/i.test(v)) return v; return 'https://'+v.replace(/^\/+/,''); };
 const shortUrl = (v) => String(v||'').replace(/^https?:\/\//i,'').replace(/^www\./i,'').replace(/\/$/,'').slice(0,42);
 const Ln = ({ href, children, cls }) => href ? html`<a class=${cls||'lnk'} href=${normUrl(href)} target="_blank" rel="noopener noreferrer" onClick=${e=>e.stopPropagation()}>${children||shortUrl(href)}</a>` : html`<span>—</span>`;
@@ -1844,7 +1851,7 @@ const VIEW = {
   // Social Media — creative execution + content calendar + campaigns/briefs.
   'Social Media': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams','campaigns','briefs'],
   // Marketing Director — marketing strategy + content + reports.
-  'Marketing Director': ['dashboard','accounts','plans','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','contracts','calendar','clientAssets','shareCenter','meetings','requests','approvalCenter','agents','automations','reports','documents','files','comments','activityLogs','notifications','teams','workload','settings'],
+  'Marketing Director': ['dashboard','accounts','plans','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','contracts','calendar','clientAssets','shareCenter','meetings','requests','approvalCenter','agents','automations','reports','documents','files','comments','activityLogs','notifications','teams','workload','settings'],
   // Art Director — leads the creative team.
   'Art Director': ['dashboard','projects','tasks','deliverables','calendar','clientAssets','revisionsHub','requests','approvalCenter','files','comments','notifications','sops','employees','availability','leaves','teams','reports','settings'],
 };
@@ -1852,14 +1859,14 @@ const VIEW = {
 const EDIT = {
   Admin: SECTIONS,
   Sales: ['accounts','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
-  'Project Manager': ['accounts','plans','clients','projects','tasks','deliverables','revisions','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
+  'Project Manager': ['accounts','plans','clients','projects','tasks','deliverables','revisions','revisionsHub','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
   Designer: ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   'Video Editor': ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   Accountant: ['invoices','payments','expenses','fixedCosts','partners','collections','comments','requests','chat'],
   Client: ['comments','chat'],
   HR: ['candidates','attendance','leaves','requests','comments','chat','availability'],
   'Social Media': ['tasks','deliverables','files','comments','leaves','requests','chat','availability','calendar','campaigns','briefs'],
-  'Marketing Director': ['plans','leads','campaigns','briefs','salesActivities','proposals','calendar','clientAssets','comments','requests','chat'],
+  'Marketing Director': ['plans','leads','campaigns','briefs','projects','tasks','deliverables','salesActivities','proposals','calendar','clientAssets','comments','requests','chat'],
   'Art Director': ['tasks','deliverables','files','comments','requests','chat','availability','clientAssets','calendar','leaves'],
 };
 
@@ -2323,7 +2330,7 @@ function normalizeOperationsData(state){
 }
 
 /* ============================ ADVANCED-OPS NORMALIZATION ============================ */
-function normalizeRequest(r){ r=r||{}; return Object.assign({
+function normalizeRequest(r){ r=r||{}; return Object.assign({}, r, {
   requestNumber:r.requestNumber||('REQ-'+String(r.id||'').slice(-4).toUpperCase()),
   requestType:r.requestType||'Other', title:r.title||'', description:r.description||'',
   requestedBy:r.requestedBy||'', requestedByName:r.requestedByName||'', requestedByRole:r.requestedByRole||'',
@@ -2333,24 +2340,24 @@ function normalizeRequest(r){ r=r||{}; return Object.assign({
   amount:r.amount!=null?r.amount:0, currency:r.currency||'USD', priority:r.priority||'Normal', status:r.status||'Draft',
   reason:r.reason||'', attachments:r.attachments||'', managerComment:r.managerComment||'',
   approvedBy:r.approvedBy||'', approvedAt:r.approvedAt||'', rejectedBy:r.rejectedBy||'', rejectedAt:r.rejectedAt||'',
-}, r); }
-function normalizeClientAsset(a){ a=a||{}; return Object.assign({
+}); }
+function normalizeClientAsset(a){ a=a||{}; return Object.assign({}, a, {
   clientId:a.clientId||'', projectId:a.projectId||'', assetType:a.assetType||'Other', title:a.title||'', description:a.description||'',
   fileLink:a.fileLink||'', driveLink:a.driveLink||'', folderLink:a.folderLink||'', platform:a.platform||'', username:a.username||'',
   accessStatus:a.accessStatus||'Available', owner:a.owner||'', visibility:a.visibility||'Internal Only', notes:a.notes||'',
-}, a); }
-function normalizeChatMessage(m){ m=m||{}; return Object.assign({
+}); }
+function normalizeChatMessage(m){ m=m||{}; return Object.assign({}, m, {
   channelType:m.channelType||'General', channelId:m.channelId||'', clientId:m.clientId||'', projectId:m.projectId||'', taskId:m.taskId||'', deliverableId:m.deliverableId||'',
   senderId:m.senderId||'', senderName:m.senderName||'', senderRole:m.senderRole||'', message:m.message||'', attachments:m.attachments||'',
   visibility:m.visibility||'Internal Only', readBy:m.readBy||[],
-}, m); }
+}); }
 // availability defaults layered onto employees (called from normalizeEmployee path via normalizeAdvancedData)
-function normalizeEmployeeAvailability(e){ e=e||{}; return Object.assign({
+function normalizeEmployeeAvailability(e){ e=e||{}; return Object.assign({}, e, {
   availabilityStatus:e.availabilityStatus||'Available', activeNow:e.activeNow!=null?e.activeNow:false,
   currentWorkload:e.currentWorkload!=null?e.currentWorkload:0, lastActivityAt:e.lastActivityAt||'',
   currentFocus:e.currentFocus||'', unavailableReason:e.unavailableReason||'', availableFrom:e.availableFrom||'',
   assignedTasksCount:e.assignedTasksCount!=null?e.assignedTasksCount:0, overdueTasksCount:e.overdueTasksCount!=null?e.overdueTasksCount:0,
-}, e); }
+}); }
 function normalizeAdvancedData(state){
   state=state||{};
   ['approvalRequests','clientAssets','chatMessages'].forEach(c=>{ if(!Array.isArray(state[c])) state[c]=[]; });
@@ -3875,7 +3882,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const renderGroup=(g)=>html`<div key=${g} style=${{marginBottom:6}}>
     <div class="eyebrow" style=${{margin:'2px 0 12px'}}>${gl(g)}</div>
     <div class="form-grid">${seen[g].map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div></div>`;
-  const isMissing=(f)=> f.req && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]==='');
+  const isMissing=(f)=> f.req && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]===''||(Array.isArray(rec[f.k])&&rec[f.k].length===0));
   const missingIn=(gnames)=> allowed.filter(f=>gnames.includes(f.group||'Other') && isMissing(f));
   const allMissing=()=> allowed.filter(isMissing);
   const reqLbl=(m)=> (ar?'محتاج تملأ: ':'Required: ')+m.map(f=>f.label).join('، ');
@@ -4090,11 +4097,13 @@ function NotificationCenterView({ ctx }){
   const { db, role, user } = ctx;
   const [tab,setTab]=useState('all');
   const byTime=(a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0);
-  const all=[...(db.notifications||[])].sort(byTime);
   const isMine=(n)=>(!n.userId||n.userId===user.id)&&(!n.role||n.role===role||aliasRole(n.role)===aliasRole(role));
-  const list = tab==='unread' ? all.filter(n=>!n.read) : tab==='mine' ? all.filter(isMine) : all;
-  const unreadCount=all.filter(n=>!n.read).length;
-  const markAll=()=>list.forEach(n=>!n.read&&ctx.updateRecord('notifications',n.id,{read:true}));
+  // Only ever show/act on notifications addressed to THIS user (or their role / broadcast).
+  // Never expose or mark other people's personal notifications — same rule as the topbar bell.
+  const base=[...(db.notifications||[])].filter(isMine).sort(byTime);
+  const list = tab==='unread' ? base.filter(n=>!n.read) : base;
+  const unreadCount=base.filter(n=>!n.read).length;
+  const markAll=()=>base.forEach(n=>!n.read&&ctx.updateRecord('notifications',n.id,{read:true}));
   return html`<div class="view">
     <${Head} eyebrow="Operations" title="Notifications" desc="Everything happening across your team — live.">
       ${unreadCount>0&&html`<button class="btn btn-ghost" onClick=${markAll}>Mark all read</button>`}
@@ -5146,7 +5155,8 @@ function App(){
       let mapped;
       if(emp) mapped = { user:{id:s.user.id,name:emp.fullName||emp.name,email,clientId:null,employeeId:emp.id}, role:emp.appRole||emp.role||'Designer' };
       else if(contact) mapped = { user:{id:s.user.id,name:contact.name,email,clientId:contact.clientId}, role:'Client' };
-      else mapped = { user:{id:s.user.id,name:email,email,clientId:null}, role:'Admin' }; // first user / owner
+      // Unknown account (not in employees or portal contacts): least-privilege, NOT Admin.
+      else mapped = { user:{id:s.user.id,name:email,email,clientId:null}, role:'Client' };
       setSession(Object.assign(mapped,{token:s.access_token, signedIn:true}));
       setShowLogin(false);
       alert('Signed in as '+email+' · role: '+mapped.role);
@@ -5737,6 +5747,10 @@ function QuickTimeOff({ ctx }){
    ============================================================================ */
 const ONBOARDING_STEPS = ['Contract signed','Brief collected','Brand assets received','Kickoff meeting','Credentials collected'];
 const cNameOf = (c)=> (c&&(c.brandName||c.name||c.company))||'—';
+// Contact fallbacks — clients are stored with mainContact* fields (older/seed data
+// used whatsapp/phone/contactPerson), so always try both shapes.
+const cPhoneOf = (c)=> (c&&(c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone))||'';
+const cContactOf = (c)=> (c&&(c.mainContactName||c.contactPerson))||'';
 const cleanPhone = (p)=>{ let s=String(p||'').replace(/[^0-9]/g,''); if(s.startsWith('00')) s=s.slice(2); if(s.startsWith('0')) s='20'+s.slice(1); return s; };
 const waLink = (num,msg)=> 'https://wa.me/'+cleanPhone(num)+'?text='+encodeURIComponent(msg);
 const acctPipe = (c)=>{ const s=c.status||'Lead';
@@ -5876,7 +5890,7 @@ function AccountsView({ ctx, visible, byBrand, ce }){
         ${upcoming.map(u=>{ const c=byId(clients,u.clientId)||{}; const s3=u.dueDate<=new Date(Date.now()+3*86400000).toISOString().slice(0,10); return html`<tr key=${u.id}>
           <td data-label="Client"><b>${cNameOf(c)}</b></td><td data-label="Amount" class="right mono">${money(u.amount)}</td>
           <td data-label="Due"><span style=${{color:s3?'var(--lime)':'var(--ink-2)'}}>${fmtDate(u.dueDate)}</span></td>
-          <td class="right">${(c.whatsapp||c.phone)?html`<a class="mini" href=${waLink(c.whatsapp||c.phone,(ar?'تذكير من Magnet: مستحق دفعة بقيمة ':'Reminder from Magnet: payment of ')+money(u.amount)+(ar?' بتاريخ ':' due ')+fmtDate(u.dueDate))} target="_blank" rel="noopener">${ar?'تذكير واتساب':'WhatsApp'}</a>`:''}</td>
+          <td class="right">${cPhoneOf(c)?html`<a class="mini" href=${waLink(cPhoneOf(c),(ar?'تذكير من Magnet: مستحق دفعة بقيمة ':'Reminder from Magnet: payment of ')+money(u.amount)+(ar?' بتاريخ ':' due ')+fmtDate(u.dueDate))} target="_blank" rel="noopener">${ar?'تذكير واتساب':'WhatsApp'}</a>`:''}</td>
         </tr>`; })}</tbody></table></div>`:''}
     <//></div>`:''}
     ${layout==='board'
@@ -5914,7 +5928,8 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
     if((db.collections||[]).some(x=>x.contractId===k.id)){ if(!confirm(ar?'العقد ده ليه جدول دفعات بالفعل. أزوّد كمان؟':'This contract already has a schedule. Add more?')) return; }
     const stepDays = ivl==='Weekly'?7:ivl==='Biweekly'?14:0; // 0 = monthly
     for(let i=0;i<n;i++){ const d=new Date(start); if(stepDays) d.setDate(d.getDate()+i*stepDays); else d.setMonth(d.getMonth()+i);
-      ctx.createRecord('collections',{clientId:c.id,contractId:k.id,title:(k.title||k.contractNumber||'Contract')+' '+(i+1)+'/'+n,amount:per,dueDate:d.toISOString().slice(0,10),status:'Pending'}); }
+      const amt = i===n-1 ? (val - per*(n-1)) : per; // last installment absorbs the rounding remainder so they sum to `val`
+      ctx.createRecord('collections',{clientId:c.id,contractId:k.id,title:(k.title||k.contractNumber||'Contract')+' '+(i+1)+'/'+n,amount:amt,dueDate:d.toISOString().slice(0,10),status:'Pending'}); }
     showProPopup('savedNotes',n+(ar?' دفعات اتولّدت':' payments generated')); };
   const markPaid=(x)=>{ ctx.updateRecord('collections',x.id,{status:'Collected',collectedDate:todayISO()}); ctx.createRecord('payments',{clientId:c.id,amount:+x.amount||0,date:todayISO(),method:x.method||'Bank',collectionId:x.id,notes:'Accounts payment'}); showProPopup('paymentReceived',money(x.amount)); };
   const total=contracts.reduce((s,k)=>s+(+k.value||0),0);
@@ -5939,11 +5954,11 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
     <div class="cdrawer-h">
       <div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>${ar?'حساب':'Account'} · ${c.status||'—'}</div>
         <h3 style=${{margin:'3px 0 0',fontSize:18}}>${nm}</h3>
-        <div class="muted" style=${{fontSize:12,marginTop:3}}>${c.contactPerson||''}${(c.contactPerson&&(c.whatsapp||c.phone))?' · ':''}${c.whatsapp||c.phone||''}</div></div>
+        <div class="muted" style=${{fontSize:12,marginTop:3}}>${cContactOf(c)}${(cContactOf(c)&&cPhoneOf(c))?' · ':''}${cPhoneOf(c)}</div></div>
       <button class="mini" onClick=${onClose}>×</button></div>
     <div class="cdrawer-b">
       <div class="flex gap8" style=${{flexWrap:'wrap',marginBottom:14}}>
-        ${(c.whatsapp||c.phone)?html`<a class="btn btn-pri" style=${{padding:'8px 14px'}} href=${waLink(c.whatsapp||c.phone,(ar?'أهلاً ':'Hi ')+(c.contactPerson||nm)+(ar?'، حابين نطمّن على الشغل ونسمع رأيك. — Magnet':', checking in on your project — Magnet'))} target="_blank" rel="noopener">${ar?'متابعة واتساب':'WhatsApp follow-up'}</a>`:''}
+        ${cPhoneOf(c)?html`<a class="btn btn-pri" style=${{padding:'8px 14px'}} href=${waLink(cPhoneOf(c),(ar?'أهلاً ':'Hi ')+(cContactOf(c)||nm)+(ar?'، حابين نطمّن على الشغل ونسمع رأيك. — Magnet':', checking in on your project — Magnet'))} target="_blank" rel="noopener">${ar?'متابعة واتساب':'WhatsApp follow-up'}</a>`:''}
         <button class="btn btn-ghost" onClick=${()=>accountMonthlyReport(c,db,ctx,'client')}>${ar?'تقرير شهري':'Monthly report'}</button>
         <button class="btn btn-ghost" onClick=${()=>accountMonthlyReport(c,db,ctx,'handover')}>${ar?'شيت هاند-أوفر':'Handover sheet'}</button>
         ${ce?html`<button class="btn btn-ghost" onClick=${()=>ctx.openModal('clients',c)}>${ar?'تعديل العميل':'Edit client'}</button>`:''}
@@ -6039,7 +6054,7 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
             <td data-label="Item">${x.title||'—'}</td><td data-label="Amount" class="right mono">${money(x.amount)}</td>
             <td data-label="Due">${fmtDate(x.dueDate)}</td>
             <td data-label="Status"><${Tag} type=${st==='Collected'?'ok':st==='Overdue'?'warn':undefined}>${st}<//></td>
-            <td class="right">${(st!=='Collected'&&ce)?html`<div class="flex gap8" style=${{justifyContent:'flex-end'}}><button class="mini pri" onClick=${()=>markPaid(x)}>${ar?'دُفعت':'Paid'}</button>${(c.whatsapp||c.phone)?html`<a class="mini" href=${waLink(c.whatsapp||c.phone,(ar?'تذكير دفعة ':'Payment reminder ')+money(x.amount)+(ar?' مستحقة ':' due ')+fmtDate(x.dueDate)+' — Magnet')} target="_blank" rel="noopener">WA</a>`:''}</div>`:''}</td>
+            <td class="right">${(st!=='Collected'&&ce)?html`<div class="flex gap8" style=${{justifyContent:'flex-end'}}><button class="mini pri" onClick=${()=>markPaid(x)}>${ar?'دُفعت':'Paid'}</button>${cPhoneOf(c)?html`<a class="mini" href=${waLink(cPhoneOf(c),(ar?'تذكير دفعة ':'Payment reminder ')+money(x.amount)+(ar?' مستحقة ':' due ')+fmtDate(x.dueDate)+' — Magnet')} target="_blank" rel="noopener">WA</a>`:''}</div>`:''}</td>
           </tr>`; })}</tbody></table></div>`:html`<div class="muted" style=${{fontSize:12,padding:'6px 0'}}>${ar?'مفيش دفعات. ولّدها من العقد فوق.':'No payments yet — generate them from a contract above.'}</div>`}
       </div>`:''}
 
@@ -6089,7 +6104,7 @@ function DashboardView({ ctx, byBrand }){
       <div class="grid g-3 stagger" style=${{marginBottom:18}}>
         <${KPI} label="Your projects" value=${mine('projects').length} icon="briefcase"/>
         <${KPI} label="Awaiting your approval" value=${dlv.filter(d=>d.status==='Client Review').length} icon="docs"/>
-        <${KPI} label="Outstanding invoices" value=${money(mine('invoices').reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0))} icon="finance"/>
+        <${KPI} label="Outstanding invoices" value=${money(mine('invoices').filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0))} icon="finance"/>
       </div>
       <div style=${{display:'grid',gridTemplateColumns:'1.3fr 1fr',gap:18}}>
         <${Panel} title="Deliverables to review">
@@ -6210,7 +6225,7 @@ function DashboardView({ ctx, byBrand }){
   const inReview = (db.deliverables||[]).filter(d=>d.status==='Client Review').length;
   const pendingRev = (db.revisions||[]).filter(r=>!['Closed','Approved'].includes(r.status)).length;
   const revenue = (db.payments||[]).filter(p=>monthOf(p.date)===m).reduce((s,p)=>s+(+p.amount||0),0);
-  const outstanding = byBrand(db.invoices||[]).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
+  const outstanding = byBrand(db.invoices||[]).filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
   const expensesM = (db.expenses||[]).filter(e=>monthOf(e.date)===m).reduce((s,e)=>s+(+e.amount||0),0);
   const fin = canSeeFinance(role);
   // HR metrics
@@ -6349,7 +6364,7 @@ function DashboardView({ ctx, byBrand }){
       <${Panel} title="Needs attention">
         ${(db.deliverables||[]).filter(d=>d.status==='Client Review').map(d=>html`<div class="lrow" key=${d.id}>
           <div class="li-ic">${React.createElement(Icon.docs)}</div><div class="li-t"><b>${d.title}</b><span>Awaiting client</span></div></div>`)}
-        ${byBrand(db.invoices||[]).filter(i=>ctx.invTotal(i)-ctx.invPaid(i)>0).map(i=>html`<div class="lrow" key=${i.id}>
+        ${byBrand(db.invoices||[]).filter(i=>!/cancel|draft/i.test(i.status||'')&&ctx.invTotal(i)-ctx.invPaid(i)>0).map(i=>html`<div class="lrow" key=${i.id}>
           <div class="li-ic">${React.createElement(Icon.finance)}</div><div class="li-t"><b>${i.invoiceNumber}</b><span>${money(ctx.invTotal(i)-ctx.invPaid(i))} outstanding</span></div></div>`)}
       <//>
     </div></div>`;
@@ -6682,7 +6697,7 @@ function ProfitabilityView({ ctx, asDashboard }){
   const { db } = ctx;
   const invTotalAll = (db.invoices||[]).reduce((s,i)=>s+ctx.invTotal(i),0);
   const paid = (db.payments||[]).reduce((s,p)=>s+(+p.amount||0),0);
-  const outstanding = (db.invoices||[]).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
+  const outstanding = (db.invoices||[]).filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
   const expOneoff = (db.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
   // Include active monthly fixed costs so this matches the Partners screen's net.
   const expFixed = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active').reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
@@ -7298,7 +7313,7 @@ function ClientProfile({ ctx, client, ce, onClose }){
   const h=calculateClientHealth(db,c.id);
   const projects=getClientProjects(db,c.id), tasks=getClientTasks(db,c.id), delivs=getClientDeliverables(db,c.id);
   const invoices=(db.invoices||[]).filter(i=>i.clientId===c.id);
-  const outstanding=invoices.reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
+  const outstanding=invoices.filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
   const totalPaid=(db.payments||[]).filter(p=>p.clientId===c.id).reduce((s,p)=>s+(+p.amount||0),0);
   const pendingApprovals=delivs.filter(d=>d.status==='Client Review').length;
 
@@ -7727,7 +7742,12 @@ function ChatView({ ctx }){
   const [chan,setChan]=useState(channels[0]); const [msg,setMsg]=useState(''); const [vis,setVis]=useState('Internal Only');
   const all=filterRecordsByRole('chatMessages', db.chatMessages||[], role, user);
   const msgs=all.filter(m=>m.channelType===chan.type && (chan.type==='General'||m.channelId===chan.id));
-  const send=()=>{ if(!msg)return; const extra=chan.type==='Project'?{projectId:chan.id,clientId:(byId(db.projects,chan.id)||{}).clientId}:chan.type==='Client'?{clientId:chan.id}:{}; ctx.sendChat(chan.type,chan.id,msg,vis,extra); setMsg(''); };
+  const send=()=>{ if(!msg)return;
+    const v = role==='Client' ? 'Client Visible' : vis; // clients can only post client-visible, or their msg would be hidden from them
+    const extra = chan.type==='Project' ? {projectId:chan.id,clientId:(byId(db.projects,chan.id)||{}).clientId}
+      : chan.type==='Client' ? {clientId:chan.id}
+      : (role==='Client' ? {clientId:user.clientId} : {});
+    ctx.sendChat(chan.type,chan.id,msg,v,extra); setMsg(''); };
   return html`<div class="view">
     <${Head} eyebrow="Operations" title="Chat" desc="Internal team chat + client-visible messages. Live sync: new messages appear automatically every few seconds."/>
     <div style=${{display:'grid',gridTemplateColumns:'240px 1fr',gap:16}}>
@@ -7890,7 +7910,7 @@ function ContentCalendarView({ ctx, visible, clientFilter }){
       <select class="sel" value=${f.brand} onChange=${e=>setFi('brand',e.target.value)}><option value="">${ar?'كل العلامات':'All brands'}</option><option value="Magnet">Magnet</option><option value="Spark Marketing">Spark</option><option value="TIA">TIA</option></select>
       <select class="sel" value=${f.platform} onChange=${e=>setFi('platform',e.target.value)}><option value="">${TT('All platforms')}</option>${CONTENT_PLATFORMS.map(p=>html`<option key=${p} value=${p}>${p}</option>`)}</select>
       <select class="sel" value=${f.status} onChange=${e=>setFi('status',e.target.value)}><option value="">${TT('All statuses')}</option>${CONTENT_STATUSES.map(s=>html`<option key=${s} value=${s}>${TT(s)}</option>`)}</select>
-      ${(f.client||f.platform||f.status||f.approval||f.priority)&&html`<button class="mini" onClick=${()=>setF({client:'',platform:'',status:'',approval:'',priority:''})}>${TT('Clear filters')}</button>`}
+      ${(f.client||f.brand||f.platform||f.status||f.approval||f.priority)&&html`<button class="mini" onClick=${()=>setF({client:'',brand:'',platform:'',status:'',approval:'',priority:''})}>${TT('Clear filters')}</button>`}
     </div>
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
       <${KPI} label=${TT('Scheduled this month')} value=${monthItems.length} icon="calendar"/>
@@ -8404,7 +8424,7 @@ function RolesPermissionsView({ ctx }){
 
   return html`<div class="view">
     <${Head} eyebrow=${t('System')} title=${ar?'الأدوار والصلاحيات':'Roles & Permissions'} desc=${ar?'من يفعل ماذا، ومن يمكنه الوصول والموافقة.':'Who does what, and who can access or approve each module.'}/>
-    ${!canManage&&html`<div class="muted" style=${{fontSize:12.5,marginBottom:14}}>${ar?'العرض فقط. يمكن للمالك (أو من يمنحه صلاحية الإدارة) تعديل المصفوفة.':'Read-only. The Owner (or anyone granted Manage on Settings) can edit this matrix.'}</div>`}
+    <div class="muted" style=${{fontSize:12.5,marginBottom:14}}>${ar?'مرجع صلاحيات كل دور الافتراضية. لتخصيص موظف بعينه: Users & Permissions ← الموظف ← Access.':'Reference of each role default access. To customize a specific person, use Users & Permissions → the employee → Access.'}</div>
     <div class="grid g-2 stagger" style=${{marginBottom:18}}>
       <${Panel} title=${ar?'الأدوار والمسؤوليات':'Roles & responsibilities'} pad=${false}>
         <div>${BUSINESS_ROLES.map(r=>html`<button key=${r} class="chan-row ${sel===r?'on':''}" onClick=${()=>setSel(r)}>${t(r)!==r?t(r):r}${getPermOverrides()[r]?html`<span class="new-badge" style=${{marginLeft:'auto'}}>${ar?'مُعدّل':'Custom'}</span>`:''}</button>`)}</div>
