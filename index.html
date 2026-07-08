@@ -3908,7 +3908,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
         <span class="muted mono" style=${{fontSize:11}}>${(ar?'خطوة ':'Step ')+(step+1)+' / '+steps.length}</span>
         ${step>0&&html`<button class="btn btn-ghost" onClick=${back}>${ar?'رجوع':'Back'}</button>`}
         ${step<steps.length-1
-          ? html`<button class="btn btn-pri" onClick=${next}>${ar?'التالي':'Next'}</button>`
+          ? html`<${React.Fragment}><button class="btn btn-ghost" onClick=${doSave} title=${ar?'احفظ دلوقتي وكمّل الباقي بعدين':'Save now, fill the rest later'}>${ar?'حفظ':'Save'}</button><button class="btn btn-pri" onClick=${next}>${ar?'التالي':'Next'}</button><//>`
           : html`<button class="btn btn-pri" onClick=${doSave}>${ar?'حفظ':'Save'}</button>`}
       </div></div>`;
   }
@@ -5432,10 +5432,10 @@ const FORM_SCHEMAS = {
     {k:'brand',label:'Brand',type:'select',opts:BRANDS,group:'Basic'},{k:'clientType',label:'Client type',type:'select',opts:CLIENT_TYPES,group:'Basic'},
     {k:'status',label:'Status',type:'select',opts:ST.client,group:'Basic'},
     {k:'mainContactName',label:'Main contact',req:true,group:'Contact'},
-    {k:'mainContactPhone',label:'Phone',req:true,group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
-    {k:'serviceType',label:'Primary service',req:true,type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},
+    {k:'mainContactPhone',label:'Phone',group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
+    {k:'serviceType',label:'Primary service',type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},
     {k:'monthlyRetainer',label:'Monthly retainer',type:'number',group:'Contract'},{k:'billingCycle',label:'Billing cycle',type:'select',opts:BILLING_CYCLES,group:'Contract'},{k:'collectionDay',label:'Collection day (1-28)',type:'number',group:'Contract'},
-    {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',req:true,group:'Account'},
+    {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',group:'Account'},
     // Monthly plan — how many of each per month (feeds the client report)
     {k:'planPosts',label:'Posts / month',type:'number',group:'Plan'},{k:'planReels',label:'Reels / month',type:'number',group:'Plan'},
     {k:'planCarousels',label:'Carousels / month',type:'number',group:'Plan'},{k:'planStories',label:'Stories / month',type:'number',group:'Plan'},
