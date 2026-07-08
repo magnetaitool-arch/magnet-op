@@ -1719,7 +1719,7 @@ const CREATIVE_SECTIONS = ['tasks','deliverables','files','comments'];
 // view matrix: which sections each role can open
 const VIEW = {
   Admin: SECTIONS,
-  Sales: ['dashboard','accounts','leads','campaigns','briefs','clients','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
+  Sales: ['dashboard','accounts','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
   'Project Manager': ['dashboard','accounts','plans','clients','projects','tasks','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
   Designer: ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
   'Video Editor': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
@@ -1962,7 +1962,7 @@ function filterRecordsByRole(coll, records, role, user){
   }
   // Tasks: every non-manager sees ONLY the tasks assigned to them. Managers (PM /
   // Marketing Director / Art Director) and Admin/Owner see everyone's tasks.
-  const TASK_MANAGERS = ['Project Manager','Marketing Director','Art Director'];
+  const TASK_MANAGERS = ['Sales','Project Manager','Marketing Director','Art Director'];
   if(coll==='tasks' && !TASK_MANAGERS.includes(role)){
     return records.filter(r=>r.assignedTo===user.id || r.assignedTo===user.name);
   }
