@@ -7,7 +7,7 @@
    - Everything cross-origin (Supabase REST/Auth, Resend, APIs) -> NEVER cached,
      always go to the network, so data is never served stale.
    Bump CACHE on each release; old caches are deleted on activate. */
-const CACHE = 'magnet-os-v23';
+const CACHE = 'magnet-os-v24';
 
 self.addEventListener('install', e => self.skipWaiting());
 

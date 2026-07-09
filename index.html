@@ -2248,8 +2248,68 @@ function normalizeHRData(state){
   return state;
 }
 
-// netAmount helper for employee payments
-const empPaymentNet = (p)=> (Number(p.baseSalary)||0)+(Number(p.bonus)||0)+(Number(p.commission)||0)-(Number(p.deductions)||0);
+/* ============================ EGYPT PAYROLL ============================
+   Configurable Egyptian payroll: social insurance (employee/employer), progressive
+   income tax by annual brackets, plus bonus/commission/overtime/advance/penalties.
+   Rates are DEFAULTS — the agency accountant should confirm the current year's
+   insurance base limits, percentages, exemption and tax brackets. Editable in
+   Settings → Payroll (appSettings.payroll). Nothing here is tax advice. */
+const PAYROLL_DEFAULTS = {
+  insEmpPct:11, insEmployerPct:18.75,   // social insurance % (employee / employer)
+  insMin:2300, insMax:14500,            // monthly insurance salary base limits (EGP)
+  personalExemption:20000,              // annual personal exemption
+  brackets:[                            // annual income-tax brackets (upto, %)
+    {upto:40000,pct:0},{upto:55000,pct:10},{upto:70000,pct:15},{upto:200000,pct:20},
+    {upto:400000,pct:22.5},{upto:1200000,pct:25},{upto:null,pct:27.5}
+  ],
+};
+const payrollCfg = ()=> { try { return Object.assign({}, PAYROLL_DEFAULTS, getAppSettings().payroll||{}); } catch(e){ return PAYROLL_DEFAULTS; } };
+function egyptPayroll(baseMonthly, opts, cfg){
+  opts=opts||{}; cfg=cfg||payrollCfg();
+  const base=+baseMonthly||0;
+  const bonus=+opts.bonus||0, commission=+opts.commission||0, overtime=+opts.overtime||0;
+  const advance=+opts.advance||0, penalties=+opts.penalties||0, otherDed=+opts.deductions||0;
+  const gross=base+bonus+commission+overtime;
+  const insBase=Math.min(Math.max(base, +cfg.insMin||0), (+cfg.insMax||base)||base);
+  const insEmp=insBase*(+cfg.insEmpPct||0)/100;
+  const insEmployer=insBase*(+cfg.insEmployerPct||0)/100;
+  const taxableMonthly=Math.max(0, gross-insEmp);
+  const annualTaxable=Math.max(0, taxableMonthly*12-(+cfg.personalExemption||0));
+  let tax=0, prev=0;
+  (cfg.brackets||[]).forEach(b=>{ const cap=(b.upto==null)?Infinity:(+b.upto); const slice=Math.max(0, Math.min(annualTaxable, cap)-prev); tax+=slice*(+b.pct||0)/100; prev=cap; });
+  const incomeTax=Math.max(0, tax/12);
+  const totalDeductions=insEmp+incomeTax+advance+penalties+otherDed;
+  return { gross:Math.round(gross), insuranceEmp:Math.round(insEmp), insuranceEmployer:Math.round(insEmployer),
+    incomeTax:Math.round(incomeTax), advance:Math.round(advance), penalties:Math.round(penalties), otherDeductions:Math.round(otherDed),
+    totalDeductions:Math.round(totalDeductions), net:Math.round(gross-totalDeductions) };
+}
+// netAmount helper for employee payments — now the full Egypt payroll net.
+const empPaymentNet = (p)=> egyptPayroll(Number(p.baseSalary)||Number(p.grossSalary)||0, {bonus:p.bonus,commission:p.commission,overtime:p.overtime,advance:p.advance,penalties:p.penalties,deductions:p.deductions}).net;
+// Printable payslip with the full Egypt payroll breakdown.
+function generatePayslip(p, emp){
+  const ar=getAppSettings().language==='ar';
+  const pr=egyptPayroll(Number(p.baseSalary)||0,{bonus:p.bonus,commission:p.commission,overtime:p.overtime,advance:p.advance,penalties:p.penalties,deductions:p.deductions});
+  const nm=(emp&&(emp.fullName||emp.name))||'—';
+  const e=s=>String(s==null?'':s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const row=(l,v,neg)=>'<tr><td>'+e(l)+'</td><td style="text-align:right;color:'+(neg?'#e6a01e':'#f3f5ef')+'">'+(neg?'- ':'')+e(money(v))+'</td></tr>';
+  const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>Payslip — '+e(nm)+'</title>'
+    +'<style>body{background:#070807;color:#f3f5ef;font-family:system-ui,Arial;max-width:560px;margin:0 auto;padding:40px}h1{color:#c8f31e;font-size:20px;letter-spacing:.14em;margin:0}h2{font-size:13px;color:#c8f31e;margin-top:22px}table{width:100%;border-collapse:collapse}td{padding:8px;border-bottom:1px solid #23261f;font-size:13px}.tot td{border-top:2px solid #c8f31e;font-weight:800;font-size:15px}.muted{color:#9a9a98}@media print{body{background:#fff;color:#111}h1,h2{color:#5b7d00}}</style></head><body>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><h1>MAGNET</h1><span class="muted" style="font-size:11px">'+(ar?'قسيمة راتب':'Payslip')+' · '+e(p.month||'')+'</span></div>'
+    +'<h2>'+e(nm)+(emp&&emp.jobTitle?(' — '+e(emp.jobTitle)):'')+'</h2>'
+    +'<h2>'+(ar?'المستحقات':'Earnings')+'</h2><table>'
+    + row(ar?'الراتب الأساسي':'Base salary', Number(p.baseSalary)||0)
+    + (p.bonus?row(ar?'بونص':'Bonus',p.bonus):'')+(p.commission?row(ar?'عمولة':'Commission',p.commission):'')+(p.overtime?row(ar?'إضافي (أوفر تايم)':'Overtime',p.overtime):'')
+    + '<tr class="tot"><td>'+(ar?'الإجمالي':'Gross')+'</td><td style="text-align:right">'+e(money(pr.gross))+'</td></tr></table>'
+    +'<h2>'+(ar?'الاستقطاعات':'Deductions')+'</h2><table>'
+    + row(ar?'تأمينات اجتماعية (حصة الموظف)':'Social insurance (employee)', pr.insuranceEmp, true)
+    + row(ar?'ضريبة الدخل':'Income tax', pr.incomeTax, true)
+    + (p.advance?row(ar?'سلفة / قرض':'Advance / loan',p.advance,true):'')+(p.penalties?row(ar?'جزاءات':'Penalties',p.penalties,true):'')+(p.deductions?row(ar?'خصومات أخرى':'Other deductions',p.deductions,true):'')
+    + '<tr class="tot"><td>'+(ar?'إجمالي الخصومات':'Total deductions')+'</td><td style="text-align:right;color:#e6a01e">- '+e(money(pr.totalDeductions))+'</td></tr></table>'
+    +'<table style="margin-top:14px"><tr class="tot"><td>'+(ar?'صافي المستحق':'Net pay')+'</td><td style="text-align:right;color:#c8f31e">'+e(money(pr.net))+'</td></tr></table>'
+    +'<p class="muted" style="margin-top:24px;font-size:10.5px">'+(ar?'المعدلات افتراضية وتُراجع مع المحاسب. تأمين صاحب العمل (غير مخصوم من الموظف): ':'Rates are defaults — verify with your accountant. Employer insurance (not deducted from the employee): ')+e(money(pr.insuranceEmployer))+'</p>'
+    +'<p class="muted" style="font-size:10px">Magnet OS · '+e(p.month||'')+'</p></body></html>';
+  try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){}
+}
 // workload classification
 function workloadTag(pct){ if(pct>100) return {label:'Overloaded',type:'neg'}; if(pct>=81) return {label:'Full',type:'warn'}; if(pct>=51) return {label:'Healthy',type:'ok'}; return {label:'Light',type:''}; }
 
@@ -5397,7 +5457,7 @@ function App(){
 
     ${modal&&html`<${Modal} title=${'New / Edit '+modal.coll} wide=${true} onClose=${()=>setModal(null)}>
       <${RecordForm} schema=${modal.schema||[]} initial=${modal.initial} db=${db} role=${role}
-        onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks!==false&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); } if(modal.coll==='employeePayments'){ updateRecord('employeePayments',created.id,{netAmount:empPaymentNet(created)}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
+        onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } if(modal.coll==='employeePayments'){ const pr=egyptPayroll(Number(rec.baseSalary)||0,{bonus:rec.bonus,commission:rec.commission,overtime:rec.overtime,advance:rec.advance,penalties:rec.penalties,deductions:rec.deductions}); updateRecord('employeePayments',rec.id,{grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks!==false&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); } if(modal.coll==='employeePayments'){ const pr=egyptPayroll(Number(created.baseSalary)||0,{bonus:created.bonus,commission:created.commission,overtime:created.overtime,advance:created.advance,penalties:created.penalties,deductions:created.deductions}); updateRecord('employeePayments',created.id,{grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
         onClose=${()=>setModal(null)}/>
     <//>`}
     ${profileOpen&&html`<${ProfileModal} authUser=${authUser} lang=${lang} onClose=${()=>setProfileOpen(false)}
@@ -5524,7 +5584,10 @@ const FORM_SCHEMAS = {
   ],
   attendance:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'checkIn',label:'Check in'},{k:'checkOut',label:'Check out'},{k:'workMode',label:'Work mode',type:'select',opts:WORK_MODES},{k:'status',label:'Status',type:'select',opts:ST.attendance},{k:'notes',label:'Notes',type:'textarea'}],
   leaves:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'leaveType',label:'Leave type',type:'select',opts:LEAVE_TYPES,req:true},{k:'startDate',label:'Start',type:'date',req:true},{k:'endDate',label:'End',type:'date'},{k:'days',label:'Days',type:'number'},{k:'reason',label:'Reason',type:'textarea'},{k:'status',label:'Status',type:'select',opts:ST.leave}],
-  employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'month',label:'Month (YYYY-MM)',req:true},{k:'baseSalary',label:'Base salary',type:'number'},{k:'bonus',label:'Bonus',type:'number'},{k:'commission',label:'Commission',type:'number'},{k:'deductions',label:'Deductions',type:'number'},{k:'paymentMethod',label:'Method',type:'select',opts:PAYMENT_METHODS},{k:'paymentStatus',label:'Status',type:'select',opts:ST.empPayment},{k:'receiptLink',label:'Receipt link'},{k:'notes',label:'Notes',type:'textarea'}],
+  employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',req:true,group:'Pay run'},
+    {k:'baseSalary',label:'Gross base salary',type:'number',group:'Earnings'},{k:'bonus',label:'Bonus',type:'number',group:'Earnings'},{k:'commission',label:'Commission',type:'number',group:'Earnings'},{k:'overtime',label:'Overtime',type:'number',group:'Earnings'},
+    {k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties',type:'number',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
+    {k:'paymentMethod',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payout'},{k:'paymentStatus',label:'Status',type:'select',opts:ST.empPayment,group:'Payout'},{k:'receiptLink',label:'Receipt link',group:'Payout'},{k:'notes',label:'Notes',type:'textarea',group:'Payout'}],
   performanceReviews:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'reviewPeriod',label:'Period',req:true},{k:'reviewerId',label:'Reviewer',type:'ref',coll:'employees'},{k:'qualityScore',label:'Quality',type:'number'},{k:'speedScore',label:'Speed',type:'number'},{k:'communicationScore',label:'Communication',type:'number'},{k:'teamworkScore',label:'Teamwork',type:'number'},{k:'creativityScore',label:'Creativity',type:'number'},{k:'attendanceScore',label:'Attendance',type:'number'},{k:'strengths',label:'Strengths',type:'textarea'},{k:'improvements',label:'Improvements',type:'textarea'},{k:'goalsNextPeriod',label:'Goals next period',type:'textarea'},{k:'reviewDate',label:'Review date',type:'date'},{k:'nextReviewDate',label:'Next review',type:'date'}],
   freelancers:[{k:'name',label:'Name',req:true},{k:'specialty',label:'Specialty'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'rateType',label:'Rate type',type:'select',opts:['Per project','Per hour','Per deliverable','Monthly']},{k:'rate',label:'Rate',type:'number'},{k:'status',label:'Status',type:'select',opts:['Active','Available','Busy','Blacklisted']}],
   departments:[{k:'name',label:'Department',req:true},{k:'status',label:'Status',type:'select',opts:['Active','Inactive']}],
@@ -6903,7 +6966,9 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
           <div class="panel" style=${{padding:12,marginBottom:14}}><div class="muted" style=${{fontSize:13,lineHeight:1.9}}>
             Method: ${e.paymentMethod} · Schedule: ${e.paymentSchedule}<br/>Bank: ${e.bankName||'—'} ${e.bankAccount||''} ${e.walletNumber?' · Wallet '+e.walletNumber:''}</div></div>
           <div class="flex between center" style=${{margin:'4px 0 8px'}}><span class="eyebrow">Payment history</span>${ce&&html`<button class="mini" onClick=${()=>{onClose();ctx.openModal('employeePayments',{employeeId:e.id,month:thisMonth(),baseSalary:e.salary,paymentStatus:'Pending'});}}>+ Add payment</button>`}</div>
-          <${DataTable} db=${db} rows=${(db.employeePayments||[]).filter(p=>p.employeeId===e.id)} cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Base',num:true,money:true},{k:'bonus',label:'Bonus',num:true,money:true},{k:'commission',label:'Comm.',num:true,money:true},{k:'deductions',label:'Ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
+          <${DataTable} db=${db} rows=${(db.employeePayments||[]).filter(p=>p.employeeId===e.id)}
+            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button>`}
+            cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
 
         ${tab==='Documents'&&html`<div class="grid g-2" style=${{gap:10}}>
           ${[['Contract','contractLink'],['NDA','ndaLink'],['CV','cvLink'],['National ID','nationalIdLink'],['Portfolio','portfolioLink'],['Drive folder','driveFolder']].map(d=>html`<div class="lrow" key=${d[1]}>
