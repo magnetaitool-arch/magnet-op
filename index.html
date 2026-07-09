@@ -5510,7 +5510,7 @@ const FORM_SCHEMAS = {
     {k:'mainContactPhone',label:'Phone',group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
     {k:'serviceType',label:'Primary service',type:'select',opts:PROJECT_TYPES,group:'Contract'},{k:'services',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES,group:'Contract'},
     {k:'monthlyRetainer',label:'Monthly retainer (fixed monthly fee)',type:'number',group:'Contract'},{k:'billingCycle',label:'Billing cycle',type:'select',opts:BILLING_CYCLES,group:'Contract'},
-    {k:'contractStartDate',label:'Contract start',type:'date',group:'Contract'},{k:'contractDurationMonths',label:'Contract duration (months)',type:'number',group:'Contract'},{k:'contractEndDate',label:'Contract end',type:'date',group:'Contract'},
+    {k:'contractStartDate',label:'Contract start',type:'date',group:'Contract'},{k:'contractDurationMonths',label:'Contract duration',type:'select',opts:['1 month','3 months','6 months','12 months (1 year)'],group:'Contract'},{k:'contractEndDate',label:'Contract end',type:'date',group:'Contract'},
     {k:'collectionDay',label:'Collection day (1-28)',type:'number',group:'Contract'},
     {k:'accountManagerId',label:'Account manager',type:'ref',coll:'employees',group:'Account'},
     // Monthly plan — how many of each per month (feeds the client report)
