@@ -1244,6 +1244,21 @@ body.theme-light .tbl thead th{background:#fff}
       // updateViaCache:none => the SW script is always fetched fresh when we check.
       navigator.serviceWorker.register("/serviceworker.js", {updateViaCache:"none"}).then(function(r){
         try{ r.update(); }catch(e){}
+        try{
+          var askWaitingToTakeOver=function(){
+            if(r.waiting && navigator.serviceWorker.controller){
+              r.waiting.postMessage({type:"SKIP_WAITING"});
+            }
+          };
+          askWaitingToTakeOver();
+          r.addEventListener("updatefound", function(){
+            var nw=r.installing;
+            if(!nw) return;
+            nw.addEventListener("statechange", function(){
+              if(nw.state==="installed") askWaitingToTakeOver();
+            });
+          });
+        }catch(e){}
         // ALWAYS-LIVE: check for a new deploy every 60s and whenever the tab regains
         // focus, so an already-open app auto-updates within ~1 min — no hard refresh ever.
         try{ setInterval(function(){ try{ r.update(); }catch(e){} }, 60000); }catch(e){}
