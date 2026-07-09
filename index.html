@@ -1153,8 +1153,17 @@ body.theme-light .tbl thead th{background:#fff}
 @media (max-width:767px){
   /* top bar: declutter + compact */
   .topbar{height:54px;padding:0 10px}
-  .top-actions{gap:6px}
+  .top-actions{gap:6px;min-width:0}
   .top-actions .tag{display:none}          /* hide Cloud/Local chip on phones */
+  /* keep the topbar NARROWER than the phone screen: hide secondary controls
+     (radio, alert-sound, theme — all still reachable from Settings), shrink the
+     Owner role-switcher, and never let the bar force horizontal page scroll */
+  .top-actions .tb-radio,.top-actions .tb-sound,.top-actions .tb-theme{display:none}
+  .top-actions .sel{max-width:84px}
+  .top-actions .user-chip span{display:none}
+  .topbar{max-width:100vw;overflow:hidden}
+  .crumbs{min-width:0}
+  .crumbs span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:28vw}
   .topbar-logo{height:22px}
   .crumbs b{font-size:14.5px}
   .icon-btn{width:36px;height:36px}
@@ -1212,7 +1221,7 @@ body.theme-light .tbl thead th{background:#fff}
     if(!__as.currency){ __as.currency='EGP'; localStorage.setItem(__ASK, JSON.stringify(__as)); }
     // migrate: ensure newer CRM modules appear for existing installs (no manual toggle needed)
     if(Array.isArray(__as.enabledModules)){
-      ["accounts","leads","campaigns","briefs","invoices","payments","expenses","fixedCosts","partners","profitability","plans","requests","approvalCenter","collections","rolesPermissions","teams"].forEach(function(k){ if(__as.enabledModules.indexOf(k)<0) __as.enabledModules.push(k); });
+      ["accounts","leads","campaigns","briefs","invoices","payments","expenses","fixedCosts","partners","profitability","plans","requests","approvalCenter","collections","rolesPermissions","teams","proposals","quotations","contracts","contacts","salesActivities","documents","reports","meetings","workflow","chat","sops"].forEach(function(k){ if(__as.enabledModules.indexOf(k)<0) __as.enabledModules.push(k); });
       localStorage.setItem(__ASK, JSON.stringify(__as));
     }
   } catch(e){}
@@ -1805,10 +1814,168 @@ const I18N = {
   'Unassign Client':'إلغاء إسناد العميل','Assigned Teams':'الفرق المسندة','Edit Team':'تعديل الفريق','Viewer':'مشاهد',
   'Name':'الاسم','Job Title':'المسمى الوظيفي','Account manager':'مدير الحساب','Cancel':'إلغاء','Save':'حفظ',
 };
+/* FIELD_AR — Arabic for every form label, table header, select option, status and
+   system message. Display-only: stored values stay English; t() translates at render. */
+const FIELD_AR = {
+  // ---- nav module keys that were missing from I18N (menu showed English) ----
+  plans:'الخطط والأهداف', campaigns:'الحملات', briefs:'بريفات العملاء', collections:'التحصيلات', fixedCosts:'التكاليف الثابتة',
+  partners:'الشركاء والتسوية', candidates:'التوظيف', leaderboard:'لوحة المتصدرين', arcade:'الأركيد', users:'المستخدمون والصلاحيات',
+  // ---- form field labels ----
+  'Full name':'الاسم بالكامل','Brand name':'اسم البراند','Legal name':'الاسم القانوني','Display name':'الاسم الظاهر','Lead name':'اسم العميل المحتمل',
+  'Main contact':'مسؤول التواصل','Contact role':'صفة جهة الاتصال','Phone':'التليفون','Phone / WhatsApp':'تليفون / واتساب','WhatsApp':'واتساب','Mobile':'الموبايل',
+  'Other phone(s)':'أرقام أخرى','Email':'الإيميل','Login email':'إيميل الدخول','Website':'الموقع الإلكتروني','Address':'العنوان','City':'المدينة','Country':'الدولة',
+  'Governorate / Area':'المحافظة / المنطقة','Industry':'المجال','Company':'الشركة','Company / Brand':'الشركة / البراند','Client type':'نوع العميل',
+  'Account manager':'مدير الحساب','Account status':'حالة الحساب','Primary service':'الخدمة الأساسية','Services (choose all that apply)':'الخدمات (اختار كل اللي ينطبق)',
+  'Service':'الخدمة','Service interested in':'الخدمة المطلوبة','Source':'المصدر','Status':'الحالة','Stage':'المرحلة','Priority':'الأولوية','Type':'النوع',
+  'Title':'العنوان','Name':'الاسم','Description':'الوصف','Notes':'ملاحظات','Internal notes':'ملاحظات داخلية','HR notes':'ملاحظات الموارد البشرية','Reason':'السبب',
+  'Details':'التفاصيل','Message / Details':'الرسالة / التفاصيل','Category':'التصنيف','Amount':'المبلغ','Amount (if any)':'المبلغ (لو فيه)','Amount (pre-tax)':'المبلغ (قبل الضريبة)',
+  'Currency':'العملة','Subtotal':'الإجمالي الفرعي','Total':'الإجمالي','Tax':'الضريبة','Tax %':'نسبة الضريبة %','Discount':'الخصم','Price':'السعر','Cost':'التكلفة',
+  'Budget':'الميزانية','Value':'القيمة','Est. value':'القيمة المتوقعة','Current value':'القيمة الحالية','Target value':'القيمة المستهدفة','Balance':'الرصيد',
+  'Revenue':'الإيراد','Expenses':'المصروفات','Profit':'الربح','Margin':'هامش الربح','Paid':'المدفوع','Paid by':'دفعها','Vendor':'المورد','Method':'طريقة الدفع',
+  'Payment method':'طريقة الدفع','Payment terms':'شروط الدفع','Bank':'بنك','Bank name':'اسم البنك','Bank account':'رقم الحساب البنكي','Wallet number':'رقم المحفظة',
+  'Invoice':'الفاتورة','Invoice #':'رقم الفاتورة','Invoices':'الفواتير','Issued':'تاريخ الإصدار','Due':'الاستحقاق','Due date':'تاريخ الاستحقاق','Valid until':'صالح حتى',
+  'Proposal #':'رقم العرض','Proposals':'العروض','Quotation #':'رقم عرض السعر','Quotations':'عروض الأسعار','Contract':'العقد','Contract #':'رقم العقد','Contracts':'العقود',
+  'Contract start':'بداية العقد','Contract end':'نهاية العقد','Contract duration':'مدة العقد','Contract link':'رابط العقد','Renewal date':'تاريخ التجديد',
+  'Monthly retainer (fixed monthly fee)':'الاشتراك الشهري (مبلغ ثابت)','Billing cycle':'دورة الفوترة','Cycle':'الدورة','Package':'الباقة','Retainer':'اشتراك شهري',
+  'Collection day (1-28)':'يوم التحصيل (1-28)','Collection date':'تاريخ التحصيل','Next collection date':'ميعاد التحصيل الجاي','Collected on':'اتحصّل في',
+  'Client':'العميل','Client · ':'العميل · ','Project':'المشروع','Project · ':'المشروع · ','Project name':'اسم المشروع','Project type':'نوع المشروع',
+  'Project manager':'مدير المشروع','Project manager (optional)':'مدير المشروع (اختياري)','PM':'مدير المشروع','Deliverable':'المخرَج','Deliverables':'المخرجات',
+  'Related deliverable':'المخرَج المرتبط','Related task':'المهمة المرتبطة','Task':'المهمة','Task title':'عنوان المهمة','Task type':'نوع المهمة',
+  'Assigned To':'مسند إلى','Assigned to':'مسند إلى','Assignee':'المسؤول','Assign to manager':'يتبعت لمين (المدير)','Assigned Clients':'العملاء المسندين',
+  'Assigned Team':'الفريق المسند','Assigned Teams':'الفرق المسندة','Owner':'المسؤول','Owner (HR)':'مسؤول الموارد البشرية','Reviewer':'المراجع','Author':'الكاتب','Actor':'المنفذ',
+  'Employee':'الموظف','Employee code':'كود الموظف','Manager':'المدير','Team Lead':'قائد الفريق','Team Members':'أعضاء الفريق','Team Name':'اسم الفريق','Team Type':'نوع الفريق',
+  'Members':'الأعضاء','General Team':'فريق عام','Department':'القسم','Position':'الوظيفة','Job title':'المسمى الوظيفي','Role':'الدور','App role':'دور في النظام',
+  'Specialization':'التخصص','Specialty':'التخصص','Skills':'المهارات','Years of experience':'سنين الخبرة','Previous workplaces':'أماكن العمل السابقة',
+  'Courses / certifications':'كورسات / شهادات','Portfolio link':'رابط البورتفوليو','CV link':'رابط الـ CV','Employment type':'نوع التوظيف','Work mode':'نظام الشغل',
+  'Working days':'أيام الشغل','Working hours':'ساعات الشغل','Capacity/wk (hrs)':'الطاقة الأسبوعية (ساعات)','Probation end':'نهاية فترة التجربة',
+  'Start date':'تاريخ البدء','Available to start from':'متاح يبدأ من','Date of birth':'تاريخ الميلاد','Age':'السن','Marital status':'الحالة الاجتماعية',
+  'National ID link':'رابط البطاقة','Emergency contact':'جهة اتصال للطوارئ','Emergency phone':'تليفون الطوارئ','Insurance':'التأمينات',
+  'Salary':'المرتب','Current salary (EGP)':'المرتب الحالي (جنيه)','Expected salary (EGP)':'المرتب المتوقع (جنيه)','Gross base salary':'المرتب الأساسي (إجمالي)',
+  'Gross':'الإجمالي','Net':'الصافي','Bonus':'بونص','Commission':'عمولة','Commission %':'نسبة العمولة %','Overtime':'أوفر تايم','Advance / loan':'سلفة',
+  'Penalties':'جزاءات','Deductions':'خصومات','Other ded.':'خصومات أخرى','Other deductions':'خصومات أخرى','Month':'الشهر','Month (YYYY-MM)':'الشهر',
+  'Period':'الفترة','Period (YYYY-MM)':'الفترة (سنة-شهر)','Period (e.g. Jun 2026 / Q3 2026)':'الفترة (مثال: يونيو 2026)','Quarter (if quarterly)':'الربع (لو ربع سنوي)',
+  'Rate':'السعر / المعدل','Rate type':'نوع التسعير','Date':'التاريخ','Date / start':'التاريخ / البداية','Start':'البداية','End':'النهاية','End date (Leave)':'تاريخ نهاية الإجازة',
+  'Days':'الأيام','Days (Leave)':'عدد أيام الإجازة','Leave type':'نوع الإجازة','Leave type (for Leave)':'نوع الإجازة','From':'من','To':'إلى',
+  'From (Permission/Lateness)':'من الساعة','To (Permission)':'إلى الساعة','When':'الميعاد','Deadline':'الديدلاين','Timeline':'الجدول الزمني','Timeframe':'الإطار الزمني',
+  'Est. hours':'الساعات المتوقعة','Progress':'التقدم','Progress %':'نسبة الإنجاز %','Check in':'الحضور','Check out':'الانصراف','Attendance':'الحضور',
+  'Attendance score':'درجة الالتزام بالحضور','On':'في','In':'دخول','Out':'خروج','Location':'المكان','Mode':'النظام','Schedule':'الجدول','Scheduled':'مجدول',
+  'Scheduled Date':'تاريخ النشر','Scheduled Time':'وقت النشر','Scheduling date':'تاريخ الجدولة','Publishing date':'تاريخ النشر','Published post link':'رابط البوست المنشور',
+  'Platform':'المنصة','Channel':'القناة','Format':'الفورمات','Content Type':'نوع المحتوى','Caption':'الكابشن','Copy':'النص','Brief':'البريف','Brief link':'رابط البريف',
+  'Client brief (what the agency received)':'بريف العميل (اللي وصل للوكالة)','Target audience':'الجمهور المستهدف','Objective':'الهدف','Goals next period':'أهداف الفترة الجاية',
+  'Campaign':'الحملة','Posts / month':'بوستات / شهر','Reels / month':'ريلز / شهر','Stories / month':'ستوريز / شهر','Carousels / month':'كاروسيل / شهر',
+  'Brand':'البراند','Brand tone':'تون البراند','Brand guidelines':'دليل البراند','Competitors':'المنافسون','Requirements':'المتطلبات','Scope':'نطاق الشغل',
+  'Plan / goal':'الخطة / الهدف','Revision policy':'سياسة التعديلات','Meeting frequency':'تكرار الاجتماعات','Next meeting':'الاجتماع الجاي','Meeting':'الاجتماع',
+  'Meeting link':'رابط الاجتماع','Meeting notes':'ملاحظات الاجتماع','Attendees':'الحاضرون','Action items (one per line)':'المطلوب تنفيذه (سطر لكل بند)','Outcome':'النتيجة',
+  'Link':'الرابط','Reference links':'روابط مرجعية','Attachment link':'رابط المرفق','File':'الملف','File name':'اسم الملف','File link':'رابط الملف','Drive link':'رابط الدرايف',
+  'Drive folder':'فولدر الدرايف','Folder link':'رابط الفولدر','Design link':'رابط التصميم','Video link':'رابط الفيديو','Preview link':'رابط المعاينة',
+  'Delivery link':'رابط التسليم','Final link':'الرابط النهائي','Final delivery folder':'فولدر التسليم النهائي','Receipt link':'رابط الإيصال','NDA link':'رابط اتفاقية السرية',
+  'Asset':'الأصل','Asset URL':'رابط الأصل','Access':'الوصول','Access notes (no raw passwords)':'ملاحظات الدخول (من غير باسوردات)','Tools access':'صلاحيات الأدوات',
+  'Username / handle':'اسم المستخدم','Visibility':'الظهور','Visible to client':'ظاهر للعميل','Instagram':'إنستجرام','Facebook':'فيسبوك','TikTok':'تيك توك',
+  'YouTube':'يوتيوب','LinkedIn':'لينكدإن','Snapchat':'سناب شات','X (Twitter)':'إكس (تويتر)','Other platforms / links (one per line)':'منصات / روابط أخرى (سطر لكل رابط)',
+  'WhatsApp group':'جروب الواتساب','Approval':'الموافقة','Approval Status':'حالة الموافقة','Report':'التقرير','Report title':'عنوان التقرير','Review date':'تاريخ المراجعة',
+  'Next review':'المراجعة الجاية','Rating (0-5)':'التقييم (0-5)','Overall score':'التقييم العام','Quality score':'درجة الجودة','Satisfaction (0-100)':'الرضا (0-100)',
+  'KPI notes':'ملاحظات الأداء','Strengths':'نقاط القوة','Improvements':'نقاط التحسين','Quality':'الجودة','Speed':'السرعة','Communication':'التواصل','Teamwork':'الشغل الجماعي',
+  'Creativity':'الإبداع','Issue':'المشكلة','Action':'الإجراء','Actions':'إجراءات','Activity':'النشاط','Entity':'العنصر','By':'بواسطة','Ver':'الإصدار','#':'#',
+  'Create default task checklist':'إنشاء قائمة المهام الافتراضية','Comment':'تعليق','Note':'ملاحظة','Lead':'عميل محتمل','Form game score':'نقاط لعبة الفورم',
+  'Number of posts':'عدد البوستات',
+  // ---- select options / statuses ----
+  'Active':'نشط','Inactive':'غير نشط','Paused':'متوقف مؤقتًا','Cancelled':'ملغي','Done':'تم','Open':'مفتوح','Draft':'مسودة','Sent':'اتبعت','Final':'نهائي',
+  'Pending':'قيد الانتظار','Pending Approval':'في انتظار الموافقة','Approved':'تمت الموافقة','Rejected':'مرفوض','Changes Requested':'مطلوب تعديلات','Completed':'مكتمل',
+  'Requested':'مطلوب','In Review':'تحت المراجعة','Review':'مراجعة','Client Review':'مراجعة العميل','Revision Requested':'مطلوب تعديل','Approved Internally':'موافقة داخلية',
+  'Backlog':'قائمة الانتظار','In Progress':'قيد التنفيذ','Not Started':'لم يبدأ','On Hold':'معلّق','At Risk':'في خطر','Healthy':'سليم','Needs Attention':'محتاج متابعة',
+  'Waiting for Client':'مستني العميل','Internal Review':'مراجعة داخلية','Revisions':'تعديلات','Delivered':'اتسلّم','Blocked':'متعطلة',
+  'Idea':'فكرة','Copywriting':'كتابة','Editing':'مونتاج','Published':'اتنشر','Archived':'مؤرشف','Onboarding':'بداية التعاقد',
+  'Renewal Needed':'محتاج تجديد','Churned':'انتهى التعاقد','Pending Internal Approval':'في انتظار موافقة داخلية','Invoice Draft':'مسودة فاتورة','Invoice Sent':'الفاتورة اتبعتت',
+  'Low':'منخفضة','Normal':'عادية','Med':'متوسطة','Medium':'متوسطة','High':'عالية','Urgent':'عاجلة','Won':'اتكسب','Lost':'خسر','Cold':'بارد','Warm':'دافي','Hot':'ساخن',
+  'New':'جديد','Contacted':'تم التواصل','Identified':'محدد','Proposal Sent':'اتبعت العرض','Negotiation':'تفاوض','Discovery':'استكشاف','Kickoff':'انطلاق',
+  'Monthly':'شهري','Quarterly':'ربع سنوي','One-time':'مرة واحدة','Internal':'داخلي','Internal Only':'داخلي فقط','Client Visible':'ظاهر للعميل','Team Visible':'ظاهر للفريق',
+  'Overdue':'متأخر','Collected':'اتحصّل','Partially Paid':'مدفوع جزئيًا','Unpaid':'غير مدفوع','Refunded':'مسترد','Delayed':'متأخر',
+  'Cash':'كاش','Card':'كارت','Cheque':'شيك','Bank Transfer':'تحويل بنكي','Vodafone Cash':'فودافون كاش','InstaPay':'إنستاباي',
+  'Annual':'سنوية','Sick':'مرضية','Emergency':'طارئة','Unpaid Leave':'بدون مرتب','Work From Home':'شغل من البيت','Shooting Day':'يوم تصوير','Other':'أخرى',
+  'Leave Request':'طلب إجازة','Permission Request':'طلب إذن','Lateness Report':'إبلاغ تأخير','Early Leave':'انصراف مبكر','Half Day':'نص يوم',
+  'Expense Request':'طلب مصروف','Purchase Request':'طلب شراء','Tool Access Request':'طلب صلاحية أداة','Deadline Change':'تغيير ديدلاين','Task Approval':'موافقة على مهمة',
+  'Deliverable Approval':'موافقة على مخرَج','Send to Client Approval':'موافقة إرسال للعميل','Proposal Approval':'موافقة على عرض','Quotation Approval':'موافقة على عرض سعر',
+  'Invoice Approval':'موافقة على فاتورة','Contract Approval':'موافقة على عقد','Bonus Request':'طلب بونص','Salary Adjustment':'تعديل مرتب',
+  'Client Discount Request':'طلب خصم لعميل','Project Scope Change':'تغيير نطاق مشروع',
+  'Office':'من المكتب','Remote':'عن بُعد','Hybrid':'هجين','Late':'متأخر','Present':'حاضر','Absent':'غايب','On Leave':'في إجازة','In Meeting':'في اجتماع',
+  'In Shooting':'في تصوير','Offline':'أوفلاين','Full-time':'دوام كامل','Part-time':'دوام جزئي','Freelance':'فريلانس','Single':'أعزب','Married':'متزوج',
+  'Prefer not to say':'أفضّل عدم الذكر','Male':'ذكر','Female':'أنثى','Per hour':'بالساعة','Per project':'بالمشروع','Per deliverable':'بالمخرَج',
+  'Renewal':'تجديد','Upsell':'ترقية','Cross-sell':'بيع إضافي','Referral':'ترشيح','Call':'مكالمة','Note (activity)':'ملاحظة','Event':'إيفنت','Ads':'إعلانات',
+  'Image':'صورة','Video':'فيديو','Doc':'مستند','Logo':'لوجو','Brand Kit':'هوية البراند','Scheduled (status)':'مجدول','Manual':'يدوي','Online':'أونلاين',
+  '1 month':'شهر','3 months':'3 شهور','6 months':'6 شهور','12 months (1 year)':'12 شهر (سنة)','0-1 years':'0-1 سنة','1-3 years':'1-3 سنين','3-5 years':'3-5 سنين','5+ years':'أكتر من 5 سنين',
+  'Both partners':'الشريكان','Blacklisted':'محظور','Working':'شغال','Follow-up':'متابعة','Invited':'مدعو','Team':'فريق','Websites':'مواقع','Social Media':'سوشيال ميديا',
+  // ---- system messages / chrome ----
+  'Requests / Approvals':'الطلبات والموافقات','Submit requests and route them to the right manager.':'قدّم طلبك وهيوصل للمدير المسؤول عن الموافقة.',
+  'My Requests':'طلباتي','Pending My Approval':'مستني موافقتي','All Requests':'كل الطلبات','New request':'طلب جديد','request(s)':'طلب',
+  'Manager comment':'تعليق المدير','Manager comment (optional)…':'تعليق المدير (اختياري)…','Approve':'موافقة','Reject':'رفض','Request changes':'طلب تعديلات',
+  'Edit':'تعديل','Delete':'حذف','Del':'حذف','Open (btn)':'فتح','Nothing here yet':'مفيش حاجة هنا لسه','No notifications':'مفيش إشعارات','Notifications':'الإشعارات',
+  'View all':'عرض الكل','Mark all read':'تحديد الكل كمقروء','Approval needed':'مطلوب موافقة','Request approved':'تمت الموافقة على الطلب','Request rejected':'تم رفض الطلب',
+  'New task assigned':'اتسندت لك مهمة جديدة','New task created':'اتعملت مهمة جديدة','Leave requested':'فيه طلب إجازة','Content due today':'محتوى مستحق النهارده',
+  'Scheduled content assigned':'اتسند لك محتوى مجدول','Ready for your review':'جاهز لمراجعتك','Deliverable approved':'تمت الموافقة على المخرَج',
+  'Revision requested':'مطلوب تعديل','Revision assigned to you':'اتسند لك تعديل','Collections due':'تحصيلات مستحقة','Changes requested':'مطلوب تعديلات',
+  'Workflow advanced':'اتحركت خطوة في الورك فلو','Invoice overdue':'فاتورة متأخرة','Good morning.':'صباح الخير.','Good evening.':'مساء الخير.',
+  'Live snapshot across Magnet and Spark Marketing.':'نظرة حية على شغل ماجنت وسبارك.','Awaiting':'في انتظار موافقة','manager':'المدير',
+  // ---- dashboard KPI labels ----
+  'Active clients':'عملاء نشطين','Active employees':'موظفين نشطين','Active items':'عناصر نشطة','Active projects':'مشاريع نشطة','Active tasks':'مهام نشطة',
+  'Available (≤50%)':'متاح (نص طاقته أو أقل)','Avg rounds / deliverable':'متوسط جولات التعديل','Avg. performance':'متوسط الأداء','Awaiting your approval':'مستني موافقتك',
+  'Busy / In session':'مشغول / في جلسة','Checks run':'فحوصات اتعملت','Client-visible':'ظاهر للعميل','Cloud sync':'مزامنة السحابة','Collected this month':'اتحصّل الشهر ده',
+  'Contracts ending':'عقود بتخلص','Critical':'حرج','Deliverables w/ revisions':'مخرجات عليها تعديلات','Documents':'مستندات','Due in 7 days':'مستحق خلال 7 أيام',
+  'Expected this month':'متوقع الشهر ده','Expenses (month)':'مصروفات الشهر','Freelance costs':'تكاليف الفريلانسرز','Freelancers':'فريلانسرز','In client review':'عند العميل للمراجعة',
+  'In progress':'قيد التنفيذ','Issues found':'مشاكل مكتشفة','Last snapshot':'آخر نسخة','Missing / requested':'ناقص / مطلوب','Monthly fixed total':'إجمالي الثابت الشهري',
+  'Net (month)':'صافي الشهر','Net profit':'صافي الربح','New leads (month)':'عملاء محتملين (الشهر)','On leave':'في إجازة','Open rounds':'جولات مفتوحة',
+  'Outstanding':'مستحق ولم يُدفع','Outstanding invoices':'فواتير مستحقة','Overdue invoices':'فواتير متأخرة','Overdue tasks':'مهام متأخرة','Paid salaries':'مرتبات مدفوعة',
+  'Payroll due':'مرتبات مستحقة','Pending payments':'مدفوعات معلقة','Pending revisions':'تعديلات معلقة','Pipeline value':'قيمة الفرص','Proposals out':'عروض مُرسلة',
+  'Requests':'طلبات','Restore points':'نقاط استرجاع','Revenue (month)':'إيراد الشهر','Subscriptions':'اشتراكات','Tasks due today':'مهام مستحقة النهاردة',
+  'Team capacity':'طاقة الفريق','Total assets':'إجمالي الأصول','Total employees':'إجمالي الموظفين','Total expenses':'إجمالي المصروفات','Total income':'إجمالي الدخل',
+  'Total invoiced':'إجمالي الفواتير','Total paid':'إجمالي المدفوع','Total pending':'إجمالي المعلق','Total plans':'إجمالي الخطط','Total records':'إجمالي السجلات',
+  'Total revisions':'إجمالي التعديلات','Won deals':'صفقات مكسوبة','Your projects':'مشاريعك','HR overview':'نظرة الموارد البشرية',
+  // ---- view headers (eyebrow / title / desc) ----
+  'Accounts':'إدارة الحسابات','Break Room':'استراحة','CRM':'إدارة العملاء','Client Portal':'بوابة العميل','Configuration':'الإعدادات','Delivery':'التسليم',
+  'Finance':'المالية','Finance / HR':'المالية / الموارد البشرية','HR':'الموارد البشرية','Intelligence':'الذكاء','Knowledge Base':'قاعدة المعرفة','Marketing':'التسويق',
+  'My Work':'شغلي','Operations':'التشغيل','People':'الفريق','Planning':'التخطيط','Sales':'المبيعات','System':'النظام','Team':'الفريق','Team / HR':'الفريق / الموارد البشرية',
+  'AI Agents':'المساعدون الأذكياء','Activity Log':'سجل النشاط','Approval Center':'مركز الموافقات','One queue for everything awaiting a manager decision.':'كل اللي مستني قرار المدير في مكان واحد.',
+  'Attendance & Payroll':'الحضور والمرتبات','Auto check-in/out from login + payroll computed from days worked.':'حضور وانصراف تلقائي من تسجيل الدخول + مرتبات محسوبة من أيام الشغل.',
+  'Automations':'الأتمتة','Predefined agency workflows. Enable, disable, or run on demand.':'ورك فلو جاهز للوكالة — شغّله أو وقّفه أو نفّذه عند الطلب.',
+  'Backup Center':'مركز النسخ الاحتياطي','Protect your data with local snapshots, file exports, and cloud sync.':'احمِ بياناتك بنسخ محلية وتصدير ملفات ومزامنة سحابية.',
+  'Campaigns':'الحملات','Build a form, share the link, and watch leads land in your CRM automatically.':'اعمل فورم، ابعت اللينك، والعملاء المحتملين هيوصلوا لعندك تلقائيًا.',
+  'Chat':'الشات','Internal team chat + client-visible messages. Live sync: new messages appear automatically every few seconds.':'شات داخلي للفريق + رسايل ظاهرة للعميل — بيتحدث تلقائيًا.',
+  'Client Assets':'أصول العملاء','Brand files, account access and links — no raw passwords stored.':'ملفات البراند وروابط الحسابات — من غير تخزين باسوردات.',
+  'Client Briefs':'بريفات العملاء','Generate a branded brief link, send it on WhatsApp, and get the full brief back in the system.':'اعمل لينك بريف ببراندك، ابعته واتساب، والبريف الكامل يرجع للنظام.',
+  'Clients':'العملاء','Full client profiles, health, projects and approvals.':'ملفات كاملة للعملاء: الصحة والمشاريع والموافقات.',
+  'Collections':'التحصيلات','Track what to collect from each client, and when.':'اعرف هتحصّل كام من كل عميل، وامتى.',
+  'Comments':'التعليقات','Data Health':'سلامة البيانات','Automated checks for gaps and items needing attention.':'فحوصات تلقائية للنواقص واللي محتاج متابعة.',
+  'Deliverables':'المخرجات','Production board with full client approval workflow.':'بورد الإنتاج بدورة موافقات العميل كاملة.',
+  'Document Center':'مركز المستندات','Preview, print and copy professional documents. Print outputs a clean white page only.':'عاين واطبع وانسخ مستندات احترافية.',
+  'Employees':'الموظفون','Full employee profiles, HR, performance and access.':'ملفات كاملة للموظفين: الموارد البشرية والأداء والصلاحيات.',
+  'Expenses':'المصروفات','Daily expenses — review and approve without editing.':'المصروفات اليومية — راجِع ووافق من غير تعديل.',
+  'Finance & Payroll':'المالية والمرتبات','Cash, margins and payroll.':'الكاش والهوامش والمرتبات.',
+  'Fixed Costs & Subscriptions':'التكاليف الثابتة والاشتراكات','Recurring fixed costs and subscriptions in one place.':'التكاليف الثابتة والاشتراكات المتكررة في مكان واحد.',
+  'Invoices':'الفواتير','Leaderboard':'لوحة المتصدرين','Earn points by getting work done. Keep your daily streak alive!':'اكسب نقاط بإنجاز شغلك وحافظ على سلسلتك اليومية.',
+  'Leads & Pipeline':'العملاء المحتملون','Drag across stages; move to Won then convert to a client.':'اسحب بين المراحل؛ لما تكسب حوّله لعميل.',
+  'Meeting Notes':'محاضر الاجتماعات','Meeting minutes and action items.':'محاضر الاجتماعات والمطلوب تنفيذه.',
+  'No access':'مفيش صلاحية',"You don't have permission to view this section.":'ما عندكش صلاحية تشوف القسم ده — اطلب من الأدمن لو محتاجه.',
+  'Partners & Settlement':'الشركاء والتسوية','Split income and expenses between partners, and settle who paid what.':'قسّم الدخل والمصروفات بين الشركاء وسوّي مين دفع إيه.',
+  'Pipeline':'الفرص','Your leads and deals.':'عملاؤك المحتملون وصفقاتك.',
+  'Plans & Goals':'الخطط والأهداف','Weekly, monthly and quarterly plans the team can track together.':'خطط أسبوعية وشهرية وربع سنوية الفريق يتابعها مع بعض.',
+  'Projects':'المشاريع','Creating a project can auto-generate its task checklist by type.':'إنشاء مشروع ممكن يولّد قائمة مهامه تلقائيًا حسب نوعه.',
+  'Reaction Arcade':'أركيد','Recruitment':'التوظيف','Applicants from the website hiring form. Drag across stages; convert Hired to an employee.':'المتقدمون من فورم التوظيف — اسحب بين المراحل وحوّل المقبول لموظف.',
+  'Reports':'التقارير','Monthly client reports.':'تقارير العملاء الشهرية.',
+  'Revision Control':'إدارة التعديلات','Version history and revision rounds across deliverables.':'تاريخ الإصدارات وجولات التعديل على المخرجات.',
+  'SOPs':'إجراءات العمل','Standard operating procedures, by category.':'إجراءات العمل القياسية حسب التصنيف.',
+  'Settings & Database':'الإعدادات وقاعدة البيانات','Cloud status, Supabase connection, auth, webhooks, popups and backups.':'حالة السحابة والاتصال والصلاحيات والإشعارات والنسخ الاحتياطي.',
+  'Share Center':'مركز المشاركة','Generate copyable text summaries and printable views to share.':'جهّز ملخصات جاهزة للنسخ وصفحات للطباعة.',
+  'System QA':'فحص النظام','Tick off each check before relying on the system or deploying.':'علّم على كل فحص قبل الاعتماد على النظام.',
+  'Tasks':'المهام','Drag across the workflow, or open a task for full detail.':'اسحب المهمة بين المراحل، أو افتحها للتفاصيل.',
+  'Team Availability':'تواجد الفريق',"Who's available right now, workload and current focus.":'مين متاح دلوقتي، وضغط الشغل، وتركيز كل واحد.',
+  'Welcome back':'أهلاً بيك تاني','Your projects, approvals, invoices and files.':'مشاريعك وموافقاتك وفواتيرك وملفاتك.',
+  'Workload':'حجم العمل','Capacity, active vs overdue work, and team balance.':'الطاقة، والشغل الجاري والمتأخر، وتوازن الفريق.',
+  'New invoice':'فاتورة جديدة','New client':'عميل جديد','New task':'مهمة جديدة','New project':'مشروع جديد','New employee':'موظف جديد','New expense':'مصروف جديد',
+  'Attendance':'الحضور','Leaves':'الإجازات','Payroll':'المرتبات','Generate due':'توليد المستحق','Mark collected':'تسجيل التحصيل',
+};
 function getLang(){ return getAppSettings().language || 'en'; }
 function isRTL(){ return getLang()==='ar'; }
 // t(key) — returns Arabic when language=ar and a translation exists, else the key itself.
-function t(key){ if(getLang()!=='ar') return key; return I18N[key] || key; }
+function t(key){ if(getLang()!=='ar') return key; return I18N[key] || FIELD_AR[key] || key; }
 // Bare "YYYY-MM-DD" strings parse as UTC midnight; rendering them in a local
 // timezone behind UTC shifted the day back by one. Format those as a pure date
 // (no timezone) so the day shown always matches the day stored.
@@ -1817,6 +1984,8 @@ const fmtDate = (d) => { if(!d) return '—'; const x = _isBareDate(d) ? new Dat
 const fmtDateTime = (d) => { if(!d) return '—'; const x=new Date(d); return isNaN(x)? d : x.toLocaleString(undefined,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
 const monthOf = (d) => (d||'').slice(0,7);
 const thisMonth = () => todayISO().slice(0,7);
+// Auto invoice number: INV-YYYYMM-<n>, n = highest existing suffix this month + 1 (no hand-typed collisions).
+const nextInvoiceNumber = (db) => { const ym=todayISO().slice(0,7).replace('-',''); let mx=0; ((db&&db.invoices)||[]).forEach(iv=>{ const m=String(iv.invoiceNumber||'').match(/^INV-(\d{6})-(\d+)$/); if(m&&m[1]===ym) mx=Math.max(mx,+m[2]); }); return 'INV-'+ym+'-'+String(mx+1).padStart(3,'0'); };
 // Clickable links: any value that looks like a URL/domain becomes an <a> that
 // opens in a new tab — never copy-paste. `Ln` renders a labelled clickable link.
 // A value is a link only if it has an explicit scheme, starts with www., or is a
@@ -1856,7 +2025,7 @@ const CREATIVE_SECTIONS = ['tasks','deliverables','files','comments'];
 const VIEW = {
   Admin: SECTIONS,
   Sales: ['dashboard','accounts','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
-  'Project Manager': ['dashboard','accounts','plans','clients','projects','tasks','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
+  'Project Manager': ['dashboard','accounts','plans','clients','projects','tasks','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','workflow','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
   Designer: ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
   'Video Editor': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
   Accountant: ['dashboard','clients','invoices','payments','expenses','profitability','fixedCosts','partners','collections','requests','approvalCenter','agents','documents','employees','chat','meetings','files','comments','activityLogs','notifications','reports','settings'],
@@ -2023,8 +2192,8 @@ const canDelete  = (section, role) => isAdminRole(role) || (!PROTECTED_DELETE.in
 // Absent module = inherit the role default. Owner/Admin always full.
 function userAccessMap(user){ return (user && user.access) || {}; }
 function userSeesModule(user, key, role){
+  if(ADMIN_ONLY_SECTIONS.includes(key)) return isAdminRole(role); // system config: Owner/Admin only, not overridable (checked FIRST so always-on can't leak it)
   if(MODULE_ALWAYS_ON.includes(key)) return true;
-  if(ADMIN_ONLY_SECTIONS.includes(key)) return isAdminRole(role); // system config: Owner/Admin only, not overridable
   if(user && (user.role==='Owner' || aliasRole(user.role)==='Admin')) return canView(key, role);
   const a = userAccessMap(user)[key];
   if(a==='hidden') return false;
@@ -2965,38 +3134,40 @@ function getPopupPrefs(){ try { return Object.assign({enabled:true,tone:'Profess
 function setPopupPrefs(p){ store.set(POPUP_KEY, JSON.stringify(Object.assign(getPopupPrefs(),p))); }
 // Message library by tone. No emojis. Professional tone.
 const POPUP_LIB = {
-  taskCompleted:{title:'Task completed', Professional:'A task has been marked complete.', Direct:'Task done.', Motivational:'Another task closed out. Strong progress.', Minimal:'Task complete'},
-  taskOverdue:{title:'Task overdue', Professional:'A task has passed its due date and needs attention.', Direct:'Task is overdue.', Motivational:'A task slipped. Let us recover it today.', Minimal:'Task overdue'},
-  requestApproved:{title:'Request approved', Professional:'An approval request has been approved.', Direct:'Request approved.', Motivational:'Approved and cleared to proceed.', Minimal:'Approved'},
-  requestRejected:{title:'Request rejected', Professional:'An approval request has been rejected.', Direct:'Request rejected.', Motivational:'Rejected for now. Review and resubmit.', Minimal:'Rejected'},
-  deliverableApproved:{title:'Deliverable approved', Professional:'The client has approved a deliverable.', Direct:'Client approved.', Motivational:'Client approval secured. Excellent work.', Minimal:'Approved by client'},
-  paymentReceived:{title:'Payment received', Professional:'A payment has been recorded.', Direct:'Payment in.', Motivational:'Cash collected. Well handled.', Minimal:'Payment received'},
-  invoiceOverdue:{title:'Invoice overdue', Professional:'An invoice has passed its due date.', Direct:'Invoice overdue.', Motivational:'An invoice needs a follow-up today.', Minimal:'Invoice overdue'},
-  leadWon:{title:'Lead won', Professional:'A lead has been converted to a client.', Direct:'Lead won.', Motivational:'New client secured. Great close.', Minimal:'Lead won'},
-  projectCompleted:{title:'Project completed', Professional:'A project has been marked complete.', Direct:'Project done.', Motivational:'Project delivered. Onto the next.', Minimal:'Project complete'},
-  syncSuccess:{title:'Sync complete', Professional:'Data synchronized with the cloud successfully.', Direct:'Synced.', Motivational:'Everything is in sync.', Minimal:'Synced'},
-  syncFailed:{title:'Sync failed', Professional:'The cloud sync did not complete. Working locally.', Direct:'Sync failed.', Motivational:'Sync hiccup. Your local data is safe.', Minimal:'Sync failed'},
-  backupSuccess:{title:'Backup saved', Professional:'A backup has been created successfully.', Direct:'Backup saved.', Motivational:'Backup saved. Your data is protected.', Minimal:'Backup saved'},
-  agentDone:{title:'Agent analysis generated', Professional:'The agent has produced a draft for your review.', Direct:'Agent output ready.', Motivational:'Draft ready. Review and put it to work.', Minimal:'Agent output ready'},
-  automationDone:{title:'Automation completed', Professional:'The automation ran successfully.', Direct:'Automation done.', Motivational:'Automation handled. One less manual step.', Minimal:'Automation complete'},
-  taskCreated:{title:'Task created', Professional:'A new task has been created.', Direct:'Task created.', Motivational:'New task created. Momentum keeps building.', Minimal:'Task created'},
-  proposalReady:{title:'Proposal ready for review', Professional:'A proposal draft has been created.', Direct:'Proposal draft ready.', Motivational:'Proposal is ready for review.', Minimal:'Proposal draft ready'},
-  savedNotes:{title:'Saved to client notes', Professional:'The output has been saved to the client record.', Direct:'Saved to notes.', Motivational:'Saved. The brief lives with the client now.', Minimal:'Saved to notes'},
-  permissionDenied:{title:'Permission required', Professional:'You do not have permission to perform this action.', Direct:'Not permitted.', Motivational:'That action needs a higher role. Ask a manager.', Minimal:'Not permitted'},
+  taskCompleted:{title:'Task completed', arTitle:'المهمة خلصت', ar:'تم تسجيل المهمة كمكتملة.', Professional:'A task has been marked complete.', Direct:'Task done.', Motivational:'Another task closed out. Strong progress.', Minimal:'Task complete'},
+  taskOverdue:{title:'Task overdue', arTitle:'مهمة متأخرة', ar:'فيه مهمة عدّى ميعادها ومحتاجة متابعة.', Professional:'A task has passed its due date and needs attention.', Direct:'Task is overdue.', Motivational:'A task slipped. Let us recover it today.', Minimal:'Task overdue'},
+  requestApproved:{title:'Request approved', arTitle:'تمت الموافقة', ar:'تمت الموافقة على الطلب.', Professional:'An approval request has been approved.', Direct:'Request approved.', Motivational:'Approved and cleared to proceed.', Minimal:'Approved'},
+  requestRejected:{title:'Request rejected', arTitle:'الطلب اترفض', ar:'تم رفض الطلب. راجع تعليق المدير.', Professional:'An approval request has been rejected.', Direct:'Request rejected.', Motivational:'Rejected for now. Review and resubmit.', Minimal:'Rejected'},
+  requestSubmitted:{title:'Request sent', arTitle:'طلبك اتبعت', ar:'طلبك وصل للمدير المسؤول، وهيوصلك إشعار بالنتيجة.', Professional:'Your request was sent to your manager for approval.', Direct:'Request sent.', Motivational:'Request on its way. You will hear back soon.', Minimal:'Request sent'},
+  deliverableApproved:{title:'Deliverable approved', arTitle:'العميل وافق', ar:'العميل وافق على المخرَج.', Professional:'The client has approved a deliverable.', Direct:'Client approved.', Motivational:'Client approval secured. Excellent work.', Minimal:'Approved by client'},
+  paymentReceived:{title:'Payment received', arTitle:'دفعة اتسجلت', ar:'تم تسجيل دفعة جديدة.', Professional:'A payment has been recorded.', Direct:'Payment in.', Motivational:'Cash collected. Well handled.', Minimal:'Payment received'},
+  invoiceOverdue:{title:'Invoice overdue', arTitle:'فاتورة متأخرة', ar:'فيه فاتورة عدّى ميعاد استحقاقها.', Professional:'An invoice has passed its due date.', Direct:'Invoice overdue.', Motivational:'An invoice needs a follow-up today.', Minimal:'Invoice overdue'},
+  leadWon:{title:'Lead won', arTitle:'كسبنا عميل', ar:'العميل المحتمل بقى عميل فعلي.', Professional:'A lead has been converted to a client.', Direct:'Lead won.', Motivational:'New client secured. Great close.', Minimal:'Lead won'},
+  projectCompleted:{title:'Project completed', arTitle:'المشروع اكتمل', ar:'تم تسجيل المشروع كمكتمل.', Professional:'A project has been marked complete.', Direct:'Project done.', Motivational:'Project delivered. Onto the next.', Minimal:'Project complete'},
+  syncSuccess:{title:'Sync complete', arTitle:'تمت المزامنة', ar:'بياناتك اتزامنت مع السحابة بنجاح.', Professional:'Data synchronized with the cloud successfully.', Direct:'Synced.', Motivational:'Everything is in sync.', Minimal:'Synced'},
+  syncFailed:{title:'Sync failed', arTitle:'المزامنة فشلت', ar:'المزامنة مع السحابة ما كملتش — شغلك متسجل محليًا وهنعيد المحاولة تلقائيًا.', Professional:'The cloud sync did not complete. Working locally.', Direct:'Sync failed.', Motivational:'Sync hiccup. Your local data is safe.', Minimal:'Sync failed'},
+  backupSuccess:{title:'Backup saved', arTitle:'النسخة الاحتياطية اتحفظت', ar:'تم إنشاء نسخة احتياطية بنجاح.', Professional:'A backup has been created successfully.', Direct:'Backup saved.', Motivational:'Backup saved. Your data is protected.', Minimal:'Backup saved'},
+  agentDone:{title:'Agent analysis generated', arTitle:'التحليل جاهز', ar:'المساعد جهّز مسودة للمراجعة.', Professional:'The agent has produced a draft for your review.', Direct:'Agent output ready.', Motivational:'Draft ready. Review and put it to work.', Minimal:'Agent output ready'},
+  automationDone:{title:'Automation completed', arTitle:'الأتمتة اشتغلت', ar:'الأتمتة اتنفذت بنجاح.', Professional:'The automation ran successfully.', Direct:'Automation done.', Motivational:'Automation handled. One less manual step.', Minimal:'Automation complete'},
+  taskCreated:{title:'Task created', arTitle:'مهمة جديدة', ar:'تم إنشاء مهمة جديدة.', Professional:'A new task has been created.', Direct:'Task created.', Motivational:'New task created. Momentum keeps building.', Minimal:'Task created'},
+  proposalReady:{title:'Proposal ready for review', arTitle:'العرض جاهز', ar:'تم تجهيز مسودة العرض للمراجعة.', Professional:'A proposal draft has been created.', Direct:'Proposal draft ready.', Motivational:'Proposal is ready for review.', Minimal:'Proposal draft ready'},
+  savedNotes:{title:'Saved to client notes', arTitle:'اتحفظ في ملاحظات العميل', ar:'النتيجة اتحفظت على ملف العميل.', Professional:'The output has been saved to the client record.', Direct:'Saved to notes.', Motivational:'Saved. The brief lives with the client now.', Minimal:'Saved to notes'},
+  permissionDenied:{title:'Permission required', arTitle:'محتاج صلاحية', ar:'ما عندكش صلاحية للإجراء ده. اطلب من مديرك.', Professional:'You do not have permission to perform this action.', Direct:'Not permitted.', Motivational:'That action needs a higher role. Ask a manager.', Minimal:'Not permitted'},
 };
 // showProPopup(type, context) — renders a dark toast with lime accent; auto-dismiss 4s.
 function showProPopup(type, context){
   try {
     const prefs=getPopupPrefs(); if(!prefs.enabled) return;
     const lib=POPUP_LIB[type]; if(!lib) return;
-    const msg=(lib[prefs.tone]||lib.Professional);
+    const _ar=(function(){ try{ return getAppSettings().language==='ar'; }catch(e){ return false; } })();
+    const msg=_ar ? (lib.ar||lib.Professional) : (lib[prefs.tone]||lib.Professional);
     let host=document.getElementById('tia-toasts');
     if(!host){ host=document.createElement('div'); host.id='tia-toasts'; document.body.appendChild(host); }
     host.className='toast-host '+({'Top Right':'tr','Bottom Right':'br','Bottom Center':'bc'}[prefs.position]||'tr');
     const negTypes=['taskOverdue','requestRejected','invoiceOverdue','syncFailed'];
     const el=document.createElement('div'); el.className='pro-toast'+(negTypes.includes(type)?' neg':'');
     el.innerHTML='<div class="pt-bar"></div><div class="pt-body"><div class="pt-title"></div><div class="pt-msg"></div>'+(context?'<div class="pt-ctx"></div>':'')+'</div>';
-    el.querySelector('.pt-title').textContent=lib.title;
+    el.querySelector('.pt-title').textContent=_ar?(lib.arTitle||lib.title):lib.title;
     el.querySelector('.pt-msg').textContent=msg;
     if(context) el.querySelector('.pt-ctx').textContent=context;
     host.appendChild(el);
@@ -3344,12 +3515,15 @@ async function cloudDelete(cfg, id){
 async function cloudPushAll(cfg, db){
   if(!cfgComplete(cfg)) return;
   const rows=[]; COLLECTIONS.forEach(coll=>(db[coll]||[]).forEach(r=>r&&r.id&&rows.push({id:r.id,coll,data:r})));
-  // chunk to keep payloads reasonable
+  // chunk to keep payloads reasonable; count failures so a broken bulk upload
+  // is VISIBLE instead of silently reporting success
+  let failed=0;
   for(let i=0;i<rows.length;i+=200){
-    try { await fetch(_rest(cfg,'records?on_conflict=id'),
+    try { const res=await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
-        body: JSON.stringify(rows.slice(i,i+200)) }); } catch(e){}
+        body: JSON.stringify(rows.slice(i,i+200)) }); if(!res.ok) failed++; } catch(e){ failed++; }
   }
+  if(failed){ try{ showProPopup('syncFailed'); }catch(e){} }
 }
 
 /* ---- Durable offline sync queue (additive). Failed cloud writes no longer
@@ -3408,11 +3582,12 @@ function syncQueueChip(){
     if(!el){
       el=document.createElement('div'); el.id='sync-pending-chip';
       el.style.cssText='position:fixed;left:14px;bottom:14px;z-index:9999;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
-      el.title='Pending cloud writes. They retry automatically; click to retry now.';
       el.onclick=function(){ syncQueueDrain(); };
       document.body.appendChild(el);
     }
-    el.textContent='SYNC PENDING: '+n;
+    const _arc=(function(){ try{ return (JSON.parse(localStorage.getItem('tia_agency_os_appsettings')||'{}').language)==='ar'; }catch(e){ return false; } })();
+    el.title=_arc?'فيه تغييرات مستنية ترفع للسحابة — بتتبعت تلقائيًا، ودوس هنا لو عايز تبعتها دلوقتي.':'Pending cloud writes. They retry automatically; click to retry now.';
+    el.textContent=_arc?('في انتظار المزامنة: '+n):('SYNC PENDING: '+n);
   } catch(e){}
 }
 window.__syncQueue = { size:()=>syncQueueLoad().length, list:syncQueueLoad, drain:syncQueueDrain };
@@ -3798,7 +3973,7 @@ function Avatar({ name, size=34, src }){
 function KPI({ label, value, icon, sub }){
   return html`<div class="kpi">
     ${icon&&html`<div class="k-top"><div class="k-ic">${React.createElement(Icon[icon]||Icon.command)}</div></div>`}
-    <div class="k-lab">${label}</div>
+    <div class="k-lab">${t(label)}</div>
     <div class="k-val" style=${{marginTop:6}}>${value}</div>
     ${sub&&html`<div class="k-foot">${sub}</div>`}</div>`;
 }
@@ -3892,21 +4067,21 @@ function Modal({ title, onClose, children, wide }) {
 function Field({ f, value, onChange, db, rec }) {
   const set = v => onChange(f.k, v);
   if(f.type==='select'){ const _opts=(value && (f.opts||[]).indexOf(value)<0) ? [value, ...(f.opts||[])] : (f.opts||[]); // keep an existing off-list value visible (e.g. an older role name)
-    return html`<label class="fld"><span>${f.label}</span>
+    return html`<label class="fld"><span>${t(f.label)}</span>
     <select value=${value||''} onChange=${e=>set(e.target.value)}><option value="">—</option>
-      ${_opts.map(o=>html`<option value=${o} key=${o}>${o}</option>`)}</select></label>`; }
+      ${_opts.map(o=>html`<option value=${o} key=${o}>${t(o)}</option>`)}</select></label>`; }
   if(f.type==='ref'){ const opts=(db[f.coll]||[]).filter(r=> f.filterBy?f.filterBy(r,rec||{},db):true);
-    return html`<label class="fld"><span>${f.label}</span>
+    return html`<label class="fld"><span>${t(f.label)}</span>
     <select value=${value||''} onChange=${e=>set(e.target.value)}><option value="">—</option>
       ${opts.map(r=>html`<option value=${r.id} key=${r.id}>${r.fullName||r.brandName||r.projectName||r.name||r.title||r.invoiceNumber||r.id}</option>`)}</select></label>`; }
-  if(f.type==='textarea') return html`<label class="fld full"><span>${f.label}</span>
+  if(f.type==='textarea') return html`<label class="fld full"><span>${t(f.label)}</span>
     <textarea rows="3" value=${value||''} onChange=${e=>set(e.target.value)}></textarea></label>`;
   if(f.type==='multiref'){
     const arr = Array.isArray(value)?value : (value?[value]:[]);
     const opts = (db[f.coll]||[]).filter(r=> f.filter?f.filter(r):true);
     const labelOf = r => r.fullName||r.brandName||r.projectName||r.name||r.title||r.id;
     const toggle = id => { const s=new Set(arr); s.has(id)?s.delete(id):s.add(id); set([...s]); };
-    return html`<label class="fld full"><span>${f.label}</span>
+    return html`<label class="fld full"><span>${t(f.label)}</span>
       <div class="multiref">
         ${arr.length?html`<div class="mr-chips">${arr.map(id=>{ const r=(db[f.coll]||[]).find(x=>x.id===id);
           return html`<span class="mr-chip" key=${id}>${r?labelOf(r):id}<button type="button" onClick=${()=>toggle(id)}>×</button></span>`; })}</div>`:''}
@@ -3919,18 +4094,18 @@ function Field({ f, value, onChange, db, rec }) {
     const arr = Array.isArray(value)?value : (value?[value]:[]);
     const opts = f.opts||[];
     const toggle = v => { const s=new Set(arr); s.has(v)?s.delete(v):s.add(v); set([...s]); };
-    return html`<label class="fld full"><span>${f.label}</span>
+    return html`<label class="fld full"><span>${t(f.label)}</span>
       <div class="multiref">
-        ${arr.length?html`<div class="mr-chips">${arr.map(v=>html`<span class="mr-chip" key=${v}>${v}<button type="button" onClick=${()=>toggle(v)}>×</button></span>`)}</div>`:''}
+        ${arr.length?html`<div class="mr-chips">${arr.map(v=>html`<span class="mr-chip" key=${v}>${t(v)}<button type="button" onClick=${()=>toggle(v)}>×</button></span>`)}</div>`:''}
         <div class="mr-list">${opts.map(v=>html`<label class="mr-opt ${arr.includes(v)?'on':''}" key=${v}>
-          <input type="checkbox" checked=${arr.includes(v)} onChange=${()=>toggle(v)}/><span>${v}</span></label>`)}
+          <input type="checkbox" checked=${arr.includes(v)} onChange=${()=>toggle(v)}/><span>${t(v)}</span></label>`)}
         ${opts.length===0?html`<div class="muted" style=${{fontSize:12,padding:6}}>—</div>`:''}</div>
       </div></label>`;
   }
   if(f.type==='checkbox') return html`<label class="fld" style=${{flexDirection:'row',alignItems:'center',gap:9}}>
     <input type="checkbox" checked=${!!value} onChange=${e=>set(e.target.checked)} style=${{width:16,height:16,accentColor:'var(--lime)'}}/>
-    <span style=${{textTransform:'none',letterSpacing:0,fontSize:13,color:'var(--ink-2)'}}>${f.label}</span></label>`;
-  return html`<label class="fld ${f.full?'full':''}"><span>${f.label}${isUrl(value)?html` · <${Ln} href=${value}>${'فتح ↗'}<//>`:''}</span>
+    <span style=${{textTransform:'none',letterSpacing:0,fontSize:13,color:'var(--ink-2)'}}>${t(f.label)}</span></label>`;
+  return html`<label class="fld ${f.full?'full':''}"><span>${t(f.label)}${isUrl(value)?html` · <${Ln} href=${value}>${getLang()==='ar'?'فتح ↗':'Open ↗'}<//>`:''}</span>
     <input type=${f.type||'text'} value=${value==null?'':value}
       onChange=${e=>{ const v=e.target.value; set(f.type==='number' ? (v===''?'':Number(v)) : v); }} /></label>`;
 }
@@ -3941,13 +4116,16 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const set = (k,v)=>setRec(r=>({...r,[k]:v}));
   const ar = getAppSettings().language==='ar';
   // hide admin-only / finance-only fields when the role isn't allowed
+  // f.showIf(rec) hides fields that don't apply to the current values (e.g. leave
+  // dates only for Leave requests) so simple flows stay simple.
   const allowed = (schema||[]).filter(f=>{
     if(f.admin && !(role==='Admin')) return false;
     if(f.finance && !(role==='Admin'||role==='Accountant')) return false;
+    if(typeof f.showIf==='function' && !f.showIf(rec)) return false;
     return true;
   });
   const COLLAPSE = new Set(['Advanced','More','متقدّم']);
-  const GL = {Basic:'الأساسي',Contact:'التواصل',Contract:'العقد',Account:'الحساب',Plan:'الخطة الشهرية (كام في الشهر)',Links:'الروابط',Advanced:'تفاصيل إضافية (اختياري)',Notes:'ملاحظات',Business:'بيانات',Other:'أخرى',Work:'الشغل',Compensation:'الرواتب',Performance:'الأداء',Access:'الدخول',Documents:'مستندات',Asset:'الأصل',Meeting:'الاجتماع'};
+  const GL = {Basic:'الأساسي',Contact:'التواصل',Contract:'العقد',Account:'الحساب',Plan:'الخطة الشهرية (كام في الشهر)',Links:'الروابط',Advanced:'تفاصيل إضافية (اختياري)',Notes:'ملاحظات',Business:'بيانات',Other:'أخرى',Work:'الشغل',Compensation:'الرواتب',Performance:'الأداء',Access:'الدخول',Documents:'مستندات',Asset:'الأصل',Meeting:'الاجتماع',Request:'الطلب','Time off':'مواعيد الإجازة / الإذن'};
   const gl = (g)=> ar ? (GL[g]||g) : g;
   const hasGroups = allowed.some(f=>f.group);
   // build ordered groups
@@ -3957,17 +4135,20 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const renderGroup=(g)=>html`<div key=${g} style=${{marginBottom:6}}>
     <div class="eyebrow" style=${{margin:'2px 0 12px'}}>${gl(g)}</div>
     <div class="form-grid">${seen[g].map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div></div>`;
-  const isMissing=(f)=> f.req && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]===''||(Array.isArray(rec[f.k])&&rec[f.k].length===0));
+  const isMissing=(f)=> (f.req || (typeof f.reqIf==='function' && f.reqIf(rec))) && (rec[f.k]===undefined||rec[f.k]===null||rec[f.k]===''||(Array.isArray(rec[f.k])&&rec[f.k].length===0));
   const missingIn=(gnames)=> allowed.filter(f=>gnames.includes(f.group||'Other') && isMissing(f));
   const allMissing=()=> allowed.filter(isMissing);
-  const reqLbl=(m)=> (ar?'محتاج تملأ: ':'Required: ')+m.map(f=>f.label).join('، ');
+  const reqLbl=(m)=> (ar?'محتاج تملأ: ':'Required: ')+m.map(f=>ar?(FIELD_AR[f.label]||I18N[f.label]||f.label):f.label).join('، ');
+  // double-click guard: a fast second tap on Save must not create a duplicate record
+  const savingRef = useRef(false);
+  const guardSave = (r)=>{ if(savingRef.current) return; savingRef.current=true; setTimeout(()=>{ savingRef.current=false; },1500); onSave(r); };
   // MULTI-STEP when there are 3+ essential groups: one step per group + an optional
   // "More details" step for the collapsed advanced fields.
   const multi = hasGroups && ess.length>=3;
   if(multi){
     const steps=[...ess.map(g=>({key:g,groups:[g],label:gl(g)})), ...(adv.length?[{key:'__more',groups:adv,label:(ar?'تفاصيل إضافية':'More')}]:[])];
     const cur=steps[Math.min(step,steps.length-1)];
-    const doSave=()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); const idx=steps.findIndex(s=>s.groups.some(g=>m.some(f=>(f.group||'Other')===g))); if(idx>=0)setStep(idx); return; } onSave(rec); };
+    const doSave=()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); const idx=steps.findIndex(s=>s.groups.some(g=>m.some(f=>(f.group||'Other')===g))); if(idx>=0)setStep(idx); return; } guardSave(rec); };
     const next=()=>{ const m=missingIn(cur.groups); if(m.length){ setErr(reqLbl(m)); return; } setErr(''); setStep(s=>Math.min(s+1,steps.length-1)); };
     const back=()=>{ setErr(''); setStep(s=>Math.max(s-1,0)); };
     const pct=Math.round(((step+1)/steps.length)*100);
@@ -3988,7 +4169,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
       </div></div>`;
   }
   // SINGLE-STEP (small forms) — unchanged behavior
-  const save = ()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); return; } onSave(rec); };
+  const save = ()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); return; } guardSave(rec); };
   const body = hasGroups
     ? html`<div>${ess.map(renderGroup)}${adv.length?html`<details style=${{marginTop:4}}><summary style=${{cursor:'pointer',fontSize:12,color:'var(--lime)',padding:'8px 0',listStyle:'none'}}>${ar?'▸ تفاصيل إضافية (اختياري)':'▸ More details (optional)'}</summary>${adv.map(renderGroup)}</details>`:''}</div>`
     : html`<div class="form-grid">${allowed.map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div>`;
@@ -4036,14 +4217,14 @@ function Kanban({ items, columns, field, render, onMove, onCard, canMove=true, o
   const canDrag = canMove && !IS_TOUCH; // touch devices can't HTML5-drag; tap a card to move instead
   const clickCard = (c,e)=>{ if(e.target.closest('button,a,input'))return; if(onUpdate) setOpen(c.id); else if(onCard) onCard(c); };
   return html`<div class="kwrap">
-    ${tappable?html`<div class="khint">↔ Swipe for columns · tap a card to open & move it</div>`:''}
+    ${tappable?html`<div class="khint">${getLang()==='ar'?'↔ اسحب يمين وشمال للأعمدة · دوس على الكارت عشان تفتحه وتنقله':'↔ Swipe for columns · tap a card to open & move it'}</div>`:''}
     <div class="kanban">${columns.map(col=>{
     const cards = items.filter(i=>i[field]===col);
     return html`<div class="kcol ${(over===col&&canDrag)?'kover':''}" key=${col}
         onDragOver=${e=>{ if(canDrag){ e.preventDefault(); if(over!==col) setOver(col); } }}
         onDragLeave=${()=>setOver(o=>o===col?null:o)}
         onDrop=${()=>{ if(canMove&&drag) onMove(drag,col); setDrag(null); setOver(null); }}>
-      <div class="kcol-h"><span>${col}</span><span class="kcount">${cards.length}</span></div>
+      <div class="kcol-h"><span>${t(col)}</span><span class="kcount">${cards.length}</span></div>
       <div class="kcol-b">${cards.map(c=>html`<div class="kcard ${canMove?'':'locked'} ${tappable?'tappable':''}" key=${c.id} draggable=${canDrag}
         onDragStart=${canDrag?(()=>setDrag(c.id)):null} onDragEnd=${()=>{ setDrag(null); setOver(null); }}
         onClick=${tappable?(e=>clickCard(c,e)):null}>
@@ -4179,27 +4360,28 @@ function NotificationCenterView({ ctx }){
   const list = tab==='unread' ? base.filter(n=>!n.read) : base;
   const unreadCount=base.filter(n=>!n.read).length;
   const markAll=()=>base.forEach(n=>!n.read&&ctx.updateRecord('notifications',n.id,{read:true}));
+  const arr=getLang()==='ar';
   return html`<div class="view">
-    <${Head} eyebrow="Operations" title="Notifications" desc="Everything happening across your team — live.">
-      ${unreadCount>0&&html`<button class="btn btn-ghost" onClick=${markAll}>Mark all read</button>`}
+    <${Head} eyebrow=${arr?'التشغيل':'Operations'} title=${t('Notifications')} desc=${arr?'كل اللي بيحصل في الفريق — لايف.':'Everything happening across your team — live.'}>
+      ${unreadCount>0&&html`<button class="btn btn-ghost" onClick=${markAll}>${t('Mark all read')}</button>`}
     <//>
     <div class="seg" style=${{marginBottom:16}}>
-      ${[['all','All'],['unread','Unread'+(unreadCount>0?(' ('+unreadCount+')'):'')],['mine','Mine']].map(([k,l])=>html`<button key=${k} class=${tab===k?'on':''} onClick=${()=>setTab(k)}>${l}</button>`)}
+      ${[['all',arr?'الكل':'All'],['unread',(arr?'غير المقروء':'Unread')+(unreadCount>0?(' ('+unreadCount+')'):'')],['mine',arr?'الخاصة بيا':'Mine']].map(([k,l])=>html`<button key=${k} class=${tab===k?'on':''} onClick=${()=>setTab(k)}>${l}</button>`)}
     </div>
-    ${list.length===0?html`<${EmptyState} title="No notifications" text="You're all caught up." icon="bell"/>`:
+    ${list.length===0?html`<${EmptyState} title=${t('No notifications')} text=${arr?'مفيش جديد — انت متابع كل حاجة.':"You're all caught up."} icon="bell"/>`:
     html`<div class="notif-list">${list.map(n=>html`<div class="notif-card ${n.read?'':'unread'}" key=${n.id}
         onClick=${()=>{ if(!n.read) ctx.updateRecord('notifications',n.id,{read:true}); if(n.entityType&&canView(n.entityType,role)) ctx.go(n.entityType); }}>
       <span class="nc-dot ${n.read?'':'on'}"></span>
-      <div class="nc-body"><b>${n.title}</b><span>${n.message||''}</span><i>${fmtDateTime(n.createdAt)}${n.role?(' · '+n.role):''}</i></div>
-      ${!n.read&&html`<button class="mini" onClick=${e=>{e.stopPropagation();ctx.updateRecord('notifications',n.id,{read:true});}}>Mark read</button>`}
+      <div class="nc-body"><b>${t(n.title)}</b><span>${n.message||''}</span><i>${fmtDateTime(n.createdAt)}${n.role?(' · '+n.role):''}</i></div>
+      ${!n.read&&html`<button class="mini" onClick=${e=>{e.stopPropagation();ctx.updateRecord('notifications',n.id,{read:true});}}>${arr?'تمت القراءة':'Mark read'}</button>`}
     </div>`)}</div>`}
   </div>`;
 }
 
 function Head({ eyebrow, title, desc, children }) {
   return html`<div class="view-head"><div class="vh-t">
-    ${eyebrow&&html`<div class="eyebrow" style=${{marginBottom:10}}>${eyebrow}</div>`}
-    <h1>${title}</h1>${desc&&html`<p>${desc}</p>`}</div>
+    ${eyebrow&&html`<div class="eyebrow" style=${{marginBottom:10}}>${t(eyebrow)}</div>`}
+    <h1>${t(title)}</h1>${desc&&html`<p>${t(desc)}</p>`}</div>
     ${children&&html`<div class="view-actions">${children}</div>`}</div>`;
 }
 
@@ -4207,7 +4389,7 @@ function Head({ eyebrow, title, desc, children }) {
 function EmptyState({ title, text, actionLabel, onAction, icon }){
   return html`<div class="empty-state">
     <div class="es-ic">${React.createElement(Icon[icon]||Icon.layers)}</div>
-    <div class="es-title">${title||'Nothing here yet'}</div>
+    <div class="es-title">${title||(getLang()==='ar'?'مفيش حاجة هنا لسه':'Nothing here yet')}</div>
     ${text&&html`<div class="es-text">${text}</div>`}
     ${actionLabel&&onAction&&html`<button class="btn btn-pri" style=${{marginTop:14}} onClick=${onAction}>${React.createElement(Icon.plus)} ${actionLabel}</button>`}
   </div>`;
@@ -4240,22 +4422,22 @@ function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions
       <span class="muted mono" style=${{fontSize:11}}>${list.length}${list.length!==rows.length?(' / '+rows.length):''}</span>
     </div>`}
     <div class="tbl-wrap"><table class="tbl tbl-cards"><thead><tr>
-      ${cols.map(c=>html`<th key=${c.k} class=${c.num?'right':''} onClick=${()=>toggleSort(c)} style=${{cursor:'pointer',userSelect:'none'}} title=${ar?'رتّب':'Sort'}>${c.label}${arrow(c.k)}</th>`)}
+      ${cols.map(c=>html`<th key=${c.k} class=${c.num?'right':''} onClick=${()=>toggleSort(c)} style=${{cursor:'pointer',userSelect:'none'}} title=${ar?'رتّب':'Sort'}>${t(c.label)}${arrow(c.k)}</th>`)}
       ${(onEdit||onDelete||extraActions)&&html`<th></th>`}</tr></thead>
     <tbody>${list.map(r=>html`<tr key=${r.id}>
-      ${cols.map(c=>html`<td key=${c.k} class=${c.num?'num':''} data-label=${c.label||''}>${
+      ${cols.map(c=>html`<td key=${c.k} class=${c.num?'num':''} data-label=${t(c.label)||''}>${
         c.render ? c.render(r,db) :
         c.money ? money(r[c.k]) :
         c.date ? fmtDate(r[c.k]) :
-        c.tag ? html`<${Tag}>${r[c.k]||'—'}<//>` :
+        c.tag ? html`<${Tag}>${r[c.k]?t(String(r[c.k])):'—'}<//>` :
         c.ref ? nameById(db[c.coll], r[c.k], c.f) :
         isUrl(r[c.k]) ? html`<${Ln} href=${r[c.k]}/>` :
         (r[c.k]==null||r[c.k]===''?'—':r[c.k])
       }</td>`)}
-      ${(onEdit||onDelete||extraActions)&&html`<td class="right cell-actions" data-label="Actions" style=${{whiteSpace:'nowrap'}}>
+      ${(onEdit||onDelete||extraActions)&&html`<td class="right cell-actions" data-label=${ar?'إجراءات':'Actions'} style=${{whiteSpace:'nowrap'}}>
         ${extraActions&&extraActions(r)}
-        ${onEdit&&canEditFlag&&html`<button class="mini" onClick=${()=>onEdit(r)}>Edit</button>`}
-        ${onDelete&&canEditFlag&&html`<button class="mini" onClick=${()=>onDelete(r)}>Del</button>`}</td>`}
+        ${onEdit&&canEditFlag&&html`<button class="mini" onClick=${()=>onEdit(r)}>${ar?'تعديل':'Edit'}</button>`}
+        ${onDelete&&canEditFlag&&html`<button class="mini" onClick=${()=>onDelete(r)}>${ar?'حذف':'Del'}</button>`}</td>`}
     </tr>`)}
     ${list.length===0&&html`<tr><td colspan=${cols.length+1} class="muted" style=${{padding:'28px',textAlign:'center'}}>${ql?(ar?'مفيش نتايج':'No matches'):(ar?'مفيش سجلات':'No records yet.')}</td></tr>`}
     </tbody></table></div><//>`;
@@ -4304,7 +4486,7 @@ function PublicForm({ slug, cfg }){
   const submit = async (e)=>{
     if(e&&e.preventDefault) e.preventDefault();
     if(hp) { setState('done'); return; }
-    if(!vals.name||!vals.name.trim()){ alert('Please enter your name.'); return; }
+    if(!vals.name||!vals.name.trim()){ alert('من فضلك اكتب اسمك. | Please enter your name.'); return; }
     setBusy(true);
     const id='lea-'+Math.random().toString(36).slice(2,10);
     const now=new Date().toISOString();
@@ -4315,7 +4497,7 @@ function PublicForm({ slug, cfg }){
       const res=await fetch(sbBase(cfg)+'/rest/v1/records?on_conflict=id', {method:'POST', headers:{apikey:sbKey(cfg),'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify([{id,coll:'leads',data:lead},{id:notif.id,coll:'notifications',data:notif}])});
       if(!res.ok) throw new Error('write failed');
       setState('done');
-    } catch(err){ setBusy(false); alert('Something went wrong. Please try again.'); }
+    } catch(err){ setBusy(false); alert('حصلت مشكلة، جرّب تاني. | Something went wrong. Please try again.'); }
   };
   const accent = (camp&&camp.accent) || '#C4FF3D';
   return html`<div class="pf-wrap"><div class="pf-card">
@@ -5028,7 +5210,13 @@ function App(){
   };
 
   /* ---- workflow: deliverable approval / revision ---- */
-  const sendToClientReview = (dlv) => { updateRecord('deliverables',dlv.id,{status:'Client Review'}); addActivity('deliverables',dlv.id,'sent to client review',dlv.title); addNotification('Client','Ready for your review',`${dlv.title} is ready for approval`,'deliverables',dlv.id); triggerWebhook('deliverableClientReviewWebhook',{deliverable:dlv}); awardPoints(POINTS.sentToClient,'Sent to client'); };
+  const sendToClientReview = (dlv) => { updateRecord('deliverables',dlv.id,{status:'Client Review'}); addActivity('deliverables',dlv.id,'sent to client review',dlv.title);
+    // Notify ONLY this client's portal users — a role-wide 'Client' broadcast would show
+    // client A's deliverable titles to client B. Falls back to the broadcast only when
+    // no portal account is linked to this client.
+    let _sent=0; try { (AUTH.loadUsers()||[]).filter(u=>aliasRole(u.role)==='Client' && (u.assignedClients||[]).includes(dlv.clientId)).forEach(u=>{ addNotification(u.id,'Ready for your review',`${dlv.title} is ready for approval`,'deliverables',dlv.id); _sent++; }); } catch(e){}
+    if(!_sent) addNotification('Client','Ready for your review',`${dlv.title} is ready for approval`,'deliverables',dlv.id);
+    triggerWebhook('deliverableClientReviewWebhook',{deliverable:dlv}); awardPoints(POINTS.sentToClient,'Sent to client'); };
   const approveDeliverable = (dlv) => { updateRecord('deliverables',dlv.id,{status:'Approved',approvedBy:user.id,approvedAt:nowISO()}); addActivity('deliverables',dlv.id,'approved',dlv.title); addNotification('Project Manager','Deliverable approved',`${dlv.title} approved by ${user.name}`,'deliverables',dlv.id); triggerWebhook('deliverableApprovedWebhook',{deliverable:dlv}); awardPoints(POINTS.deliverableApproved,'Deliverable approved'); showProPopup('deliverableApproved',dlv.title); };
   const requestRevision = (dlv, note) => {
     const rev = createRecord('revisions',{ deliverableId:dlv.id, clientId:dlv.clientId, projectId:dlv.projectId, requestedBy:user.id, assignedTo:dlv.assignedTo, note:note||'Please revise', status:'Requested', priority:'Med', versionFrom:dlv.version||1, versionTo:(dlv.version||1)+1 });
@@ -5047,6 +5235,7 @@ function App(){
     addActivity('approvalRequests', created.id, 'request submitted', created.title);
     addNotification(rec.assignedManagerId||'Admin','Approval needed',`${created.requestType}: ${created.title}`,'requests',created.id);
     triggerWebhook('approvalRequestWebhook',{request:created});
+    showProPopup('requestSubmitted',created.title); // clear confirmation so people don't resubmit
     return created;
   };
   const approveRequest = (req, comment) => {
@@ -5071,6 +5260,17 @@ function App(){
       const note='Lateness approved'+(req.reason?(': '+req.reason):'');
       if(existing){ updateRecord('attendance', existing.id, { status:'Late', notes:(existing.notes?existing.notes+' · ':'')+note }); }
       else { createRecord('attendance', { employeeId:eid, employeeName:req.requestedByName||'', date:day, checkIn:req.fromTime||'', checkOut:'', workMode:'Office', status:'Late', notes:note, source:'request' }); }
+    }
+    if(req.requestType==='Half Day'){
+      // half a day on the HR Leaves calendar so reports stay accurate
+      createRecord('leaves', { employeeId:req.employeeId||req.requestedBy, employeeName:req.requestedByName||'', leaveType:req.leaveType||'Annual', startDate:req.date||todayISO(), endDate:req.date||todayISO(), days:0.5, reason:req.reason||req.description||'', status:'Approved', approvedBy:user.id, approvedAt:nowISO(), source:'request', requestId:req.id });
+    }
+    if(req.requestType==='Permission Request'||req.requestType==='Early Leave'){
+      // leave a trace on that day's attendance row (if one exists) so HR sees it
+      const eid=req.employeeId||req.requestedBy; const day=req.date||todayISO();
+      const existing=(db.attendance||[]).find(a=>a.employeeId===eid && a.date===day);
+      const label=(req.requestType==='Early Leave'?'Early leave approved':'Permission approved')+((req.fromTime||req.toTime)?(' ('+(req.fromTime||'')+(req.toTime?('-'+req.toTime):'')+')'):'');
+      if(existing) updateRecord('attendance', existing.id, { notes:(existing.notes?existing.notes+' · ':'')+label });
     }
     showProPopup('requestApproved',req.title);
   };
@@ -5107,11 +5307,11 @@ function App(){
 
   /* ---- document builder ---- */
   const docPrint = (type, rec) => printDocument(type, rec, db);
-  const docCopy = (type, rec) => { copyDocumentText(type, rec, db); alert('Document text copied to clipboard.'); };
+  const docCopy = (type, rec) => { copyDocumentText(type, rec, db); alert(getLang()==='ar'?'اتنسخ نص المستند.':'Document text copied to clipboard.'); };
   const docEmail = async (type, rec) => {
     const client=(db.clients||[]).find(c=>c.id===rec.clientId)||{};
     const to = type==='invoice' ? (client.billingContactEmail||client.mainContactEmail) : (client.mainContactEmail||client.billingContactEmail);
-    if(!to){ alert('No client email on file. Open the client and add a contact email first.'); return; }
+    if(!to){ alert(getLang()==='ar'?'مفيش إيميل للعميل. افتح ملف العميل وضيف إيميل الأول.':'No client email on file. Open the client and add a contact email first.'); return; }
     const num = rec.invoiceNumber||rec.proposalNumber||rec.quotationNumber||rec.contractNumber||rec.id;
     const subject = type.charAt(0).toUpperCase()+type.slice(1)+' '+num+' — '+(brand||'Magnet');
     try { await sendEmail({ to, subject, html:_docHTML(type, rec, db) }); showProPopup('syncSuccess','Email sent to '+to); }
@@ -5174,9 +5374,9 @@ function App(){
 
   /* ---- workflow ---- */
   const startWorkflow = (clientId) => {
-    if(!clientId) return alert('Select a client first.');
+    if(!clientId) return alert(getLang()==='ar'?'اختار عميل الأول.':'Select a client first.');
     const existing=(db.workflows||[]).find(w=>w.clientId===clientId);
-    if(existing){ alert('Workflow already started for this client.'); return existing; }
+    if(existing){ alert(getLang()==='ar'?'الورك فلو شغال بالفعل للعميل ده.':'Workflow already started for this client.'); return existing; }
     const wf=createRecord('workflows',{ clientId, stage:1, startedAt:nowISO(), notes:'' });
     addActivity('workflows', wf.id, 'workflow started', nameById(db.clients,clientId));
     showProPopup('automationDone','Workflow started');
@@ -5215,9 +5415,9 @@ function App(){
       cfg.current=Object.assign(cfg.current,{webhooks:c.webhooks}); setCfg(cfg.current);
       alert('Saved settings, but could not connect: '+e.message); }
   };
-  const saveWebhooks = (webhooks) => { cfg.current=Object.assign({},cfg.current,{webhooks}); setCfg(cfg.current); alert('Webhook URLs saved.'); };
-  const syncNow = async () => { if(!cloudOn) return alert('Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb(prev=>mergeDB(prev,d)); showProPopup('syncSuccess'); } catch(e){ showProPopup('syncFailed'); } };
-  const pullFromCloud = async () => { if(!cloudOn) return alert('Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb(prev=>mergeDB(prev,d)); showProPopup('syncSuccess','Pulled from cloud'); } catch(e){ showProPopup('syncFailed'); } };
+  const saveWebhooks = (webhooks) => { cfg.current=Object.assign({},cfg.current,{webhooks}); setCfg(cfg.current); alert(getLang()==='ar'?'اتحفظت روابط الويبهوك.':'Webhook URLs saved.'); };
+  const syncNow = async () => { if(!cloudOn) return alert(getLang()==='ar'?'مش متوصل بالسحابة.':'Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb(prev=>mergeDB(prev,d)); showProPopup('syncSuccess'); } catch(e){ showProPopup('syncFailed'); } };
+  const pullFromCloud = async () => { if(!cloudOn) return alert(getLang()==='ar'?'مش متوصل بالسحابة.':'Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb(prev=>mergeDB(prev,d)); showProPopup('syncSuccess','Pulled from cloud'); } catch(e){ showProPopup('syncFailed'); } };
   const disconnectCloud = () => { const w=cfg.current.webhooks; cfg.current={webhooks:w}; setCfg(cfg.current); setCloudOn(false); alert('Disconnected. Local-only mode.'); };
   const signInCloud = async (email,password) => {
     try {
@@ -5242,10 +5442,10 @@ function App(){
 
   /* ---- backup / restore (strong storage) ---- */
   const exportJSON = () => { makeSnapshot(db,'manual-export'); downloadJSON(db,'backup'); showProPopup('backupSuccess'); };
-  const importJSON = (file) => { const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); makeSnapshot(db,'before-import'); COLLECTIONS.forEach(c=>{if(!d[c])d[c]=[];}); setDb(d); alert('Imported ✓ (a snapshot of your previous data was saved first)'); }catch(e){ alert('Invalid file'); } }; r.readAsText(file); };
+  const importJSON = (file) => { const r=new FileReader(); r.onload=()=>{ try{ const d=JSON.parse(r.result); makeSnapshot(db,'before-import'); COLLECTIONS.forEach(c=>{if(!d[c])d[c]=[];}); setDb(d); alert(getLang()==='ar'?'تم الاستيراد ✓ (اتاخدت نسخة من بياناتك القديمة الأول)':'Imported ✓ (a snapshot of your previous data was saved first)'); }catch(e){ alert(getLang()==='ar'?'ملف غير صالح':'Invalid file'); } }; r.readAsText(file); };
   const clearLocal = () => { if(confirm('Clear ALL local data? A snapshot is saved first so you can restore.')){ makeSnapshot(db,'before-clear'); store.del(KEY); setDb(()=>{const e={};COLLECTIONS.forEach(c=>e[c]=[]);return e;}); } };
   const seedDemo = () => { if(confirm('Replace data with demo set? A snapshot is saved first.')){ makeSnapshot(db,'before-seed'); const s=seed(); setDb(s); store.set(KEY,JSON.stringify(s)); } };
-  const restoreSnapshot = (snap) => { if(snap&&snap.data&&confirm('Restore data from '+fmtDateTime(snap.at)+'? Current data is snapshotted first.')){ makeSnapshot(db,'before-restore'); const d=JSON.parse(JSON.stringify(snap.data)); COLLECTIONS.forEach(c=>{if(!d[c])d[c]=[];}); setDb(d); alert('Restored ✓'); } };
+  const restoreSnapshot = (snap) => { if(snap&&snap.data&&confirm('Restore data from '+fmtDateTime(snap.at)+'? Current data is snapshotted first.')){ makeSnapshot(db,'before-restore'); const d=JSON.parse(JSON.stringify(snap.data)); COLLECTIONS.forEach(c=>{if(!d[c])d[c]=[];}); setDb(d); alert(getLang()==='ar'?'تم الاسترجاع ✓':'Restored ✓'); } };
   const setBackupPrefs = (prefs) => { const m=getBackupMeta(); setBackupMeta(Object.assign(m,prefs)); };
 
   /* ---- nav (role-filtered) ---- */
@@ -5308,7 +5508,7 @@ function App(){
     convertLead, convertCandidate, createDefaultTasksForProject, sendToClientReview, approveDeliverable, requestRevision, addDeliverableVersion,
     submitRequest, approveRequest, rejectRequest, requestChanges, sendChat, setAvailability, driveAction, docPrint, docCopy, docEmail,
     runAgent, agentToTask, agentToProposal, agentToNotes, runAutomation, toggleAutomation, startWorkflow, advanceWorkflow, syncTeam,
-    invTotal, invPaid, openModal:(coll,initial,schema,title)=>setModal({coll,initial,schema:schema||FORM_SCHEMAS[coll],title:title||((initial&&initial.id?'Edit ':'New ')+coll)}),
+    invTotal, invPaid, openModal:(coll,initial,schema,title)=>setModal({coll,initial,schema:schema||FORM_SCHEMAS[coll],title:title||((initial&&initial.id?(getLang()==='ar'?'تعديل ':'Edit '):(getLang()==='ar'?'إضافة ':'New '))+(t(coll)!==coll?t(coll):coll))}),
     go };
 
   const byBrand = (arr)=> brand==='All'?arr:(arr||[]).filter(x=>!x.brand||x.brand===brand);
@@ -5331,7 +5531,7 @@ function App(){
     if(canCreateTasks(role)) a.push({label:(lang==='ar'?'تاسك جديد':'New task'),icon:'plus',action:()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})});
     if(canEdit('projects',role)) a.push({label:(lang==='ar'?'مشروع جديد':'New project'),icon:'plus',action:()=>ctx.openModal('projects',{status:'Not Started'})});
     if(canEdit('leads',role)) a.push({label:(lang==='ar'?'ليد جديد':'New lead'),icon:'plus',action:()=>ctx.openModal('leads',{})});
-    if(canEdit('invoices',role)) a.push({label:(lang==='ar'?'فاتورة جديدة':'New invoice'),icon:'plus',action:()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),tax:5})});
+    if(canEdit('invoices',role)) a.push({label:(lang==='ar'?'فاتورة جديدة':'New invoice'),icon:'plus',action:()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),tax:5,invoiceNumber:nextInvoiceNumber(ctx.db)})});
     if(canEdit('contentCalendar',role)) a.push({label:(lang==='ar'?'كونتنت جديد':'New content'),icon:'calendar',action:()=>ctx.openModal('contentCalendar',{status:'Idea'})});
     return a; })();
   const cmdkItems = (()=>{ const nav=[];
@@ -5398,7 +5598,7 @@ function App(){
               <div class="qc-menu">${quickCreate.map(a=>html`<button key=${a.label} onClick=${()=>{setQcOpen(false);a.action();}}>${React.createElement(Icon[a.icon]||Icon.plus)}<span>${a.label}</span></button>`)}</div>
             <//>`}
           </div>`:''}
-          <div class="qc-wrap">
+          <div class="qc-wrap tb-radio">
             <button class="icon-btn" title=${lang==='ar'?'راديو ماجنت':'Magnet Radio'} onClick=${()=>setRadioOpen(o=>!o)} style=${{color:musicOn?'var(--lime)':'var(--ink-4)'}}>${React.createElement(musicOn?Icon.volume:Icon.volumeOff)}</button>
             ${radioOpen&&html`<${React.Fragment}>
               <div style=${{position:'fixed',inset:0,zIndex:55}} onClick=${()=>setRadioOpen(false)}></div>
@@ -5422,25 +5622,25 @@ function App(){
               </div>
             <//>`}
           </div>
-          <button class="icon-btn" title="Alert sound" onClick=${()=>applyAppSettings({soundAlerts:appSettings.soundAlerts===false})} style=${{color:appSettings.soundAlerts!==false?'var(--lime)':'var(--ink-4)'}}>${React.createElement(appSettings.soundAlerts!==false?Icon.bell:Icon.volumeOff)}</button>
+          <button class="icon-btn tb-sound" title="Alert sound" onClick=${()=>applyAppSettings({soundAlerts:appSettings.soundAlerts===false})} style=${{color:appSettings.soundAlerts!==false?'var(--lime)':'var(--ink-4)'}}>${React.createElement(appSettings.soundAlerts!==false?Icon.bell:Icon.volumeOff)}</button>
           <span class="tag ${cloudOn?'ok':''}"><span class="d"></span>${cloudOn?'Cloud':'Local'}</span>
           <div style=${{position:'relative'}}>
             <button class="icon-btn" onClick=${()=>setNotifOpen(o=>!o)}>${React.createElement(Icon.bell)}${unread>0&&html`<span class="dot"></span>`}</button>
             ${notifOpen&&html`<div class="notif-pop">
-              <div class="notif-h">Notifications</div>
+              <div class="notif-h">${t('Notifications')}</div>
               ${notifs.slice(0,8).map(n=>html`<div class="notif-row ${n.read?'':'unread'}" key=${n.id}
-                  onClick=${()=>{ updateRecord('notifications',n.id,{read:true}); if(n.entityType&&canView(n.entityType,role)) go(n.entityType); setNotifOpen(false); }}>
-                <b>${n.title}</b><span>${n.message}</span><i>${fmtDateTime(n.createdAt)}</i></div>`)}
-              ${notifs.length===0&&html`<div class="notif-row muted">No notifications</div>`}
+                  onClick=${()=>{ updateRecord('notifications',n.id,{read:true}); if(n.entityType&&canView(n.entityType,role)&&moduleEnabled(n.entityType,appSettings)) go(n.entityType); else go('notifications'); setNotifOpen(false); }}>
+                <b>${t(n.title)}</b><span>${n.message}</span><i>${fmtDateTime(n.createdAt)}</i></div>`)}
+              ${notifs.length===0&&html`<div class="notif-row muted">${t('No notifications')}</div>`}
               <div class="notif-foot">
-                <button class="mini" onClick=${()=>{ go('notifications'); setNotifOpen(false); }}>View all</button>
-                ${unread>0&&html`<button class="mini" onClick=${()=>{ notifs.forEach(n=>!n.read&&updateRecord('notifications',n.id,{read:true})); }}>Mark all read</button>`}
+                <button class="mini" onClick=${()=>{ go('notifications'); setNotifOpen(false); }}>${t('View all')}</button>
+                ${unread>0&&html`<button class="mini" onClick=${()=>{ notifs.forEach(n=>!n.read&&updateRecord('notifications',n.id,{read:true})); }}>${t('Mark all read')}</button>`}
               </div>
             </div>`}
           </div>
           <div style=${{width:1,height:24,background:'var(--line)'}}></div>
           <button class="lang-toggle" onClick=${()=>applyAppSettings({language: lang==='ar'?'en':'ar'})} title="Language">${lang==='ar'?'EN':'ع'}</button>
-          <button class="icon-btn" onClick=${()=>applyAppSettings({theme:(appSettings.theme==='light'?'dark':'light')})} title=${appSettings.theme==='light'?(lang==='ar'?'الوضع الداكن':'Dark mode'):(lang==='ar'?'الوضع الفاتح':'Light mode')}>${React.createElement(appSettings.theme==='light'?Icon.moon:Icon.sun)}</button>
+          <button class="icon-btn tb-theme" onClick=${()=>applyAppSettings({theme:(appSettings.theme==='light'?'dark':'light')})} title=${appSettings.theme==='light'?(lang==='ar'?'الوضع الداكن':'Dark mode'):(lang==='ar'?'الوضع الفاتح':'Light mode')}>${React.createElement(appSettings.theme==='light'?Icon.moon:Icon.sun)}</button>
           ${isOwner&&html`<select class="sel" value=${role} onChange=${e=>setRoleOverride(e.target.value===baseRole?null:e.target.value)} title="Switch role for testing (Owner only)">
             ${roleOptions(role).map(r=>html`<option key=${r} value=${r}>${t(r)!==r?t(r):r}</option>`)}
           </select>`}
@@ -5453,24 +5653,30 @@ function App(){
           connectCloud, disconnectCloud, syncNow, saveWebhooks, signInCloud, setLocalRole,
           exportJSON, importJSON, clearLocal, seedDemo, restoreSnapshot, setBackupPrefs, pullFromCloud })}
       </div>
-      ${(()=>{ // mobile bottom navigation (5 slots; last opens the More sheet)
-        const primary=[['dashboard','Dashboard','command'],['accounts','Accounts','people'],['tasks','Tasks','check'],['approvalCenter','Approvals','shield']].filter(it=>canView(it[0],role));
+      ${(()=>{ // mobile bottom navigation (5 slots; last opens the More sheet).
+        // Same gating as the sidebar + the role's own primary modules, so a designer
+        // gets Tasks/Deliverables/Calendar and HR gets Employees/Attendance — not a
+        // fixed set that dead-ends into "No access".
+        const allowedBN = it=>!HIDDEN_NAV.includes(it[0])&&canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role);
+        const allNav=[]; NAVGROUPS.forEach(g=>g.items.forEach(it=>{ if(allowedBN(it)) allNav.push(it); }));
+        const pk=(ROLE_PRIMARY[aliasRole(role)]||ROLE_PRIMARY._default);
+        const primary=pk.map(k=>allNav.find(it=>it[0]===k)).filter(Boolean).slice(0,4);
         return html`<nav class="bottom-nav">
           ${primary.map(it=>html`<button key=${it[0]} class="bn-item ${route===it[0]?'on':''}" onClick=${()=>goM(it[0])}>
-            ${React.createElement(Icon[it[2]]||Icon.command)}<span>${it[1]}</span></button>`)}
-          <button class="bn-item ${moreOpen?'on':''}" onClick=${()=>setMoreOpen(o=>!o)}>${React.createElement(Icon.grid)}<span>More</span></button>
+            ${React.createElement(Icon[it[2]]||Icon.command)}<span>${t(it[0])!==it[0]?t(it[0]):it[1]}</span></button>`)}
+          <button class="bn-item ${moreOpen?'on':''}" onClick=${()=>setMoreOpen(o=>!o)}>${React.createElement(Icon.grid)}<span>${lang==='ar'?'المزيد':'More'}</span></button>
         </nav>`; })()}
     </main>
     ${moreOpen&&html`<div class="more-scrim" onClick=${()=>setMoreOpen(false)}>
       <div class="more-sheet" onClick=${e=>e.stopPropagation()}>
         <div class="more-grip"></div>
         <div class="more-grid">
-          ${NAVGROUPS.flatMap(g=>g.items).filter(it=>canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role)).map(it=>html`<button key=${it[0]} class="more-item ${route===it[0]?'on':''}" onClick=${()=>goM(it[0])}>
-            ${React.createElement(Icon[it[2]]||Icon.command)}<span>${it[1]}</span></button>`)}
+          ${NAVGROUPS.flatMap(g=>g.items).filter(it=>!HIDDEN_NAV.includes(it[0])&&canView(it[0],role)&&moduleEnabled(it[0],appSettings)&&userSeesModule(authUser,it[0],role)).map(it=>html`<button key=${it[0]} class="more-item ${route===it[0]?'on':''}" onClick=${()=>goM(it[0])}>
+            ${React.createElement(Icon[it[2]]||Icon.command)}<span>${t(it[0])!==it[0]?t(it[0]):it[1]}</span></button>`)}
         </div>
       </div></div>`}
 
-    ${modal&&html`<${Modal} title=${'New / Edit '+modal.coll} wide=${true} onClose=${()=>setModal(null)}>
+    ${modal&&html`<${Modal} title=${modal.title||((getLang()==='ar'?'إضافة / تعديل ':'New / Edit ')+(t(modal.coll)!==modal.coll?t(modal.coll):modal.coll))} wide=${true} onClose=${()=>setModal(null)}>
       <${RecordForm} schema=${modal.schema||[]} initial=${modal.initial} db=${db} role=${role}
         onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } if(modal.coll==='employeePayments'){ const pr=egyptPayroll(Number(rec.baseSalary)||0,{bonus:rec.bonus,commission:rec.commission,overtime:rec.overtime,advance:rec.advance,penalties:rec.penalties,deductions:rec.deductions}); updateRecord('employeePayments',rec.id,{grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks!==false&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); } if(modal.coll==='employeePayments'){ const pr=egyptPayroll(Number(created.baseSalary)||0,{bonus:created.bonus,commission:created.commission,overtime:created.overtime,advance:created.advance,penalties:created.penalties,deductions:created.deductions}); updateRecord('employeePayments',created.id,{grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
         onClose=${()=>setModal(null)}/>
@@ -5572,7 +5778,7 @@ const FORM_SCHEMAS = {
     {k:'internalNotes',label:'Internal notes',type:'textarea',group:'Notes'},
   ],
   revisions:[{k:'deliverableId',label:'Deliverable',type:'ref',coll:'deliverables'},{k:'note',label:'Note',type:'textarea',req:true},{k:'assignedTo',label:'Assignee',type:'ref',coll:'employees'},{k:'priority',label:'Priority',type:'select',opts:PRIORITIES},{k:'status',label:'Status',type:'select',opts:ST.revision},{k:'dueDate',label:'Due',type:'date'}],
-  invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date'},{k:'dueDate',label:'Due',type:'date'},{k:'amount',label:'Amount (pre-tax)',type:'number'},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'}],
+  invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date'},{k:'dueDate',label:'Due',type:'date'},{k:'amount',label:'Amount (pre-tax)',type:'number',req:true},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'}],
   payments:[{k:'invoiceId',label:'Invoice',type:'ref',coll:'invoices'},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date'},{k:'method',label:'Method',type:'select',opts:['Bank','Card','Cash','Cheque','Online']}],
   expenses:[{k:'title',label:'Title',req:true},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date'},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'vendor',label:'Vendor'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'status',label:'Status',type:'select',opts:ST.expense},{k:'notes',label:'Notes',type:'textarea'}],
   plans:[{k:'title',label:'Plan / goal',req:true},{k:'timeframe',label:'Timeframe',type:'select',opts:PLAN_TIMEFRAMES},{k:'quarter',label:'Quarter (if quarterly)',type:'select',opts:PLAN_QUARTERS},{k:'period',label:'Period (e.g. Jun 2026 / Q3 2026)'},{k:'owner',label:'Owner',type:'select',opts:[...PARTNERS_DEFAULT.map(p=>p.name),'Both partners','Team']},{k:'status',label:'Status',type:'select',opts:PLAN_STATUS},{k:'progress',label:'Progress %',type:'number'},{k:'dueDate',label:'Due date',type:'date'},{k:'notes',label:'Notes',type:'textarea'}],
@@ -5604,7 +5810,7 @@ const FORM_SCHEMAS = {
   ],
   attendance:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'checkIn',label:'Check in'},{k:'checkOut',label:'Check out'},{k:'workMode',label:'Work mode',type:'select',opts:WORK_MODES},{k:'status',label:'Status',type:'select',opts:ST.attendance},{k:'notes',label:'Notes',type:'textarea'}],
   leaves:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'leaveType',label:'Leave type',type:'select',opts:LEAVE_TYPES,req:true},{k:'startDate',label:'Start',type:'date',req:true},{k:'endDate',label:'End',type:'date'},{k:'days',label:'Days',type:'number'},{k:'reason',label:'Reason',type:'textarea'},{k:'status',label:'Status',type:'select',opts:ST.leave}],
-  employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',req:true,group:'Pay run'},
+  employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',type:'month',req:true,group:'Pay run'},
     {k:'baseSalary',label:'Gross base salary',type:'number',group:'Earnings'},{k:'bonus',label:'Bonus',type:'number',group:'Earnings'},{k:'commission',label:'Commission',type:'number',group:'Earnings'},{k:'overtime',label:'Overtime',type:'number',group:'Earnings'},
     {k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties',type:'number',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
     {k:'paymentMethod',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payout'},{k:'paymentStatus',label:'Status',type:'select',opts:ST.empPayment,group:'Payout'},{k:'receiptLink',label:'Receipt link',group:'Payout'},{k:'notes',label:'Notes',type:'textarea',group:'Payout'}],
@@ -5617,16 +5823,24 @@ const FORM_SCHEMAS = {
   contentCalendar:[{k:'title',label:'Title',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'contentType',label:'Content Type',type:'select',opts:CONTENT_TYPES},{k:'platform',label:'Platform',type:'select',opts:CONTENT_PLATFORMS},{k:'campaignName',label:'Campaign'},{k:'scheduledDate',label:'Scheduled Date',type:'date',req:true},{k:'scheduledTime',label:'Scheduled Time'},{k:'deadline',label:'Deadline',type:'date'},{k:'assignedTo',label:'Assigned To',type:'ref',coll:'employees'},{k:'priority',label:'Priority',type:'select',opts:['Low','Normal','High','Urgent']},{k:'status',label:'Status',type:'select',opts:CONTENT_STATUSES},{k:'approvalStatus',label:'Approval Status',type:'select',opts:['','Pending','Approved','Needs Edits','Rejected']},{k:'caption',label:'Caption',type:'textarea'},{k:'notes',label:'Notes',type:'textarea'},{k:'assetUrl',label:'Asset URL'}],
   renewals:[{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'type',label:'Type',type:'select',opts:['Renewal','Upsell','Cross-sell']},{k:'status',label:'Stage',type:'select',opts:['Identified','Contacted','Proposal Sent','Negotiation','Won','Lost']},{k:'currentValue',label:'Current value',type:'number'},{k:'targetValue',label:'Target value',type:'number'},{k:'renewalDate',label:'Renewal date',type:'date'},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'}],
   reports:[{k:'title',label:'Report title',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'period',label:'Period (YYYY-MM)'},{k:'type',label:'Type',type:'select',opts:['Monthly','Campaign','Quarterly']},{k:'status',label:'Status',type:'select',opts:['Draft','In Review','Sent']}],
-  approvalRequests:[
+  approvalRequests:(function(){
+    // Conditional fields keep the everyday flows tiny: a leave/permission request
+    // shows only its own dates and hides the business Links group entirely.
+    const TIMEOFF=['Leave Request','Permission Request','Lateness Report','Early Leave','Half Day'];
+    const isTO=r=>TIMEOFF.includes(r.requestType);
+    const isLeave=r=>r.requestType==='Leave Request';
+    const hasTimes=r=>['Permission Request','Lateness Report','Early Leave'].includes(r.requestType);
+    return [
     {k:'title',label:'Title',req:true,group:'Request'},{k:'requestType',label:'Type',type:'select',opts:REQUEST_TYPES,req:true,group:'Request'},
     {k:'priority',label:'Priority',type:'select',opts:['Low','Normal','High','Urgent'],group:'Request'},{k:'assignedManagerId',label:'Assign to manager',type:'ref',coll:'employees',req:true,group:'Request'},
-    {k:'description',label:'Description',type:'textarea',group:'Request'},{k:'reason',label:'Reason',type:'textarea',group:'Request'},
-    {k:'employeeId',label:'Employee',type:'ref',coll:'employees',group:'Time off'},{k:'leaveType',label:'Leave type (for Leave)',type:'select',opts:LEAVE_TYPES,group:'Time off'},
-    {k:'date',label:'Date / start',type:'date',group:'Time off'},{k:'endDate',label:'End date (Leave)',type:'date',group:'Time off'},{k:'days',label:'Days (Leave)',type:'number',group:'Time off'},
-    {k:'fromTime',label:'From (Permission/Lateness)',group:'Time off'},{k:'toTime',label:'To (Permission)',group:'Time off'},
-    {k:'amount',label:'Amount (if any)',type:'number',group:'Links'},{k:'clientId',label:'Client',type:'ref',coll:'clients',group:'Links'},{k:'projectId',label:'Project',type:'ref',coll:'projects',group:'Links'},
-    {k:'deliverableId',label:'Deliverable',type:'ref',coll:'deliverables',group:'Links'},{k:'invoiceId',label:'Invoice',type:'ref',coll:'invoices',group:'Links'},{k:'attachments',label:'Attachment link',group:'Links'},
-  ],
+    {k:'description',label:'Description',type:'textarea',group:'Request',showIf:r=>!isTO(r)},{k:'reason',label:'Reason',type:'textarea',group:'Request'},
+    {k:'employeeId',label:'Employee',type:'ref',coll:'employees',group:'Time off',showIf:isTO},{k:'leaveType',label:'Leave type (for Leave)',type:'select',opts:LEAVE_TYPES,group:'Time off',showIf:isLeave,reqIf:isLeave},
+    {k:'date',label:'Date / start',type:'date',group:'Time off',showIf:isTO,reqIf:isTO},{k:'endDate',label:'End date (Leave)',type:'date',group:'Time off',showIf:isLeave},{k:'days',label:'Days (Leave)',type:'number',group:'Time off',showIf:isLeave},
+    {k:'fromTime',label:'From (Permission/Lateness)',group:'Time off',showIf:hasTimes},{k:'toTime',label:'To (Permission)',group:'Time off',showIf:hasTimes},
+    {k:'attachments',label:'Attachment link',group:'Time off',showIf:isTO},
+    {k:'amount',label:'Amount (if any)',type:'number',group:'Links',showIf:r=>!isTO(r)},{k:'clientId',label:'Client',type:'ref',coll:'clients',group:'Links',showIf:r=>!isTO(r)},{k:'projectId',label:'Project',type:'ref',coll:'projects',group:'Links',showIf:r=>!isTO(r)},
+    {k:'deliverableId',label:'Deliverable',type:'ref',coll:'deliverables',group:'Links',showIf:r=>!isTO(r)},{k:'invoiceId',label:'Invoice',type:'ref',coll:'invoices',group:'Links',showIf:r=>!isTO(r)},{k:'attachments',label:'Attachment link',group:'Links',showIf:r=>!isTO(r)},
+  ];})(),
   clientAssets:[
     {k:'title',label:'Title',req:true,group:'Asset'},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Asset'},{k:'projectId',label:'Project',type:'ref',coll:'projects',group:'Asset'},
     {k:'assetType',label:'Type',type:'select',opts:ASSET_TYPES,req:true,group:'Asset'},{k:'accessStatus',label:'Access',type:'select',opts:ST.assetAccess,group:'Asset'},{k:'visibility',label:'Visibility',type:'select',opts:ASSET_VISIBILITY,group:'Asset'},
@@ -5661,9 +5875,9 @@ function renderRoute(route, ctx, x){
   // programmatically (notifications, conversions, stale state). Never RENDER a
   // canonical module the user can't see. Alias/system routes not in SECTIONS are
   // left to their own case handling so nothing legitimate is blocked.
-  if(SECTIONS.includes(route) && !MODULE_ALWAYS_ON.includes(route) && !userSeesModule(user && user.account, route, role)){
+  if(SECTIONS.includes(route) && !userSeesModule(user && user.account, route, role)){
     return html`<div class="view"><${Head} eyebrow="Access" title="No access" desc="You don't have permission to view this section."/>
-      <div class="board-ro" style=${{display:'flex',alignItems:'center',gap:6}}>${React.createElement(Icon.lock)} You don't have access to this module. Ask an admin if you need it.</div></div>`;
+      <div class="board-ro" style=${{display:'flex',alignItems:'center',gap:6}}>${React.createElement(Icon.lock)} ${getLang()==='ar'?'ما عندكش صلاحية للموديول ده. اطلبه من الأدمن لو محتاجه.':"You don't have access to this module. Ask an admin if you need it."}</div></div>`;
   }
   switch(route){
     case 'dashboard': return html`<${DashboardView} ctx=${ctx} byBrand=${x.byBrand}/>`;
@@ -5816,6 +6030,8 @@ function QuickTimeOff({ ctx }){
       <button class="btn btn-pri" onClick=${()=>open('Leave Request', ar?'طلب إجازة':'Leave request')}>${React.createElement(Icon.plus)} ${ar?'إجازة':'Leave'}</button>
       <button class="btn btn-ghost" onClick=${()=>open('Permission Request', ar?'طلب إذن':'Permission request')}>${ar?'إذن':'Permission'}</button>
       <button class="btn btn-ghost" onClick=${()=>open('Lateness Report', ar?'إبلاغ تأخير':'Lateness report')}>${ar?'تأخير':'Lateness'}</button>
+      <button class="btn btn-ghost" onClick=${()=>open('Early Leave', ar?'انصراف مبكر':'Early leave')}>${ar?'مشي بدري':'Early leave'}</button>
+      <button class="btn btn-ghost" onClick=${()=>open('Half Day', ar?'طلب نص يوم':'Half day')}>${ar?'نص يوم':'Half day'}</button>
     </div>
     <div class="muted" style=${{fontSize:12,marginTop:8}}>${ar?'هيتبعت لمديرك للموافقة، وهيوصلك إشعار بالنتيجة.':'Sent to your manager for approval; you’ll be notified of the result.'}</div>
   <//>`;
@@ -6196,7 +6412,7 @@ function DashboardView({ ctx, byBrand }){
             <div class="li-t"><b>${d.title}</b><span>${d.type} · v${d.version||1}</span></div>
             <div class="flex gap8">
               <button class="mini pri" onClick=${()=>ctx.approveDeliverable(d)}>Approve</button>
-              <button class="mini" onClick=${()=>{const n=prompt('What needs changing?');if(n)ctx.requestRevision(d,n);}}>Request revision</button></div></div>`)}
+              <button class="mini" onClick=${()=>{const n=prompt(getLang()==='ar'?'إيه المطلوب تعديله؟':'What needs changing?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'طلب تعديل':'Request revision'}</button></div></div>`)}
           ${dlv.filter(d=>d.status==='Client Review').length===0&&html`<div class="muted" style=${{fontSize:12}}>Nothing is awaiting your approval right now.</div>`}
         <//>
         <${Panel} title="Your invoices">
@@ -6238,7 +6454,7 @@ function DashboardView({ ctx, byBrand }){
       </div>
       <div style=${{marginBottom:18}}><${QuickTimeOff} ctx=${ctx}/></div>
       <${Panel} title="My tasks" pad=${false}>
-        <${DataTable} db=${db} rows=${myTasks} cols=${[{k:'name',label:'Task'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'status',label:'Status',tag:true},{k:'dueDate',label:'Due',date:true}]}/>
+        <${DataTable} db=${db} rows=${myTasks} cols=${[{k:'name',label:'Task',render:r=>r.title||r.name||'—'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'status',label:'Status',tag:true},{k:'dueDate',label:'Due',date:true}]}/>
       <//></div>`;
   }
 
@@ -6325,8 +6541,9 @@ function DashboardView({ ctx, byBrand }){
   const isPM = aliasRole(role)==='Project Manager';
 
   return html`<div class="view">
-    <${Head} eyebrow="Group Command" title=${t('Good morning.')} desc="Live snapshot across Magnet and Spark Marketing."/>
-    ${(()=>{ const m=getBackupMeta(); const days=m.lastDownloadAt?((Date.now()-m.lastDownloadAt)/86400000):999;
+    <${Head} eyebrow=${ctx.lang==='ar'?'غرفة القيادة':'Group Command'} title=${t(new Date().getHours()<12?'Good morning.':'Good evening.')} desc=${t('Live snapshot across Magnet and Spark Marketing.')}/>
+    ${(()=>{ if(!isAdminRole(role)) return null; // backup lives in an admin-only section — don't dead-end other roles
+      const m=getBackupMeta(); const days=m.lastDownloadAt?((Date.now()-m.lastDownloadAt)/86400000):999;
       return days>7?html`<div class="backup-banner"><span>${ctx.lang==='ar'?'يُنصح بأخذ نسخة احتياطية. قم بتصدير بياناتك للحفاظ عليها.':'Backup recommended. Export your data to keep it safe.'}</span>
         <button class="mini pri" onClick=${()=>ctx.go('backupCenter')}>${ctx.lang==='ar'?'النسخ الاحتياطي':'Backup'}</button></div>`:null; })()}
     ${(()=>{ const arr=ctx.lang==='ar'; const today=todayISO();
@@ -6334,7 +6551,7 @@ function DashboardView({ ctx, byBrand }){
       if(canEdit('clients',role)) acts.push([arr?'عميل جديد':'New client',()=>{ctx.go('accounts');ctx.openModal('clients',{status:'Lead'});}]);
       if(canCreateTasks(role)) acts.push([arr?'تاسك جديد':'New task',()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})]);
       if(canEdit('projects',role)) acts.push([arr?'مشروع جديد':'New project',()=>ctx.openModal('projects',{status:'Not Started'})]);
-      if(canEdit('invoices',role)&&fin) acts.push([arr?'فاتورة':'New invoice',()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:today,tax:5})]);
+      if(canEdit('invoices',role)&&fin) acts.push([arr?'فاتورة':'New invoice',()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:today,tax:5,invoiceNumber:nextInvoiceNumber(db)})]);
       const myTasks=(db.tasks||[]).filter(tk=>(tk.assignedTo===user.id||tk.assignedTo===user.name)&&!['Done','Completed','Approved'].includes(tk.status)&&(tk.dueDate===today||isOverdue(tk.dueDate)));
       const approvals=(db.approvalRequests||[]).filter(r=>r.status==='Pending Approval');
       const meetings=(db.meetings||[]).filter(mt=>(mt.date||'').slice(0,10)===today&&mt.status!=='Cancelled');
@@ -6373,7 +6590,7 @@ function DashboardView({ ctx, byBrand }){
       ${fin&&html`<${KPI} label="Expenses (month)" value=${money(expensesM)} icon="trendDown"/>`}
       ${fin&&html`<${KPI} label="Net (month)" value=${money(revenue-expensesM)} icon="trend"/>`}
     </div>
-    <div class="eyebrow" style=${{margin:'4px 0 12px'}}>${isPM?'Team capacity':'HR overview'}</div>
+    <div class="eyebrow" style=${{margin:'4px 0 12px'}}>${t(isPM?'Team capacity':'HR overview')}</div>
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
       <${KPI} label="Active employees" value=${emps.length} icon="people"/>
       ${aliasRole(role)==='Admin'&&html`<${KPI} label="Freelancers" value=${freelancersN} icon="people"/>`}
@@ -6459,7 +6676,7 @@ function InvoicesView({ ctx, visible, ce }){
   const { db } = ctx; const rows=visible('invoices');
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Invoices">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),tax:5})}>${React.createElement(Icon.plus)} New invoice</button>`}<//>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),tax:5,invoiceNumber:nextInvoiceNumber(ctx.db)})}>${React.createElement(Icon.plus)} ${t('New invoice')}</button>`}<//>
     <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('invoices',r)):null}
       onDelete=${ctx.canDelete('invoices')?(r=>ctx.delRec('invoices',r.id,r.invoiceNumber||'invoice')):null}
       cols=${[{k:'invoiceNumber',label:'Invoice'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'issueDate',label:'Issued',date:true},{k:'status',label:'Status',tag:true},
@@ -6469,7 +6686,7 @@ function InvoicesView({ ctx, visible, ce }){
 }
 
 function ReviewDrawer({ ctx, coll, rec, fields, canApprove, onClose }){
-  const ar=false; // finance screens are English-only
+  const ar=getLang()==='ar'; // follow the app language (the finance team is Arabic-speaking too)
   const act=(status)=>{ ctx.updateRecord(coll,rec.id,{status}); ctx.addActivity(coll,rec.id,'status → '+status,rec.title||rec.name||''); onClose(); };
   return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" onClick=${e=>e.stopPropagation()}>
     <div class="cdrawer-h"><div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>${ar?'مراجعة':'Review'} · ${rec.status||'—'}</div>
@@ -6512,7 +6729,7 @@ function SettleForm({ ctx, item, coll, onClose }){
 }
 function ExpensesView({ ctx, ce }){
   const { db, role } = ctx;
-  const ar=false; // English-only finance screen
+  const ar=getLang()==='ar'; // follow the app language
   const [settle,setSettle]=useState(null);
   const partners=getPartners(ctx.appSettings);
   const [rev,setRev]=useState(null);
@@ -6604,7 +6821,7 @@ function CollectionsView({ ctx, ce }){
   const collectedThisMonth=cols.filter(x=>x.status==='Collected' && monthOf(x.collectedDate||x.updatedAt)===m);
   const expectedThisMonth = sum(pending.filter(x=>monthOf(x.dueDate)===m)) + upcoming.filter(u=>!u.has && monthOf(u.dueDate)===m).reduce((s,u)=>s+u.amount,0);
   const statusOf=(x)=> x.status==='Collected'?'Collected' : x.status==='Cancelled'?'Cancelled' : (x.dueDate&&x.dueDate<today?'Overdue':'Pending');
-  const markCollected=(rec)=>{ ctx.updateRecord('collections',rec.id,{status:'Collected',collectedDate:today}); ctx.createRecord('payments',{clientId:rec.clientId, amount:Number(rec.amount)||0, date:today, method:rec.method||'Bank', source:'collection', collectionId:rec.id, notes:'Collection: '+(rec.title||nameById(db.clients,rec.clientId))}); showProPopup('paymentReceived',money(rec.amount)); };
+  const markCollected=(rec)=>{ const _arq=getLang()==='ar'; if(!confirm(_arq?('تأكيد التحصيل: هيتسجل مبلغ '+money(rec.amount)+' كدفعة من '+(nameById(db.clients,rec.clientId)||'العميل')+'. متأكد؟'):('Confirm collection: this records '+money(rec.amount)+' as a payment from '+(nameById(db.clients,rec.clientId)||'the client')+'. Continue?'))) return; ctx.updateRecord('collections',rec.id,{status:'Collected',collectedDate:today}); ctx.createRecord('payments',{clientId:rec.clientId, amount:Number(rec.amount)||0, date:today, method:rec.method||'Bank', source:'collection', collectionId:rec.id, notes:'Collection: '+(rec.title||nameById(db.clients,rec.clientId))}); showProPopup('paymentReceived',money(rec.amount)); };
   const createFromRetainer=(u)=>{ ctx.createRecord('collections',{clientId:u.client.id, title:'Retainer — '+(u.client.brandName||u.client.name||''), amount:u.amount, dueDate:u.dueDate, status:'Pending'}); };
   const generateDue=()=>{ let n=0; upcoming.forEach(u=>{ if(!u.has){ ctx.createRecord('collections',{clientId:u.client.id, title:'Retainer — '+(u.client.brandName||u.client.name||''), amount:u.amount, dueDate:u.dueDate, status:'Pending'}); n++; } }); showProPopup('savedNotes', n+' collection(s) generated'); };
   useEffect(()=>{ try{ const key='tia_coll_notify'; if(store.get(key)!==today && (overdue.length||dueSoon.length)){ store.set(key,today); ctx.createRecord('notifications',{role:'Accountant', title:'Collections due', message:(overdue.length?overdue.length+' overdue':'')+(overdue.length&&dueSoon.length?' · ':'')+(dueSoon.length?dueSoon.length+' due this week':''), entityType:'collections', entityId:'', read:false}); } }catch(e){} },[]); // eslint-disable-line
@@ -6634,7 +6851,7 @@ function CollectionsView({ ctx, ce }){
       <${DataTable} db=${db} rows=${cols} canEditFlag=${ce}
         onEdit=${ce?(r=>ctx.openModal('collections',r)):null}
         onDelete=${ctx.canDelete('collections')?(r=>ctx.delRec('collections',r.id,r.title||nameById(db.clients,r.clientId))):null}
-        extraActions=${ce?(r=>statusOf(r)==='Collected'?html`<span class="vpill ok">Collected</span>`:html`<button class="mini pri" onClick=${()=>markCollected(r)}>Mark collected</button>`):null}
+        extraActions=${ce?(r=>statusOf(r)==='Collected'?html`<span class="vpill ok">${getLang()==="ar"?"اتحصّل":"Collected"}</span>`:html`<button class="mini pri" onClick=${()=>markCollected(r)}>${getLang()==='ar'?'تسجيل التحصيل':'Mark collected'}</button>`):null}
         cols=${[{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'title',label:'Description'},{k:'amount',label:'Amount',num:true,money:true},{k:'dueDate',label:'Due',date:true},{k:'status',label:'Status',render:r=>html`<${Tag} type=${statusOf(r)==='Collected'?'ok':statusOf(r)==='Overdue'?'warn':undefined}>${statusOf(r)}<//>`},{k:'collectedDate',label:'Collected',date:true}]}
         empty=${{title:'No collections tracked yet',text:'Use "Generate due" or "New collection" to start tracking.',icon:'wallet'}}/>
     <//>
@@ -6962,7 +7179,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
 
         ${tab==='Tasks'&&html`<div>
           <div class="flex" style=${{gap:18,marginBottom:16}}>${stat('Active',m.active)}${stat('Overdue',m.overdue,m.overdue?'var(--neg)':null)}${stat('Due today',m.dueToday)}${stat('Done (month)',m.completedMonth,'var(--pos)')}</div>
-          <${DataTable} db=${db} rows=${myTasks} cols=${[{k:'name',label:'Task'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'status',label:'Status',tag:true},{k:'dueDate',label:'Due',date:true},{k:'priority',label:'Priority'}]}/></div>`}
+          <${DataTable} db=${db} rows=${myTasks} cols=${[{k:'name',label:'Task',render:r=>r.title||r.name||'—'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'status',label:'Status',tag:true},{k:'dueDate',label:'Due',date:true},{k:'priority',label:'Priority'}]}/></div>`}
 
         ${tab==='Projects & Clients'&&html`<div>
           <${Panel} title="Projects (as PM/assignee)" pad=${false}>
@@ -7019,7 +7236,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
 
 function AttendanceView({ ctx, ce }){
   const { db, appSettings, role } = ctx;
-  const ar = false; // English-only HR screen
+  const ar = getLang()==='ar'; // follow the app language
   const seeSalary = canSeeSalary(role); // hide salary/payroll columns from PMs etc.
   const [month,setMonth]=useState(thisMonth());
   const workDays = Number(appSettings.workDaysPerMonth)||26;
@@ -7109,7 +7326,7 @@ function DocView({ coll, title, ctx, visible, ce, gen, cols }){
     ${preview&&html`<${Modal} title=${title+' preview'} wide=${true} onClose=${()=>setPreview(null)}>
       <pre class="doc-preview">${gen(preview, db)}</pre>
       <div class="form-foot">
-        <button class="btn btn-ghost" onClick=${()=>{navigator.clipboard&&navigator.clipboard.writeText(gen(preview,db));alert('Copied to clipboard');}}>Copy text</button>
+        <button class="btn btn-ghost" onClick=${()=>{navigator.clipboard&&navigator.clipboard.writeText(gen(preview,db));alert(getLang()==='ar'?'اتنسخ.':'Copied to clipboard');}}>${getLang()==='ar'?'نسخ النص':'Copy text'}</button>
         ${coll==='proposals'&&html`<button class="btn btn-ghost" onClick=${()=>markStatus(preview,'Sent')}>Mark Sent</button>`}
         ${coll==='proposals'&&html`<button class="btn btn-pri" onClick=${()=>{markStatus(preview,'Accepted');setPreview(null);}}>Mark Accepted</button>`}
         ${coll==='quotations'&&html`<button class="btn btn-pri" onClick=${()=>{markStatus(preview,'Accepted');setPreview(null);}}>Mark Accepted</button>`}
@@ -7335,7 +7552,7 @@ function SettingsView({ ctx, x }){
    ============================================================================ */
 
 /* small shared stat block */
-function _stat(l,v,c){ return html`<div style=${{flex:1,minWidth:110}}><div class="eyebrow">${l}</div><div style=${{fontFamily:'var(--display)',fontWeight:700,fontSize:18,marginTop:5,color:c||'var(--ink)'}}>${v}</div></div>`; }
+function _stat(l,v,c){ return html`<div style=${{flex:1,minWidth:110}}><div class="eyebrow">${t(l)}</div><div style=${{fontFamily:'var(--display)',fontWeight:700,fontSize:18,marginTop:5,color:c||'var(--ink)'}}>${v}</div></div>`; }
 function ProgressBar({ pct }){ return html`<div class="flex center" style=${{gap:10,minWidth:120}}><div class="meter" style=${{flex:1}}><i style=${{width:Math.min(100,pct||0)+'%'}}></i></div><span class="mono" style=${{fontSize:11,color:'var(--ink-3)'}}>${pct||0}%</span></div>`; }
 
 /* ============================ CLIENTS ============================ */
@@ -7633,9 +7850,9 @@ function TasksView({ ctx, visible, ce }){
   let rows=all.filter(VIEWS[view]||(()=>true));
   return html`<div class="view">
     <${Head} eyebrow="Delivery" title="Tasks" desc="Drag across the workflow, or open a task for full detail.">
-      <select class="sel" value=${view} onChange=${e=>setView(e.target.value)}>${Object.keys(VIEWS).map(v=>html`<option key=${v} value=${v}>${v}</option>`)}</select>
-      <div class="seg"><button class=${layout==='board'?'on':''} onClick=${()=>setLayout('board')}>Board</button><button class=${layout==='list'?'on':''} onClick=${()=>setLayout('list')}>List</button></div>
-      ${cc&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})}>${React.createElement(Icon.plus)} New task</button>`}<//>
+      <select class="sel" value=${view} onChange=${e=>setView(e.target.value)}>${Object.keys(VIEWS).map(v=>html`<option key=${v} value=${v}>${ctx.lang==='ar'?({'My Tasks':'مهامي','All Tasks':'كل المهام','Today':'النهاردة','This Week':'الأسبوع ده','Overdue':'المتأخرة','Internal Review':'مراجعة داخلية','Client Review':'مراجعة العميل','Blocked':'متعطلة','Done':'الخالصة'}[v]||v):v}</option>`)}</select>
+      <div class="seg"><button class=${layout==='board'?'on':''} onClick=${()=>setLayout('board')}>${ctx.lang==='ar'?'بورد':'Board'}</button><button class=${layout==='list'?'on':''} onClick=${()=>setLayout('list')}>${ctx.lang==='ar'?'قائمة':'List'}</button></div>
+      ${cc&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})}>${React.createElement(Icon.plus)} ${t('New task')}</button>`}<//>
     ${rows.length===0
       ? html`<${EmptyState} icon="check"
           title=${ctx.lang==='ar'?'مفيش تاسكات هنا':'No tasks here'}
@@ -7652,7 +7869,7 @@ function TasksView({ ctx, visible, ce }){
             <div class="muted" style=${{fontSize:11,marginTop:5}}>${nameById(db.projects,t.projectId)}</div>
             <div class="flex between center" style=${{marginTop:8}}><span class="muted" style=${{fontSize:11}}>${nameById(db.employees,t.assignedTo)}</span>
               ${d.overdue?html`<span class="mono" style=${{fontSize:10,color:'var(--neg)'}}>${d.delayDays}d late</span>`:t.dueDate?html`<span class="muted" style=${{fontSize:10}}>${fmtDate(t.dueDate)}</span>`:''}</div></div>`;}}/>`
-      : html`<${DataTable} db=${db} rows=${rows} extraActions=${t=>html`<button class="mini" onClick=${()=>setSel(t)}>Open</button>`}
+      : html`<${DataTable} db=${db} rows=${rows} extraActions=${t=>html`<button class="mini" onClick=${()=>setSel(t)}>${ctx.lang==='ar'?'فتح':'Open'}</button>`}
           canEditFlag=${ce} onDelete=${ce?(r=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة؟':'Delete this task?'))) ctx.deleteRecord('tasks',r.id); }):null}
           cols=${[{k:'title',label:'Task',render:r=>r.title||r.name},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'assignedTo',label:'Assignee',ref:true,coll:'employees'},{k:'status',label:'Status',tag:true},{k:'priority',label:'Priority'},{k:'dueDate',label:'Due',render:r=>{const d=calculateTaskDelay(r);return html`<span style=${{color:d.overdue?'var(--neg)':'var(--ink-2)'}}>${fmtDate(r.dueDate)}</span>`;}}]}/>`}
     ${sel&&html`<${TaskDetail} ctx=${ctx} task=${sel} ce=${ce} onClose=${()=>setSel(null)}/>`}
@@ -7721,7 +7938,7 @@ function DeliverablesView({ ctx, visible, ce }){
         <div class="flex gap8" style=${{marginTop:8,flexWrap:'wrap'}}>
           ${ce&&d.status!=='Client Review'&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();ctx.sendToClientReview(d);}}>→ Client</button>`}
           ${approve&&d.status==='Client Review'&&html`<button class="mini pri" onClick=${ev=>{ev.stopPropagation();ctx.approveDeliverable(d);}}>Approve</button>`}
-          ${approve&&d.status==='Client Review'&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();const n=prompt('Revision note?');if(n)ctx.requestRevision(d,n);}}>Revise</button>`}
+          ${approve&&d.status==='Client Review'&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();const n=prompt(getLang()==='ar'?'ملاحظة التعديل؟':'Revision note?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'تعديل':'Revise'}</button>`}
         </div></div>`}/>
     ${sel&&html`<${DeliverableDetail} ctx=${ctx} dlv=${sel} ce=${ce} approve=${approve} onClose=${()=>setSel(null)}/>`}
   </div>`;
@@ -7744,7 +7961,7 @@ function DeliverableDetail({ ctx, dlv, ce, approve, onClose }){
         <div class="flex gap8" style=${{flexWrap:'wrap',marginBottom:16}}>
           ${ce&&d.status!=='Client Review'&&html`<button class="mini" onClick=${()=>ctx.sendToClientReview(d)}>Send to Client Review</button>`}
           ${approve&&d.status==='Client Review'&&html`<button class="mini pri" onClick=${()=>ctx.approveDeliverable(d)}>Approve</button>`}
-          ${approve&&d.status==='Client Review'&&html`<button class="mini" onClick=${()=>{const n=prompt('What needs changing?');if(n)ctx.requestRevision(d,n);}}>Request Revision</button>`}
+          ${approve&&d.status==='Client Review'&&html`<button class="mini" onClick=${()=>{const n=prompt(getLang()==='ar'?'إيه المطلوب تعديله؟':'What needs changing?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'طلب تعديل':'Request Revision'}</button>`}
           ${ce&&html`<button class="mini" onClick=${()=>ctx.addDeliverableVersion(d)}>Add Version</button>`}
           ${ce&&html`<button class="mini" onClick=${()=>upd({status:'Scheduled'},'scheduled')}>Mark Scheduled</button>`}
           ${ce&&html`<button class="mini" onClick=${()=>upd({status:'Published',published:true},'published')}>Mark Published</button>`}
@@ -7791,14 +8008,16 @@ function RequestsView({ ctx, visible, ce }){
     'Rejected':r=>r.status==='Rejected',
   };
   let rows=all.filter(VIEWS[view]||(()=>true));
+  const arr=getLang()==='ar';
+  const TABT={'My Requests':'طلباتي','Pending My Approval':'مستني موافقتي','All Requests':'كل الطلبات','Approved':'اللي اتوافق عليها','Rejected':'المرفوضة'};
   return html`<div class="view">
-    <${Head} eyebrow="Operations" title="Requests / Approvals" desc="Submit requests and route them to the right manager.">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('approvalRequests',{priority:'Normal',requestType:'Other'},null,'New request')}>${React.createElement(Icon.plus)} New request</button>`}<//>
+    <${Head} eyebrow=${arr?'التشغيل':'Operations'} title=${arr?'الطلبات والموافقات':'Requests / Approvals'} desc=${arr?'قدّم طلبك وهيوصل للمدير المسؤول عن الموافقة.':'Submit requests and route them to the right manager.'}>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('approvalRequests',{priority:'Normal',requestType:'Other'},null,arr?'طلب جديد':'New request')}>${React.createElement(Icon.plus)} ${arr?'طلب جديد':'New request'}</button>`}<//>
     <div style=${{marginBottom:16}}><${QuickTimeOff} ctx=${ctx}/></div>
     <div class="flex gap8" style=${{marginBottom:16,flexWrap:'wrap'}}>
-      ${Object.keys(VIEWS).map(v=>html`<button key=${v} class="mini ${view===v?'pri':''}" onClick=${()=>setView(v)}>${v}</button>`)}
-      <span class="muted" style=${{fontSize:12,marginLeft:'auto'}}>${rows.length} request(s)</span></div>
-    <${DataTable} db=${db} rows=${rows} extraActions=${r=>html`<button class="mini" onClick=${()=>setSel(r)}>Open</button>`}
+      ${Object.keys(VIEWS).map(v=>html`<button key=${v} class="mini ${view===v?'pri':''}" onClick=${()=>setView(v)}>${arr?(TABT[v]||v):v}</button>`)}
+      <span class="muted" style=${{fontSize:12,marginLeft:'auto'}}>${rows.length} ${arr?'طلب':'request(s)'}</span></div>
+    <${DataTable} db=${db} rows=${rows} extraActions=${r=>html`<button class="mini" onClick=${()=>setSel(r)}>${arr?'فتح':'Open'}</button>`}
       cols=${[{k:'requestNumber',label:'#'},{k:'title',label:'Title'},{k:'requestType',label:'Type'},{k:'requestedByName',label:'By'},{k:'assignedManagerName',label:'Manager'},{k:'priority',label:'Priority'},{k:'status',label:'Status',tag:true}]}/>
     ${sel&&html`<${RequestDetail} ctx=${ctx} req=${sel} onClose=${()=>setSel(null)}/>`}
   </div>`;
@@ -7808,22 +8027,23 @@ function RequestDetail({ ctx, req, onClose }){
   const r = byId(db.approvalRequests, req.id)||req;
   const [comment,setComment]=useState('');
   const canApr = r.status==='Pending Approval' && (aliasRole(role)==='Admin' || r.assignedManagerId===user.id || canApproveRequest(role,r.requestType));
+  const arr=getLang()==='ar';
   return html`<${Modal} title=${r.requestNumber+' · '+r.title} wide=${true} onClose=${onClose}>
     <div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:16}}>
-      ${_stat('Type',r.requestType)}${_stat('Priority',r.priority)}${_stat('Status',r.status)}${_stat('By',r.requestedByName)}${r.amount?_stat('Amount',money(r.amount)):''}</div>
-    ${r.description?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">Description</div><div style=${{marginTop:6,fontSize:13}}>${r.description}</div></div>`:''}
-    ${r.reason?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">Reason</div><div style=${{marginTop:6,fontSize:13}}>${r.reason}</div></div>`:''}
-    ${r.managerComment?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">Manager comment</div><div style=${{marginTop:6,fontSize:13}}>${r.managerComment}</div></div>`:''}
+      ${_stat(arr?'النوع':'Type',t(r.requestType))}${_stat(arr?'الأولوية':'Priority',t(r.priority))}${_stat(arr?'الحالة':'Status',t(r.status))}${_stat(arr?'مقدم الطلب':'By',r.requestedByName)}${r.amount?_stat(arr?'المبلغ':'Amount',money(r.amount)):''}</div>
+    ${r.description?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'الوصف':'Description'}</div><div style=${{marginTop:6,fontSize:13}}>${r.description}</div></div>`:''}
+    ${r.reason?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'السبب':'Reason'}</div><div style=${{marginTop:6,fontSize:13}}>${r.reason}</div></div>`:''}
+    ${r.managerComment?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'تعليق المدير':'Manager comment'}</div><div style=${{marginTop:6,fontSize:13}}>${r.managerComment}</div></div>`:''}
     ${canApr?html`<div style=${{marginTop:8}}>
-      <input class="sel" style=${{width:'100%',marginBottom:10}} placeholder="Manager comment (optional)…" value=${comment} onChange=${e=>setComment(e.target.value)}/>
+      <input class="sel" style=${{width:'100%',marginBottom:10}} placeholder=${arr?'تعليق المدير (اختياري)…':'Manager comment (optional)…'} value=${comment} onChange=${e=>setComment(e.target.value)}/>
       <div class="flex gap8">
-        <button class="btn btn-pri" onClick=${()=>{ctx.approveRequest(r,comment);onClose();}}>Approve</button>
-        <button class="btn btn-ghost" onClick=${()=>{ctx.rejectRequest(r,comment);onClose();}}>Reject</button>
-        <button class="btn btn-ghost" onClick=${()=>{ctx.requestChanges(r,comment);onClose();}}>Request changes</button>
+        <button class="btn btn-pri" onClick=${()=>{ctx.approveRequest(r,comment);onClose();}}>${arr?'موافقة':'Approve'}</button>
+        <button class="btn btn-ghost" onClick=${()=>{ctx.rejectRequest(r,comment);onClose();}}>${arr?'رفض':'Reject'}</button>
+        <button class="btn btn-ghost" onClick=${()=>{ctx.requestChanges(r,comment);onClose();}}>${arr?'طلب تعديلات':'Request changes'}</button>
       </div></div>`
-    : r.status==='Approved'?html`<div class="ok" style=${{fontSize:13}}>Approved ${r.approvedAt?('· '+fmtDateTime(r.approvedAt)):''}</div>`
-    : r.status==='Rejected'?html`<div class="neg" style=${{fontSize:13}}>Rejected ${r.rejectedAt?('· '+fmtDateTime(r.rejectedAt)):''}</div>`
-    : html`<div class="muted" style=${{fontSize:12}}>Awaiting ${r.assignedManagerName||'manager'} approval.</div>`}
+    : r.status==='Approved'?html`<div class="ok" style=${{fontSize:13}}>${arr?'تمت الموافقة':'Approved'} ${r.approvedAt?('· '+fmtDateTime(r.approvedAt)):''}</div>`
+    : r.status==='Rejected'?html`<div class="neg" style=${{fontSize:13}}>${arr?'اترفض':'Rejected'} ${r.rejectedAt?('· '+fmtDateTime(r.rejectedAt)):''}</div>`
+    : html`<div class="muted" style=${{fontSize:12}}>${arr?('في انتظار موافقة '+(r.assignedManagerName||'المدير')+'.'):('Awaiting '+(r.assignedManagerName||'manager')+' approval.')}</div>`}
   <//>`;
 }
 
@@ -8301,7 +8521,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
       <div class="flex center" style=${{justifyContent:'center',gap:10,marginTop:16}}>
         <button class="link-btn" onClick=${()=>applyAppSettings({language:ar?'en':'ar'})}>${ar?'English':'العربية'}</button>
       </div>
-      <div class="muted" style=${{fontSize:10.5,textAlign:'center',marginTop:14,lineHeight:1.6}}>${ar?'إصدار محلي للاختبار الداخلي. للاستخدام الإنتاجي اربط النظام بقاعدة بيانات آمنة.':'Local/demo authentication for internal testing. Connect a secure backend for production.'}</div>
+      <div class="muted" style=${{fontSize:10.5,textAlign:'center',marginTop:14,lineHeight:1.6}}>${ar?'نظام ماجنت الداخلي — لو نسيت كلمة السر استخدم "نسيت كلمة المرور؟" أو كلم الأدمن.':'Magnet internal system — forgot your password? Use "Forgot password?" or contact your admin.'}</div>
     </div></div>`;
 }
 
@@ -8410,7 +8630,7 @@ function ApprovalCenterView({ ctx }){
       : tab==='Deliverables'?(pendDlv.length?pendDlv.map(d=>html`<${Panel} key=${d.id} className="mb18">
           <div class="flex between center"><div><b>${d.title}</b><div class="muted" style=${{fontSize:12,marginTop:3}}>${d.type} · v${d.version||1} · ${nameById(db.clients,d.clientId)}</div></div><${Tag}>${d.status}<//></div>
           <div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" onClick=${()=>ctx.approveDeliverable(d)}>Approve</button>
-            <button class="btn btn-ghost" onClick=${()=>{const n=prompt('What needs changing?');if(n)ctx.requestRevision(d,n);}}>Request edits</button></div><//>`):html`<${Panel}><${EmptyState} title="No deliverables to review" text="Nothing is awaiting sign-off." icon="check"/><//>`)
+            <button class="btn btn-ghost" onClick=${()=>{const n=prompt(getLang()==='ar'?'إيه المطلوب تعديله؟':'What needs changing?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'طلب تعديلات':'Request edits'}</button></div><//>`):html`<${Panel}><${EmptyState} title="No deliverables to review" text="Nothing is awaiting sign-off." icon="check"/><//>`)
       : tab==='Proposals'?(pendProp.length?pendProp.map(p=>html`<${Panel} key=${p.id} className="mb18">
           <div class="flex between center"><div><b>${p.title}</b><div class="muted" style=${{fontSize:12,marginTop:3}}>${nameById(db.clients,p.clientId)}</div></div><${Tag}>${p.status}<//></div>
           <div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" onClick=${()=>{ctx.updateRecord('proposals',p.id,{status:'Approved Internally'});ctx.addActivity('proposals',p.id,'approved internally',p.title);showProPopup('requestApproved',p.title);}}>Approve</button></div><//>`):html`<${Panel}><${EmptyState} title="No proposals pending" text="No proposals are awaiting internal approval." icon="check"/><//>`)
