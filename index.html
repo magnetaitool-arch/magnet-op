@@ -5515,8 +5515,11 @@ const FORM_SCHEMAS = {
     {k:'planPosts',label:'Posts / month',type:'number',group:'Plan'},{k:'planReels',label:'Reels / month',type:'number',group:'Plan'},
     {k:'planCarousels',label:'Carousels / month',type:'number',group:'Plan'},{k:'planStories',label:'Stories / month',type:'number',group:'Plan'},
     // Links — all clickable
-    {k:'website',label:'Website',group:'Links'},{k:'instagram',label:'Instagram',group:'Links'},{k:'googleDriveFolder',label:'Drive folder',group:'Links'},
-    {k:'brandGuidelinesLink',label:'Brand guidelines',group:'Links'},{k:'whatsappGroupLink',label:'WhatsApp group',group:'Links'},
+    {k:'website',label:'Website',group:'Links'},{k:'instagram',label:'Instagram',group:'Links'},{k:'facebook',label:'Facebook',group:'Links'},
+    {k:'tiktok',label:'TikTok',group:'Links'},{k:'youtube',label:'YouTube',group:'Links'},{k:'linkedin',label:'LinkedIn',group:'Links'},
+    {k:'snapchat',label:'Snapchat',group:'Links'},{k:'xTwitter',label:'X (Twitter)',group:'Links'},
+    {k:'googleDriveFolder',label:'Drive folder',group:'Links'},{k:'brandGuidelinesLink',label:'Brand guidelines',group:'Links'},{k:'whatsappGroupLink',label:'WhatsApp group',group:'Links'},
+    {k:'otherLinks',label:'Other platforms / links (one per line)',type:'textarea',group:'Links'},
     // Advanced — optional, collapsed by default
     {k:'projectManagerId',label:'Project manager (optional)',type:'ref',coll:'employees',group:'Advanced'},
     {k:'legalName',label:'Legal name',group:'Advanced'},{k:'priority',label:'Priority',type:'select',opts:CLIENT_PRIORITIES,group:'Advanced'},{k:'source',label:'Source',group:'Advanced'},
@@ -6083,7 +6086,7 @@ function AccountDrawer({ ctx, client, fin, ce, onClose }){
         <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'لقطة الحساب':'Account snapshot'}</b></div>
         ${[[ar?'الكونتاكت':'Main contact', c.mainContactName||c.contactPerson],[ar?'هاتف / واتساب':'Phone / WhatsApp', c.mainContactWhatsapp||c.whatsapp||c.mainContactPhone||c.phone],[ar?'أكونت مانجر':'Account manager', c.accountManagerId?empById(c.accountManagerId):''],[ar?'بروجيكت مانجر':'Project manager', c.projectManagerId?empById(c.projectManagerId):''],[ar?'الخدمات':'Services', Array.isArray(c.services)?c.services.join(', '):c.serviceType],[ar?'الريتينر / الفوترة':'Retainer / Billing', (c.monthlyRetainer?money(c.monthlyRetainer):'')+(c.billingCycle?(' · '+c.billingCycle):'')]].filter(r=>r[1]).map((r,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'5px 0',borderBottom:'1px solid var(--line)'}}><span class="muted" style=${{fontSize:12}}>${r[0]}</span><span style=${{fontSize:12.5,textAlign:ar?'left':'right'}}>${r[1]}</span></div>`)}
 
-        ${(()=>{ const links=[[ar?'الموقع':'Website',c.website],[ar?'إنستجرام':'Instagram',c.instagram],[ar?'مجلد درايف':'Drive folder',c.googleDriveFolder],[ar?'دليل الهوية':'Brand guidelines',c.brandGuidelinesLink],[ar?'جروب واتساب':'WhatsApp group',c.whatsappGroupLink]].filter(r=>r[1]); return links.length?html`
+        ${(()=>{ const links=[[ar?'الموقع':'Website',c.website],[ar?'إنستجرام':'Instagram',c.instagram],['Facebook',c.facebook],['TikTok',c.tiktok],['YouTube',c.youtube],['LinkedIn',c.linkedin],['Snapchat',c.snapchat],['X (Twitter)',c.xTwitter],[ar?'مجلد درايف':'Drive folder',c.googleDriveFolder],[ar?'دليل الهوية':'Brand guidelines',c.brandGuidelinesLink],[ar?'جروب واتساب':'WhatsApp group',c.whatsappGroupLink]].filter(r=>r[1]); return links.length?html`
         <div style=${{margin:'18px 0 8px'}}><b style=${{fontSize:13}}>${ar?'الروابط':'Links'}</b> <span class="muted" style=${{fontSize:10.5}}>${ar?'اضغط يفتح':'tap to open'}</span></div>
         ${links.map((r,i)=>html`<div class="flex between center" key=${i} style=${{gap:10,padding:'5px 0',borderBottom:'1px solid var(--line)'}}><span class="muted" style=${{fontSize:12}}>${r[0]}</span><${Ln} href=${r[1]}/></div>`)}`:''; })()}
 
