@@ -7034,13 +7034,35 @@ function AttendanceView({ ctx, ce }){
       cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'workMode',label:'Mode'},{k:'status',label:'Status',tag:true}]}/></div>`;
 }
 
+// Leave balance for an employee this year (allowance from settings − approved days used).
+function leaveBalance(db, empId, appS){
+  const annual=(appS&&appS.annualLeaveDefault!=null)?appS.annualLeaveDefault:21;
+  const sick=(appS&&appS.sickLeaveDefault!=null)?appS.sickLeaveDefault:6;
+  const yr=todayISO().slice(0,4);
+  const approved=(db.leaves||[]).filter(l=>l.employeeId===empId && l.status==='Approved' && (l.startDate||'').startsWith(yr));
+  const usedAnnual=approved.filter(l=>!l.leaveType||/annual|سنوي/i.test(l.leaveType)).reduce((s,l)=>s+(Number(l.days)||0),0);
+  const usedSick=approved.filter(l=>/sick|مرض/i.test(l.leaveType||'')).reduce((s,l)=>s+(Number(l.days)||0),0);
+  return { annual, sick, usedAnnual, usedSick, remainingAnnual:annual-usedAnnual, remainingSick:sick-usedSick };
+}
 function LeavesView({ ctx, ce }){
-  const { db, role } = ctx;
+  const { db, role, appSettings } = ctx; const ar=ctx.lang==='ar';
   const canApproveLeave = ['Admin','Project Manager','HR','Marketing Director','Art Director'].includes(aliasRole(role));
   const approve=(r,s)=>ctx.updateRecord('leaves',r.id,{status:s,approvedBy:ctx.user.id,approvedAt:nowISO()});
+  const emps=(db.employees||[]).filter(e=>!['Resigned','Terminated','Archived'].includes(e.status));
   return html`<div class="view">
-    <${Head} eyebrow="Team / HR" title="Leaves" desc="Leave requests and approvals.">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('leaves',{status:'Requested',startDate:todayISO()})}>${React.createElement(Icon.plus)} Request leave</button>`}<//>
+    <${Head} eyebrow="Team / HR" title=${ar?'الإجازات':'Leaves'} desc=${ar?'طلبات الإجازات والأرصدة والاعتماد.':'Leave requests, balances and approvals.'}>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('leaves',{status:'Requested',startDate:todayISO()})}>${React.createElement(Icon.plus)} ${ar?'طلب إجازة':'Request leave'}</button>`}<//>
+    <${Panel} title=${ar?'أرصدة الإجازات ('+todayISO().slice(0,4)+')':'Leave balances ('+todayISO().slice(0,4)+')'} sub=${ar?'الرصيد من الإعدادات ناقص المعتمَد':'allowance from settings − approved days'} className="mb18">
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>${ar?'الموظف':'Employee'}</th><th class="right">${ar?'سنوية مستخدمة':'Annual used'}</th><th class="right">${ar?'سنوية متبقية':'Annual left'}</th><th class="right">${ar?'مرضية مستخدمة':'Sick used'}</th><th class="right">${ar?'مرضية متبقية':'Sick left'}</th></tr></thead><tbody>
+        ${emps.map(e=>{ const b=leaveBalance(db,e.id,appSettings); return html`<tr key=${e.id}>
+          <td data-label="Employee"><b>${e.fullName||e.name}</b></td>
+          <td class="right mono" data-label="Annual used">${b.usedAnnual}</td>
+          <td class="right mono" data-label="Annual left" style=${{color:b.remainingAnnual<=0?'var(--warn)':'var(--lime)'}}>${b.remainingAnnual}</td>
+          <td class="right mono" data-label="Sick used">${b.usedSick}</td>
+          <td class="right mono" data-label="Sick left" style=${{color:b.remainingSick<=0?'var(--warn)':'var(--ink-2)'}}>${b.remainingSick}</td></tr>`; })}
+        ${emps.length===0?html`<tr><td colspan="5" class="muted" style=${{textAlign:'center',padding:16}}>${ar?'مفيش موظفين':'No employees'}</td></tr>`:''}
+      </tbody></table></div>
+    <//>
     <${DataTable} db=${db} rows=${(db.leaves||[]).slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''))} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('leaves',r)):null}
       extraActions=${canApproveLeave?(r=>r.status==='Requested'?html`<button class="mini pri" onClick=${()=>approve(r,'Approved')}>Approve</button><button class="mini" onClick=${()=>approve(r,'Rejected')}>Reject</button>`:null):null}
       cols=${[{k:'employeeId',label:'Employee',ref:true,coll:'employees'},{k:'leaveType',label:'Type'},{k:'startDate',label:'From',date:true},{k:'endDate',label:'To',date:true},{k:'days',label:'Days',num:true},{k:'status',label:'Status',tag:true}]}/></div>`;
@@ -7101,6 +7123,8 @@ function SettingsView({ ctx, x }){
   const setInterval=(h)=>{ x.setBackupPrefs({intervalH:Number(h)}); setMeta(getBackupMeta()); };
   const [pp,setPp]=useState(getPopupPrefs());
   const savePp=(patch)=>{ const n=Object.assign({},pp,patch); setPp(n); setPopupPrefs(patch); };
+  const arr=ctx.lang==='ar'; const pcfg=payrollCfg();
+  const setPay=(k,v)=>ctx.applyAppSettings({payroll:Object.assign({},payrollCfg(),{[k]:v})});
   return html`<div class="view">
     <${Head} eyebrow="Configuration" title="Settings & Database" desc="Cloud status, Supabase connection, auth, webhooks, popups and backups."/>
 
@@ -7117,6 +7141,21 @@ function SettingsView({ ctx, x }){
             <option value="light">${ctx.lang==='ar'?'فاتح':'Light'}</option><option value="dark">${ctx.lang==='ar'?'داكن':'Dark'}</option></select></label>
       </div>
       <div class="muted" style=${{fontSize:12,marginTop:10}}>${ctx.lang==='ar'?'تُطبَّق العملة على لوحة التحكم والفواتير والعروض والتقارير. القيم القديمة تستخدم العملة الافتراضية.':'Currency applies to dashboard, invoices, proposals and reports. Existing amounts use the default currency.'}</div>
+    <//>
+
+    <${Panel} title=${arr?'الرواتب والموارد البشرية (مصر)':'Payroll & HR (Egypt)'} className="mb18">
+      <div class="muted" style=${{fontSize:12,marginBottom:12}}>${arr?'معدلات افتراضية للسنة الحالية — راجعها مع محاسبك. بتنطبق على حساب الرواتب والقسائم.':'Default rates for the current year — verify with your accountant. Used by payroll & payslips.'}</div>
+      <div class="flex gap8" style=${{flexWrap:'wrap'}}>
+        ${[['insEmpPct',arr?'تأمين الموظف %':'Insurance employee %'],['insEmployerPct',arr?'تأمين الشركة %':'Insurance employer %'],['insMin',arr?'حد أدنى تأميني':'Insurance base min'],['insMax',arr?'حد أقصى تأميني':'Insurance base max'],['personalExemption',arr?'الإعفاء الشخصي (سنوي)':'Personal exemption (annual)']].map(([k,l])=>html`<label class="fld" style=${{minWidth:150}} key=${k}><span>${l}</span><input type="number" value=${pcfg[k]} onChange=${e=>setPay(k,Number(e.target.value)||0)}/></label>`)}
+        <label class="fld" style=${{minWidth:150}}><span>${arr?'أيام العمل/شهر':'Work days / month'}</span><input type="number" value=${ctx.appSettings.workDaysPerMonth||26} onChange=${e=>ctx.applyAppSettings({workDaysPerMonth:Number(e.target.value)||26})}/></label>
+        <label class="fld" style=${{minWidth:150}}><span>${arr?'رصيد الإجازة السنوية':'Annual leave (days)'}</span><input type="number" value=${ctx.appSettings.annualLeaveDefault!=null?ctx.appSettings.annualLeaveDefault:21} onChange=${e=>ctx.applyAppSettings({annualLeaveDefault:Number(e.target.value)||0})}/></label>
+        <label class="fld" style=${{minWidth:150}}><span>${arr?'رصيد الإجازة المرضية':'Sick leave (days)'}</span><input type="number" value=${ctx.appSettings.sickLeaveDefault!=null?ctx.appSettings.sickLeaveDefault:6} onChange=${e=>ctx.applyAppSettings({sickLeaveDefault:Number(e.target.value)||0})}/></label>
+        <label class="fld" style=${{minWidth:170}}><span>${arr?'أيام الويكاند':'Weekend days'}</span><input value=${ctx.appSettings.weekendDays||'Fri,Sat'} onChange=${e=>ctx.applyAppSettings({weekendDays:e.target.value})}/></label>
+      </div>
+      <label class="fld full" style=${{marginTop:10}}><span>${arr?'الأجازات الرسمية (تواريخ YYYY-MM-DD مفصولة بفاصلة)':'Public holidays (YYYY-MM-DD, comma-separated)'}</span>
+        <textarea rows="2" defaultValue=${(ctx.appSettings.publicHolidays||[]).join(', ')} onBlur=${e=>ctx.applyAppSettings({publicHolidays:e.target.value.split(',').map(s=>s.trim()).filter(Boolean)})}></textarea></label>
+      <label class="fld full" style=${{marginTop:10}}><span>${arr?'شرائح ضريبة الدخل السنوية (JSON: upto / pct)':'Income-tax brackets (JSON: upto / pct)'}</span>
+        <textarea rows="3" defaultValue=${JSON.stringify(pcfg.brackets)} onBlur=${e=>{ try{ const b=JSON.parse(e.target.value); if(Array.isArray(b)&&b.every(x=>x&&('pct' in x))) setPay('brackets',b); else throw 0; }catch(x){ alert(arr?'JSON غير صحيح — لم يُحفظ.':'Invalid JSON — not saved.'); } }}></textarea></label>
     <//>
 
     <${Panel} title="Professional popups" className="mb18">
