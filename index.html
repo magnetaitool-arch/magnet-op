@@ -5649,6 +5649,9 @@ function App(){
         </div>
       </header>
       <div class="canvas" ref=${canvasRef}>
+        ${authUser&&authUser.isDefaultPassword&&html`<div class="backup-banner" style=${{marginBottom:14}}>
+          <span>${lang==='ar'?'لسه داخل بكلمة سر مؤقتة — غيّرها دلوقتي عشان تأمّن حسابك.':'You are still on a temporary password — change it now to secure your account.'}</span>
+          <button class="mini pri" onClick=${()=>setProfileOpen(true)}>${lang==='ar'?'تغيير كلمة السر':'Change password'}</button></div>`}
         ${renderRoute(route, ctx, { visible, byBrand,
           connectCloud, disconnectCloud, syncNow, saveWebhooks, signInCloud, setLocalRole,
           exportJSON, importJSON, clearLocal, seedDemo, restoreSnapshot, setBackupPrefs, pullFromCloud })}
