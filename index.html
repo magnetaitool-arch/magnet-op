@@ -5040,6 +5040,30 @@ function App(){
   } catch(e){} });
   useEffect(()=>{ store.set(SESSION_KEY, JSON.stringify(session)); }, [session]);
   useEffect(()=>{ if(cfgComplete(cfg.current)){ cloudLoadAll(cfg.current).then(d=>{ if(d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d)); }).catch(()=>{}); } }, []);
+  // CLOUD LOG PRUNING — activity/notification rows accumulate forever in the cloud
+  // (they are what pushed the database past 1000 records and slow every pull).
+  // Once a day, the first Owner/Admin device online trims each log collection to
+  // its local cap by hard-deleting the oldest rows. Logs are ephemeral: no
+  // tombstones here — a tombstone would ADD a row instead of freeing one.
+  useEffect(()=>{
+    if(!cfgComplete(cfg.current) || !isAdminRole(role)) return;
+    const KEY='tia_log_prune_at';
+    try { if(Date.now()-(+localStorage.getItem(KEY)||0) < 86400000) return; } catch(e){}
+    const prune=async(coll,keep)=>{
+      try {
+        const res=await fetch(_rest(cfg.current,'records?select=id&coll=eq.'+coll+'&order=data->>createdAt.desc.nullslast'),
+          { headers:_headers(cfg.current,{ Range:keep+'-'+(keep+999), 'Range-Unit':'items' }) });
+        if(!res.ok) return;
+        const olds=await res.json(); if(!Array.isArray(olds)||!olds.length) return;
+        for(let i=0;i<olds.length;i+=100){
+          const ids=olds.slice(i,i+100).map(r=>r.id).join(',');
+          await fetch(_rest(cfg.current,'records?coll=eq.'+coll+'&id=in.('+encodeURIComponent(ids)+')'),
+            { method:'DELETE', headers:_headers(cfg.current) });
+        }
+      } catch(e){}
+    };
+    (async()=>{ await prune('activityLogs',500); await prune('notifications',300); try{ localStorage.setItem(KEY,String(Date.now())); }catch(e){} })();
+  }, []);
   // LIVE SYNC — unified poll: pull ALL collections in ONE request every 5s so
   // EVERY module (clients, invoices, employees, tasks, chat…) stays live without a
   // manual refresh, even if Realtime is blocked on the network. Change-detection
@@ -5048,7 +5072,12 @@ function App(){
   useEffect(()=>{
     if(!cfgComplete(cfg.current)) return;
     let stop=false, busy=false;
-    const tick=async()=>{ if(stop||busy||document.hidden) return; busy=true;
+    const tick=async()=>{ if(stop||busy||document.hidden) return;
+      // Realtime delivers changes instantly; the full pull is only a safety net.
+      // While realtime is connected, pull once a minute instead of every 5s —
+      // 12x less bandwidth/egress as the database grows. No realtime => 5s.
+      if(window.__rtOn && window.__moLastSync && (Date.now()-window.__moLastSync)<55000) return;
+      busy=true;
       try {
         const d=await cloudLoadAll(cfg.current);
         window.__moPollN=(window.__moPollN||0)+1; window.__moLastSync=Date.now();
