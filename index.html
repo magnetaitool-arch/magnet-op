@@ -3410,9 +3410,21 @@ async function cloudPing(cfg){
   return true;
 }
 async function cloudLoadAll(cfg){
-  const res = await fetch(_rest(cfg,'records?select=*'), { headers:_headers(cfg) });
-  if(!res.ok) throw new Error('Load failed ('+res.status+')');
-  const rows = await res.json(); const db = {};
+  // PostgREST caps every response at 1000 rows. Once the database grew past 1000
+  // records, a single fetch silently dropped the tail — fresh devices "lost" the
+  // newest clients. Page through with Range headers until the last page.
+  const rows=[]; let start=0;
+  for(;;){
+    const res = await fetch(_rest(cfg,'records?select=*&order=id.asc'),
+      { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
+    if(!res.ok) throw new Error('Load failed ('+res.status+')');
+    const chunk = await res.json();
+    rows.push.apply(rows, chunk);
+    if(!Array.isArray(chunk) || chunk.length<1000) break;
+    start+=1000;
+    if(start>100000) break; // hard stop — never loop forever
+  }
+  const db = {};
   COLLECTIONS.forEach(c=>db[c]=[]);
   rows.forEach(r=>{ if(!db[r.coll]) db[r.coll]=[]; db[r.coll].push(Object.assign({id:r.id}, r.data||{})); });
   return db;
@@ -3434,9 +3446,18 @@ window.__moDiag = async function(){
 // don't pull the whole database every few seconds).
 async function cloudLoadColl(cfg, coll){
   if(!cfgComplete(cfg)) return null;
-  const res = await fetch(_rest(cfg,'records?select=id,data&coll=eq.'+encodeURIComponent(coll)), { headers:_headers(cfg) });
-  if(!res.ok) return null;
-  const rows = await res.json();
+  // Paginated like cloudLoadAll — a single response is capped at 1000 rows.
+  const rows=[]; let start=0;
+  for(;;){
+    const res = await fetch(_rest(cfg,'records?select=id,data&coll=eq.'+encodeURIComponent(coll)+'&order=id.asc'),
+      { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
+    if(!res.ok) return start===0 ? null : rows.map(r=>Object.assign({id:r.id}, r.data||{}));
+    const chunk = await res.json();
+    rows.push.apply(rows, chunk);
+    if(!Array.isArray(chunk) || chunk.length<1000) break;
+    start+=1000;
+    if(start>100000) break;
+  }
   return rows.map(r=>Object.assign({id:r.id}, r.data||{}));
 }
 // Merge a single collection (local + cloud) keeping the newest record per id.
