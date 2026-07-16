@@ -3156,6 +3156,7 @@ const POPUP_LIB = {
   proposalReady:{title:'Proposal ready for review', arTitle:'العرض جاهز', ar:'تم تجهيز مسودة العرض للمراجعة.', Professional:'A proposal draft has been created.', Direct:'Proposal draft ready.', Motivational:'Proposal is ready for review.', Minimal:'Proposal draft ready'},
   savedNotes:{title:'Saved to client notes', arTitle:'اتحفظ في ملاحظات العميل', ar:'النتيجة اتحفظت على ملف العميل.', Professional:'The output has been saved to the client record.', Direct:'Saved to notes.', Motivational:'Saved. The brief lives with the client now.', Minimal:'Saved to notes'},
   permissionDenied:{title:'Permission required', arTitle:'محتاج صلاحية', ar:'ما عندكش صلاحية للإجراء ده. اطلب من مديرك.', Professional:'You do not have permission to perform this action.', Direct:'Not permitted.', Motivational:'That action needs a higher role. Ask a manager.', Minimal:'Not permitted'},
+  fixedPaid:{title:'Marked paid for this month', arTitle:'اتسجلت كمدفوعة', ar:'اتعلّمت إنها اتدفعت الشهر ده. تمام.', Professional:'This fixed cost is marked paid for the current month.', Direct:'Marked paid.', Motivational:'One more bill off the list.', Minimal:'Paid'},
 };
 // showProPopup(type, context) — renders a dark toast with lime accent; auto-dismiss 4s.
 function showProPopup(type, context){
@@ -6939,19 +6940,34 @@ function FixedCostsView({ ctx, ce }){
   const subs=active.filter(f=>f.kind==='Subscription');
   const subsTotal=subs.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   const canDel = ctx.canDelete ? ctx.canDelete('fixedCosts') : ce;
+  // Manual "paid ✓" tracking per month (paidMonths:['2026-07',…]). Pure checklist:
+  // profit math is untouched (fixed costs already count monthly by themselves) —
+  // this only shows which bills were ACTUALLY paid this month and which are due.
+  const arf=getLang()==='ar';
+  const mNow=thisMonth();
+  const isPaidNow=(f)=>(f.paidMonths||[]).includes(mNow);
+  const paidCount=active.filter(isPaidNow).length;
+  const markPaid=(f)=>{ ctx.updateRecord('fixedCosts',f.id,{paidMonths:[...(f.paidMonths||[]),mNow],lastPaidAt:todayISO()}); showProPopup('fixedPaid',f.name); };
+  const unmarkPaid=(f)=>{ if(confirm(arf?'إلغاء علامة الدفع للشهر ده؟':'Unmark paid for this month?')) ctx.updateRecord('fixedCosts',f.id,{paidMonths:(f.paidMonths||[]).filter(x=>x!==mNow)}); };
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Fixed Costs & Subscriptions" desc="Recurring fixed costs and subscriptions in one place.">
       ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('fixedCosts',{kind:'Fixed expense',cycle:'Monthly',status:'Active',startDate:todayISO(),paidBy:'Company'})}>${React.createElement(Icon.plus)} New fixed cost</button>`}
     <//>
-    <div class="grid g-3 stagger" style=${{marginBottom:16}}>
-      <${KPI} label="Monthly fixed total" value=${money(monthlyTotal)} icon="trendDown" sub="normalized monthly"/>
-      <${KPI} label="Subscriptions" value=${subs.length} icon="refresh" sub=${money(subsTotal)+' / mo'}/>
+    <div class="grid g-4 stagger" style=${{marginBottom:16}}>
+      <${KPI} label="Monthly fixed total" value=${money(monthlyTotal)} icon="trendDown" sub=${arf?'محسوب شهريًا':'normalized monthly'}/>
+      <${KPI} label="Subscriptions" value=${subs.length} icon="refresh" sub=${money(subsTotal)+(arf?' / شهر':' / mo')}/>
       <${KPI} label="Active items" value=${active.length} icon="check"/>
+      <${KPI} label=${arf?'اتدفع الشهر ده':'Paid this month'} value=${paidCount+' / '+active.length} icon="wallet" sub=${paidCount<active.length?(arf?('فاضل '+(active.length-paidCount)):((active.length-paidCount)+' still due')):(arf?'كله اتدفع ✓':'all paid ✓')}/>
     </div>
     <${DataTable} db=${db} rows=${rows.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))} canEditFlag=${ce}
       onEdit=${ce?(r=>ctx.openModal('fixedCosts',r)):null}
       onDelete=${canDel?(r=>ctx.delRec('fixedCosts',r.id,r.name)):null}
-      extraActions=${r=>(ce&&!r.settled&&partners.some(p=>p.name===r.paidBy))?html`<button class="mini" onClick=${()=>setSettle(r)}>Settle</button>`:''}
+      extraActions=${r=>html`<${React.Fragment}>
+        ${ce&&(r.status||'Active')==='Active'&&(isPaidNow(r)
+          ? html`<button class="mini" style=${{color:'var(--pos)',borderColor:'var(--pos)'}} title=${arf?'اضغط للتراجع':'Click to undo'} onClick=${()=>unmarkPaid(r)}>${arf?'اتدفع ✓':'Paid ✓'}</button>`
+          : html`<button class="mini pri" onClick=${()=>markPaid(r)}>${arf?'اتدفع الشهر ده':'Mark paid'}</button>`)}
+        ${(ce&&!r.settled&&partners.some(p=>p.name===r.paidBy))?html`<button class="mini" onClick=${()=>setSettle(r)}>${arf?'تسوية':'Settle'}</button>`:''}
+      <//>`}
       cols=${[{k:'name',label:'Name'},{k:'kind',label:'Type',tag:true},{k:'category',label:'Category'},{k:'amount',label:'Amount',num:true,money:true},{k:'cycle',label:'Cycle'},{k:'startDate',label:'Start date',date:true},{k:'paidBy',label:'Paid by',render:r=>r.settled?html`<span class="vpill ok">Both ✓</span>`:(r.paidBy||'—')},{k:'status',label:'Status',tag:true}]}
       empty=${{title:'No fixed costs yet',text:'Add rent, subscriptions and fixed costs so they appear in the partner accounting.',icon:'finance'}}/>
     ${settle&&html`<${SettleForm} ctx=${ctx} item=${(db.fixedCosts||[]).find(x=>x.id===settle.id)||settle} coll="fixedCosts" onClose=${()=>setSettle(null)}/>`}
