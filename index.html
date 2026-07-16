@@ -6595,6 +6595,9 @@ function DashboardView({ ctx, byBrand }){
   const revenue = (db.payments||[]).filter(p=>monthOf(p.date)===m).reduce((s,p)=>s+(+p.amount||0),0);
   const outstanding = byBrand(db.invoices||[]).filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
   const expensesM = (db.expenses||[]).filter(e=>monthOf(e.date)===m).reduce((s,e)=>s+(+e.amount||0),0);
+  // Salaries PAID for this month's pay runs count in Net (month) — payroll was
+  // invisible to the finance KPIs before, which overstated profit.
+  const payrollM = (db.employeePayments||[]).filter(p=>p.paymentStatus==='Paid'&&(p.month===m||monthOf(p.paidAt)===m)).reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
   const fin = canSeeFinance(role);
   // HR metrics
   const emps = (db.employees||[]).filter(e=>!['Archived','Resigned','Terminated'].includes(e.status));
@@ -6657,7 +6660,7 @@ function DashboardView({ ctx, byBrand }){
       ${fin&&html`<${KPI} label="Revenue (month)" value=${money(revenue)} icon="finance"/>`}
       ${fin&&html`<${KPI} label="Outstanding" value=${money(outstanding)} icon="wallet"/>`}
       ${fin&&html`<${KPI} label="Expenses (month)" value=${money(expensesM)} icon="trendDown"/>`}
-      ${fin&&html`<${KPI} label="Net (month)" value=${money(revenue-expensesM)} icon="trend"/>`}
+      ${fin&&html`<${KPI} label="Net (month)" value=${money(revenue-expensesM-payrollM)} icon="trend" sub=${payrollM>0?((getLang()==='ar'?'شامل مرتبات ':'incl. salaries ')+money(payrollM)):undefined}/>`}
     </div>
     <div class="eyebrow" style=${{margin:'4px 0 12px'}}>${t(isPM?'Team capacity':'HR overview')}</div>
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
@@ -6965,7 +6968,10 @@ function PartnersView({ ctx }){
   const income = (db.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0),0);
   const expOneoff = (db.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
   const expFixed = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active').reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
-  const expenses = expOneoff + expFixed;
+  // Paid payroll counts as a cost here too, so this net (the profit that gets
+  // split between partners) always matches the Profitability screen's net.
+  const paidPayroll = (db.employeePayments||[]).filter(p=>p.paymentStatus==='Paid').reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
+  const expenses = expOneoff + expFixed + paidPayroll;
   const net = income - expenses;
   const sharePct = (p)=> (p.share==null ? 50 : Number(p.share))/100;
   // What each partner PERSONALLY paid out of pocket (paidBy === their name).
@@ -7026,7 +7032,7 @@ function PartnersView({ ctx }){
     <//>`}
     <div class="grid g-3 stagger" style=${{margin:'4px 0 16px'}}>
       <${KPI} label="Total income" value=${money(income)} icon="trend"/>
-      <${KPI} label="Total expenses" value=${money(expenses)} icon="trendDown" sub="one-off + monthly fixed"/>
+      <${KPI} label="Total expenses" value=${money(expenses)} icon="trendDown" sub=${getLang()==='ar'?'متغيرة + ثابتة + مرتبات':'one-off + fixed + salaries'}/>
       <${KPI} label="Net profit" value=${money(net)} icon="finance"/>
     </div>
     <${Panel} title=${getLang()==='ar'?'حساب كل شريك':'Each partner'} pad=${false}>
@@ -7098,7 +7104,11 @@ function ProfitabilityView({ ctx, asDashboard }){
   const expOneoff = (db.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
   // Include active monthly fixed costs so this matches the Partners screen's net.
   const expFixed = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active').reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
-  const expenses = expOneoff + expFixed;
+  // AUTO payroll: every pay run marked Paid counts as a cost by itself.
+  // MANUAL salaries (paid outside the Payroll screen) are normal Expenses and
+  // flow through expOneoff — record a salary in ONE of the two places, never both.
+  const paidPayroll = (db.employeePayments||[]).filter(p=>p.paymentStatus==='Paid').reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
+  const expenses = expOneoff + expFixed + paidPayroll;
   const net = paid-expenses;
   const overdueCount = (db.invoices||[]).filter(i=>isOverdue(i.dueDate)&&ctx.invTotal(i)-ctx.invPaid(i)>0).length;
   const perClient = (db.clients||[]).map(c=>{
@@ -7120,7 +7130,8 @@ function ProfitabilityView({ ctx, asDashboard }){
       <${KPI} label="Total invoiced" value=${money(invTotalAll)} icon="finance"/>
       <${KPI} label="Total paid" value=${money(paid)} icon="wallet"/>
       <${KPI} label="Outstanding" value=${money(outstanding)} icon="trendDown"/>
-      <${KPI} label="Total expenses" value=${money(expenses)} icon="trendDown" sub="one-off + monthly fixed"/>
+      <${KPI} label="Total expenses" value=${money(expenses)} icon="trendDown" sub=${getLang()==='ar'?'متغيرة + ثابتة + مرتبات':'one-off + fixed + salaries'}/>
+      <${KPI} label="Paid salaries" value=${money(paidPayroll)} icon="people" sub=${getLang()==='ar'?'من شاشة المرتبات (Paid)':'from Payroll (Paid runs)'}/>
       <${KPI} label="Net profit" value=${money(net)} icon="trend"/>
       <${KPI} label="Overdue invoices" value=${overdueCount} icon="alert"/>
     </div>
