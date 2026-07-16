@@ -7351,6 +7351,9 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
             Method: ${e.paymentMethod} · Schedule: ${e.paymentSchedule}<br/>Bank: ${e.bankName||'—'} ${e.bankAccount||''} ${e.walletNumber?' · Wallet '+e.walletNumber:''}</div></div>
           <div class="flex between center" style=${{margin:'4px 0 8px'}}><span class="eyebrow">Payment history</span>${ce&&html`<button class="mini" onClick=${()=>{onClose();ctx.openModal('employeePayments',{employeeId:e.id,month:thisMonth(),baseSalary:e.salary,paymentStatus:'Pending'});}}>+ Add payment</button>`}</div>
           <${DataTable} db=${db} rows=${(db.employeePayments||[]).filter(p=>p.employeeId===e.id)}
+            canEditFlag=${ce}
+            onEdit=${ce?(r=>{onClose();ctx.openModal('employeePayments',r);}):null}
+            onDelete=${ce?(r=>ctx.delRec('employeePayments',r.id,(e.fullName||e.name||'')+' · '+(r.month||''))):null}
             extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button>`}
             cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
 
