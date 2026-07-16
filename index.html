@@ -7142,6 +7142,10 @@ function ProfitabilityView({ ctx, asDashboard }){
   // MANUAL salaries (paid outside the Payroll screen) are normal Expenses and
   // flow through expOneoff — record a salary in ONE of the two places, never both.
   const paidPayroll = (db.employeePayments||[]).filter(p=>p.paymentStatus==='Paid').reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
+  // Display-only: salaries living as Fixed Cost lines (category 'Salaries') so the
+  // KPI reflects the agency's actual salary model. Already inside expFixed —
+  // NOT added to expenses again.
+  const fixedSalaries = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active'&&/salar/i.test(f.category||'')).reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   const expenses = expOneoff + expFixed + paidPayroll;
   const net = paid-expenses;
   const overdueCount = (db.invoices||[]).filter(i=>isOverdue(i.dueDate)&&ctx.invTotal(i)-ctx.invPaid(i)>0).length;
@@ -7166,7 +7170,7 @@ function ProfitabilityView({ ctx, asDashboard }){
       <${KPI} label="Total paid" value=${money(paid)} icon="wallet"/>
       <${KPI} label="Outstanding" value=${money(outstanding)} icon="trendDown"/>
       <${KPI} label="Total expenses" value=${money(expenses)} icon="trendDown" sub=${getLang()==='ar'?'متغيرة + ثابتة + مرتبات':'one-off + fixed + salaries'}/>
-      <${KPI} label="Paid salaries" value=${money(paidPayroll)} icon="people" sub=${getLang()==='ar'?'من شاشة المرتبات (Paid)':'from Payroll (Paid runs)'}/>
+      <${KPI} label="Paid salaries" value=${money(paidPayroll+fixedSalaries)} icon="people" sub=${getLang()==='ar'?'مرتبات ثابتة شهريًا + Payroll المدفوع':'fixed monthly salaries + Payroll paid runs'}/>
       <${KPI} label="Net profit" value=${money(net)} icon="trend"/>
       <${KPI} label="Overdue invoices" value=${overdueCount} icon="alert"/>
     </div>
