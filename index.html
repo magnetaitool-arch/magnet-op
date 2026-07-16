@@ -1972,7 +1972,7 @@ const FIELD_AR = {
   'New invoice':'فاتورة جديدة','New client':'عميل جديد','New task':'مهمة جديدة','New project':'مشروع جديد','New employee':'موظف جديد','New expense':'مصروف جديد',
   'Partner':'الشريك','Share':'النسبة','Profit share':'نصيبه من الربح','Paid out of pocket':'دفع من جيبه','Deposits':'إيداعات','Withdrawals':'مسحوبات',
   'Balance (with company)':'رصيده مع الشركة','Withdrawal':'سحب','Deposit':'إيداع','Taken from (client money)':'اتسحبت من فلوس مين (العميل)',
-  'Partner draws':'مسحوبات الشركاء','Cash left':'المتبقي من فلوسه','Create invoice for the budget (auto)':'اعمل فاتورة بقيمة البدجت تلقائيًا','Record payment':'تسجيل دفعة','Revenue':'الإيراد','Cost':'التكلفة','Budget (label)':'الميزانية',
+  'Partner draws':'مسحوبات الشركاء','Cash left':'المتبقي من فلوسه','Create invoice for the budget (auto)':'اعمل فاتورة بقيمة البدجت تلقائيًا','Record payment':'تسجيل دفعة','Remaining':'الفاضل','Still owed':'فاضل عليه','Revenue':'الإيراد','Cost':'التكلفة','Budget (label)':'الميزانية',
   'Attendance':'الحضور','Leaves':'الإجازات','Payroll':'المرتبات','Generate due':'توليد المستحق','Mark collected':'تسجيل التحصيل',
 };
 function getLang(){ return getAppSettings().language || 'en'; }
@@ -6026,7 +6026,9 @@ function renderRoute(route, ctx, x){
 
     case 'invoices': return html`<${InvoicesView} ctx=${ctx} visible=${x.visible} ce=${ce('invoices')}/>`;
     case 'payments': return simpleList('payments','Payments','Finance', ctx, x, ce('payments'),
-      [{k:'invoiceId',label:'Invoice',ref:true,coll:'invoices',f:'invoiceNumber'},{k:'clientId',label:'Client',render:(r,db)=>{ const cid=r.clientId||((byId(db.invoices,r.invoiceId)||{}).clientId); return cid?nameById(db.clients,cid):'—'; }},{k:'amount',label:'Amount',num:true,money:true},{k:'date',label:'Date',date:true},{k:'method',label:'Method'}],
+      [{k:'invoiceId',label:'Invoice',ref:true,coll:'invoices',f:'invoiceNumber'},{k:'clientId',label:'Client',render:(r,db)=>{ const cid=r.clientId||((byId(db.invoices,r.invoiceId)||{}).clientId); return cid?nameById(db.clients,cid):'—'; }},{k:'amount',label:'Amount',num:true,money:true},
+       {k:'remaining',label:'Remaining',num:true,render:(r,db)=>{ const inv=byId(db.invoices,r.invoiceId); if(!inv) return '—'; const b=ctx.invTotal(inv)-ctx.invPaid(inv); return html`<span class="mono" style=${{color:b>0?'var(--warn)':'var(--pos)'}}>${money(Math.max(0,b))}</span>`; }},
+       {k:'date',label:'Date',date:true},{k:'method',label:'Method'}],
       {date:todayISO(),method:'Bank'});
     case 'expenses': return html`<${ExpensesView} ctx=${ctx} ce=${ce('expenses')}/>`;
     case 'fixedCosts': return html`<${FixedCostsView} ctx=${ctx} ce=${ce('fixedCosts')}/>`;
@@ -7150,7 +7152,8 @@ function ProfitabilityView({ ctx, asDashboard }){
     // they don't change profit (they're distributions) but they do reduce how
     // much of this client's cash is still in the company.
     const draws=(db.partnerTx||[]).filter(x=>!x._del&&x.txType!=='Deposit'&&x.sourceClientId===c.id).reduce((s,x)=>s+(+x.amount||0),0);
-    return {id:c.id,name:c.brandName||c.name,rev,exp,draws,profit:rev-exp,cashLeft:rev-exp-draws};
+    const owed=(db.invoices||[]).filter(i=>i.clientId===c.id&&!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+Math.max(0,ctx.invTotal(i)-ctx.invPaid(i)),0);
+    return {id:c.id,name:c.brandName||c.name,rev,exp,draws,owed,profit:rev-exp,cashLeft:rev-exp-draws};
   }).filter(r=>r.rev||r.exp||r.draws).sort((a,b)=>b.profit-a.profit);
   const perProject = (db.projects||[]).map(p=>{
     const exp=(db.expenses||[]).filter(e=>e.projectId===p.id).reduce((s,e)=>s+(+e.amount||0),0);
@@ -7169,7 +7172,7 @@ function ProfitabilityView({ ctx, asDashboard }){
     </div>
     <div style=${{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
       <${Panel} title=${getLang()==='ar'?'ربحية كل عميل':'Profit per client'} pad=${false}>
-        <${DataTable} db=${db} rows=${perClient} cols=${[{k:'name',label:'Client'},{k:'rev',label:'Revenue',num:true,money:true},{k:'exp',label:'Expenses',num:true,money:true},{k:'profit',label:'Profit',num:true,money:true},{k:'draws',label:'Partner draws',num:true,money:true},{k:'cashLeft',label:'Cash left',num:true,render:(r)=>html`<span class="mono" style=${{color:r.cashLeft>=0?'var(--pos)':'var(--neg)'}}>${money(r.cashLeft)}</span>`}]}/><//>
+        <${DataTable} db=${db} rows=${perClient} cols=${[{k:'name',label:'Client'},{k:'rev',label:'Revenue',num:true,money:true},{k:'exp',label:'Expenses',num:true,money:true},{k:'profit',label:'Profit',num:true,money:true},{k:'owed',label:'Still owed',num:true,render:(r)=>html`<span class="mono" style=${{color:r.owed>0?'var(--warn)':'var(--ink-3)'}}>${money(r.owed)}</span>`},{k:'draws',label:'Partner draws',num:true,money:true},{k:'cashLeft',label:'Cash left',num:true,render:(r)=>html`<span class="mono" style=${{color:r.cashLeft>=0?'var(--pos)':'var(--neg)'}}>${money(r.cashLeft)}</span>`}]}/><//>
       <${Panel} title="Margin per project" pad=${false}>
         <${DataTable} db=${db} rows=${perProject} cols=${[{k:'name',label:'Project'},{k:'budget',label:'Budget',num:true,money:true},{k:'exp',label:'Cost',num:true,money:true},{k:'margin',label:'Margin',num:true,money:true}]}/><//>
     </div></div>`;
