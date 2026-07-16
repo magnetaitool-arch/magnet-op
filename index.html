@@ -1970,6 +1970,9 @@ const FIELD_AR = {
   'Welcome back':'أهلاً بيك تاني','Your projects, approvals, invoices and files.':'مشاريعك وموافقاتك وفواتيرك وملفاتك.',
   'Workload':'حجم العمل','Capacity, active vs overdue work, and team balance.':'الطاقة، والشغل الجاري والمتأخر، وتوازن الفريق.',
   'New invoice':'فاتورة جديدة','New client':'عميل جديد','New task':'مهمة جديدة','New project':'مشروع جديد','New employee':'موظف جديد','New expense':'مصروف جديد',
+  'Partner':'الشريك','Share':'النسبة','Profit share':'نصيبه من الربح','Paid out of pocket':'دفع من جيبه','Deposits':'إيداعات','Withdrawals':'مسحوبات',
+  'Balance (with company)':'رصيده مع الشركة','Withdrawal':'سحب','Deposit':'إيداع','Taken from (client money)':'اتسحبت من فلوس مين (العميل)',
+  'Partner draws':'مسحوبات الشركاء','Cash left':'المتبقي من فلوسه','Revenue':'الإيراد','Cost':'التكلفة','Budget (label)':'الميزانية',
   'Attendance':'الحضور','Leaves':'الإجازات','Payroll':'المرتبات','Generate due':'توليد المستحق','Mark collected':'تسجيل التحصيل',
 };
 function getLang(){ return getAppSettings().language || 'en'; }
@@ -2002,7 +2005,7 @@ const Ln = ({ href, children, cls }) => href ? html`<a class=${cls||'lnk'} href=
 const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
 const isOverdue = (d) => d && new Date(d) < new Date(todayISO());
 const byId = (arr,id) => (arr||[]).find(x=>x.id===id) || null;
-const nameById = (arr,id,f='name') => { const r=byId(arr,id); return r ? (r[f]||r.title||r.name||'—') : '—'; };
+const nameById = (arr,id,f='name') => { const r=byId(arr,id); return r ? (r[f]||r.title||r.name||r.brandName||r.fullName||r.projectName||'—') : '—'; };
 
 /* ============================ ROLES & PERMISSIONS ============================ */
 const ROLES = ['Admin','Sales','Project Manager','Designer','Video Editor','Accountant','Client','HR','Marketing Director','Art Director','Social Media'];
@@ -2662,7 +2665,7 @@ const COLLECTIONS = ['leads','clients','contacts','salesActivities','proposals',
   'employees','freelancers','departments','services','packages',
   'attendance','leaves','employeePayments','performanceReviews','candidates',
   'approvalRequests','clientAssets','chatMessages','automations','agentRuns','workflows','contentCalendar','teams','teamRequests',
-  'files','comments','activityLogs','notifications','reports','meetings','renewals','gameScores','gameStats','campaigns','briefs','fixedCosts','partnerSettlements','plans','collections'];
+  'files','comments','activityLogs','notifications','reports','meetings','renewals','gameScores','gameStats','campaigns','briefs','fixedCosts','partnerSettlements','partnerTx','plans','collections'];
 
 /* ============================ CONTENT CALENDAR ============================ */
 const CONTENT_TYPES = ['Post','Reel','Carousel','Story','Video','Campaign','Ad Creative','Blog','Email','Photoshoot','Meeting','Delivery','Report'];
@@ -5833,6 +5836,19 @@ const FORM_SCHEMAS = {
   revisions:[{k:'deliverableId',label:'Deliverable',type:'ref',coll:'deliverables'},{k:'note',label:'Note',type:'textarea',req:true},{k:'assignedTo',label:'Assignee',type:'ref',coll:'employees'},{k:'priority',label:'Priority',type:'select',opts:PRIORITIES},{k:'status',label:'Status',type:'select',opts:ST.revision},{k:'dueDate',label:'Due',type:'date'}],
   invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date'},{k:'dueDate',label:'Due',type:'date'},{k:'amount',label:'Amount (pre-tax)',type:'number',req:true},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'}],
   payments:[{k:'invoiceId',label:'Invoice',type:'ref',coll:'invoices'},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date'},{k:'method',label:'Method',type:'select',opts:['Bank','Card','Cash','Cheque','Online']}],
+  // Partner drawings/deposits ledger. NOT an expense: draws are profit
+  // distributions, so they never touch net profit — they only move the
+  // partner's balance with the company (and, when a source client is set,
+  // reduce that client's remaining cash in Profitability).
+  partnerTx:[
+    {k:'partnerName',label:'Partner',type:'select',opts:PAID_BY_OPTS.filter(x=>x!=='Company'),req:true},
+    {k:'txType',label:'Type',type:'select',opts:['Withdrawal','Deposit'],req:true},
+    {k:'amount',label:'Amount',type:'number',req:true},
+    {k:'date',label:'Date',type:'date',req:true},
+    {k:'sourceClientId',label:'Taken from (client money)',type:'ref',coll:'clients',showIf:r=>r.txType!=='Deposit'},
+    {k:'method',label:'Method',type:'select',opts:['Bank','Card','Cash','Cheque','Online']},
+    {k:'note',label:'Note',type:'textarea'},
+  ],
   expenses:[{k:'title',label:'Title',req:true},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date'},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'vendor',label:'Vendor'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'status',label:'Status',type:'select',opts:ST.expense},{k:'notes',label:'Notes',type:'textarea'}],
   plans:[{k:'title',label:'Plan / goal',req:true},{k:'timeframe',label:'Timeframe',type:'select',opts:PLAN_TIMEFRAMES},{k:'quarter',label:'Quarter (if quarterly)',type:'select',opts:PLAN_QUARTERS},{k:'period',label:'Period (e.g. Jun 2026 / Q3 2026)'},{k:'owner',label:'Owner',type:'select',opts:[...PARTNERS_DEFAULT.map(p=>p.name),'Both partners','Team']},{k:'status',label:'Status',type:'select',opts:PLAN_STATUS},{k:'progress',label:'Progress %',type:'number'},{k:'dueDate',label:'Due date',type:'date'},{k:'notes',label:'Notes',type:'textarea'}],
   fixedCosts:[{k:'name',label:'Name',req:true},{k:'kind',label:'Type',type:'select',opts:FIXED_KINDS},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'cycle',label:'Cycle',type:'select',opts:FIXED_CYCLES},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'startDate',label:'Start date',type:'date'},{k:'status',label:'Status',type:'select',opts:['Active','Paused']},{k:'notes',label:'Notes',type:'textarea'}],
@@ -6955,6 +6971,19 @@ function PartnersView({ ctx }){
   // What each partner PERSONALLY paid out of pocket (paidBy === their name).
   const paidByName = (name)=> (db.expenses||[]).filter(e=>e.paidBy===name&&!e.settled).reduce((s,e)=>s+(Number(e.amount)||0),0)
     + (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active'&&f.paidBy===name&&!f.settled).reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  // Partner ledger: withdrawals (draws) and deposits. Draws are profit
+  // distributions, NOT expenses — net profit above is untouched. Balance shown
+  // per partner = profit share + deposits − withdrawals.
+  const ptx = (db.partnerTx||[]).filter(t=>!t._del);
+  const drawsOf    = (name)=> ptx.filter(t=>t.partnerName===name && t.txType!=='Deposit').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const depositsOf = (name)=> ptx.filter(t=>t.partnerName===name && t.txType==='Deposit').reduce((s,t)=>s+(Number(t.amount)||0),0);
+  const totalDraws = partners.reduce((s,p)=>s+drawsOf(p.name),0);
+  // Dynamic form schema so the Partner dropdown always shows the CURRENT partner
+  // names from Settings (the static schema falls back to the defaults).
+  const ptxSchema = (FORM_SCHEMAS.partnerTx||[]).map(f=> f.k==='partnerName' ? {...f, opts:partners.map(p=>p.name)} : f);
+  const openTx = (type)=> ctx.openModal('partnerTx', { txType:type, date:todayISO() }, ptxSchema,
+    getLang()==='ar' ? (type==='Deposit'?'تسجيل إيداع من شريك':'تسجيل سحب لشريك') : (type==='Deposit'?'New partner deposit':'New partner withdrawal'));
+  const ptxRows = [...ptx].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const personal1=paidByName(p1.name), personal2=paidByName(p2.name);
   const totalPersonal=personal1+personal2;
   const fair1=totalPersonal*sharePct(p1);
@@ -7000,12 +7029,27 @@ function PartnersView({ ctx }){
       <${KPI} label="Total expenses" value=${money(expenses)} icon="trendDown" sub="one-off + monthly fixed"/>
       <${KPI} label="Net profit" value=${money(net)} icon="finance"/>
     </div>
-    <${Panel} title="Each partner" pad=${false}>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Partner</th><th class="right">Share</th><th class="right">Profit share</th><th class="right">Paid out of pocket</th></tr></thead>
-      <tbody>${partners.map(p=>html`<tr key=${p.id}><td data-label="Partner"><b>${p.name}</b></td>
-        <td data-label="Share" class="right mono">${Math.round(sharePct(p)*100)}%</td>
-        <td data-label="Profit share" class="right mono lime">${money(net*sharePct(p))}</td>
-        <td data-label="Paid out of pocket" class="right mono">${money(paidByName(p.name))}</td></tr>`)}</tbody></table></div>
+    <${Panel} title=${getLang()==='ar'?'حساب كل شريك':'Each partner'} pad=${false}>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>${t('Partner')}</th><th class="right">${t('Share')}</th><th class="right">${t('Profit share')}</th><th class="right">${t('Paid out of pocket')}</th><th class="right">${t('Deposits')}</th><th class="right">${t('Withdrawals')}</th><th class="right">${t('Balance (with company)')}</th></tr></thead>
+      <tbody>${partners.map(p=>{ const dep=depositsOf(p.name), drw=drawsOf(p.name), bal=net*sharePct(p)+dep-drw; return html`<tr key=${p.id}><td data-label=${t('Partner')}><b>${p.name}</b></td>
+        <td data-label=${t('Share')} class="right mono">${Math.round(sharePct(p)*100)}%</td>
+        <td data-label=${t('Profit share')} class="right mono lime">${money(net*sharePct(p))}</td>
+        <td data-label=${t('Paid out of pocket')} class="right mono">${money(paidByName(p.name))}</td>
+        <td data-label=${t('Deposits')} class="right mono">${money(dep)}</td>
+        <td data-label=${t('Withdrawals')} class="right mono" style=${{color:drw>0?'var(--warn)':'inherit'}}>${money(drw)}</td>
+        <td data-label=${t('Balance (with company)')} class="right mono" style=${{color:bal>=0?'var(--pos)':'var(--neg)',fontWeight:700}}>${money(bal)}</td></tr>`; })}</tbody></table></div>
+    <//>
+    <${Panel} title=${getLang()==='ar'?'مسحوبات وإيداعات الشركاء':'Partner drawings & deposits'} pad=${false}>
+      ${canManage&&html`<div class="flex gap8" style=${{padding:'12px 14px',borderBottom:'1px solid var(--line)',flexWrap:'wrap'}}>
+        <button class="btn btn-pri" onClick=${()=>openTx('Withdrawal')}>${React.createElement(Icon.plus)} ${getLang()==='ar'?'تسجيل سحب':'New withdrawal'}</button>
+        <button class="btn btn-ghost" onClick=${()=>openTx('Deposit')}>${getLang()==='ar'?'تسجيل إيداع':'New deposit'}</button>
+        ${totalDraws>0&&html`<span class="muted" style=${{fontSize:12,alignSelf:'center',marginInlineStart:'auto'}}>${(getLang()==='ar'?'إجمالي المسحوبات: ':'Total withdrawals: ')+money(totalDraws)}</span>`}
+      </div>`}
+      <${DataTable} db=${db} rows=${ptxRows} canEditFlag=${canManage}
+        onEdit=${canManage?(r=>ctx.openModal('partnerTx', r, ptxSchema)):null}
+        onDelete=${canManage?(r=>ctx.delRec('partnerTx', r.id, (r.partnerName||'')+' '+money(r.amount))):null}
+        cols=${[{k:'date',label:'Date',date:true},{k:'partnerName',label:'Partner'},{k:'txType',label:'Type',tag:true},{k:'amount',label:'Amount',num:true,money:true},{k:'sourceClientId',label:'Taken from (client money)',ref:true,coll:'clients'},{k:'method',label:'Method'},{k:'note',label:'Note'}]}
+        empty=${{title:getLang()==='ar'?'مفيش حركات لسه':'No transactions yet',text:getLang()==='ar'?'سجّل أول سحب أو إيداع لشريك من الزرارين فوق.':'Record the first partner withdrawal or deposit with the buttons above.',icon:'wallet'}}/>
     <//>
     ${sharedItems.length>0&&html`<${Panel} title="Shared expenses (paid by a partner)" pad=${false}>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Item</th><th>Type</th><th>Paid by</th><th class="right">Amount</th><th>Status</th><th>Note</th></tr></thead>
@@ -7060,8 +7104,12 @@ function ProfitabilityView({ ctx, asDashboard }){
   const perClient = (db.clients||[]).map(c=>{
     const rev=(db.payments||[]).filter(p=>p.clientId===c.id).reduce((s,p)=>s+(+p.amount||0),0);
     const exp=(db.expenses||[]).filter(e=>e.clientId===c.id).reduce((s,e)=>s+(+e.amount||0),0);
-    return {id:c.id,name:c.name,rev,exp,profit:rev-exp};
-  }).filter(r=>r.rev||r.exp).sort((a,b)=>b.profit-a.profit);
+    // Partner withdrawals attributed to THIS client's money ("taken from") —
+    // they don't change profit (they're distributions) but they do reduce how
+    // much of this client's cash is still in the company.
+    const draws=(db.partnerTx||[]).filter(x=>!x._del&&x.txType!=='Deposit'&&x.sourceClientId===c.id).reduce((s,x)=>s+(+x.amount||0),0);
+    return {id:c.id,name:c.brandName||c.name,rev,exp,draws,profit:rev-exp,cashLeft:rev-exp-draws};
+  }).filter(r=>r.rev||r.exp||r.draws).sort((a,b)=>b.profit-a.profit);
   const perProject = (db.projects||[]).map(p=>{
     const exp=(db.expenses||[]).filter(e=>e.projectId===p.id).reduce((s,e)=>s+(+e.amount||0),0);
     return {id:p.id,name:p.name,budget:+p.budget||0,exp,margin:(+p.budget||0)-exp};
@@ -7077,8 +7125,8 @@ function ProfitabilityView({ ctx, asDashboard }){
       <${KPI} label="Overdue invoices" value=${overdueCount} icon="alert"/>
     </div>
     <div style=${{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
-      <${Panel} title="Profit per client" pad=${false}>
-        <${DataTable} db=${db} rows=${perClient} cols=${[{k:'name',label:'Client'},{k:'rev',label:'Revenue',num:true,money:true},{k:'exp',label:'Expenses',num:true,money:true},{k:'profit',label:'Profit',num:true,money:true}]}/><//>
+      <${Panel} title=${getLang()==='ar'?'ربحية كل عميل':'Profit per client'} pad=${false}>
+        <${DataTable} db=${db} rows=${perClient} cols=${[{k:'name',label:'Client'},{k:'rev',label:'Revenue',num:true,money:true},{k:'exp',label:'Expenses',num:true,money:true},{k:'profit',label:'Profit',num:true,money:true},{k:'draws',label:'Partner draws',num:true,money:true},{k:'cashLeft',label:'Cash left',num:true,render:(r)=>html`<span class="mono" style=${{color:r.cashLeft>=0?'var(--pos)':'var(--neg)'}}>${money(r.cashLeft)}</span>`}]}/><//>
       <${Panel} title="Margin per project" pad=${false}>
         <${DataTable} db=${db} rows=${perProject} cols=${[{k:'name',label:'Project'},{k:'budget',label:'Budget',num:true,money:true},{k:'exp',label:'Cost',num:true,money:true},{k:'margin',label:'Margin',num:true,money:true}]}/><//>
     </div></div>`;
