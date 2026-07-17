@@ -4063,11 +4063,31 @@ function Avatar({ name, size=34, src }){
   return html`<div class="avatar" style=${{width:size,height:size,fontSize:size*0.38,...(src?{padding:0,overflow:'hidden'}:{})}}>
     ${src ? html`<img src=${src} alt=${name||''} style=${{width:'100%',height:'100%',objectFit:'cover',borderRadius:'inherit'}}/>` : ini}</div>`;
 }
+// Count-up number: animates 0 -> value on mount / when the value changes, keeping
+// any prefix/suffix ("EGP ", "%", "k") and thousands separators. Non-numeric or
+// complex values render unchanged. Respects reduced-motion.
+function Num({ value }){
+  const raw = (value==null)?'':String(value);
+  const m = (typeof value==='number'||typeof value==='string') ? raw.match(/^(.*?)(-?\d[\d,]*(?:\.\d+)?)(.*)$/) : null;
+  const ref = useRef(null);
+  useEffect(()=>{
+    const el=ref.current; if(!el||!m) return;
+    if(reduceMotion()){ el.textContent=raw; return; }
+    const hadComma=m[2].indexOf(',')>=0; const dec=((m[2].split('.')[1])||'').length;
+    const target=parseFloat(m[2].replace(/,/g,'')); if(!isFinite(target)){ el.textContent=raw; return; }
+    const fmt=(n)=>{ let s= dec? n.toFixed(dec) : String(Math.round(n)); if(hadComma) s=Number(s).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec}); return m[1]+s+m[3]; };
+    let start=null; const dur=800; el.textContent=fmt(0);
+    const step=(ts)=>{ if(start==null)start=ts; const p=Math.min(1,(ts-start)/dur); const e=1-Math.pow(1-p,3); el.textContent=fmt(target*e); if(p<1)requestAnimationFrame(step); };
+    const h=requestAnimationFrame(step); return ()=>cancelAnimationFrame(h);
+  },[raw]);
+  if(!m) return html`${value}`;
+  return html`<span ref=${ref}>${raw}</span>`;
+}
 function KPI({ label, value, icon, sub }){
   return html`<div class="kpi">
     ${icon&&html`<div class="k-top"><div class="k-ic">${React.createElement(Icon[icon]||Icon.command)}</div></div>`}
     <div class="k-lab">${t(label)}</div>
-    <div class="k-val" style=${{marginTop:6}}>${value}</div>
+    <div class="k-val" style=${{marginTop:6}}><${Num} value=${value}/></div>
     ${sub&&html`<div class="k-foot">${sub}</div>`}</div>`;
 }
 
