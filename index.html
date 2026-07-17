@@ -307,6 +307,26 @@ body.theme-light .canvas{background:
 .dash-hero .dh-chip{background:rgba(255,255,255,.08);border:1px solid var(--line-2);border-radius:999px;padding:6px 13px;font-size:12px;color:var(--ink);backdrop-filter:blur(8px);font-weight:600}
 .dash-hero .dh-chip b{color:var(--lime);font-family:var(--mono);margin-inline-start:5px}
 @media(max-width:600px){.dash-hero{min-height:160px}.dash-hero .dh-img{object-position:center 30%}}
+
+/* ===== Premium dashboard row: rings + team load ===== */
+.dash-prow{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-bottom:18px}
+@media(max-width:900px){.dash-prow{grid-template-columns:1fr}}
+.rings-row{display:flex;gap:14px;justify-content:space-around;padding:6px 4px}
+.ring-card{display:flex;flex-direction:column;align-items:center;gap:10px;flex:1}
+.ring-g{position:relative;width:128px;height:128px}
+.ring-mid{position:absolute;inset:0;display:grid;place-items:center}
+.ring-mid .rv{font-family:var(--display);font-weight:800;font-size:23px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ring-lab{font-size:12px;color:var(--ink-3);font-weight:600;text-align:center}
+/* team load */
+.tl-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.tl-row:first-of-type{border-top:none}
+.tl-av{width:34px;height:34px;border-radius:11px;flex:none;display:grid;place-items:center;font-weight:800;font-size:13px;color:#0a0b07}
+.tl-info{flex:1;min-width:0}
+.tl-info b{font-size:13.5px;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-info span{font-size:11.5px;color:var(--ink-3)}
+.tl-bar{height:7px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:6px}
+.tl-bar i{display:block;height:100%;border-radius:99px;width:0;transition:width 1s cubic-bezier(.2,.7,.3,1)}
+.tl-cap{font-size:11px;font-weight:700;flex:none;width:64px;text-align:center}
 .chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px}
 .chip.up{color:var(--pos);background:rgba(127,224,138,.1)}
 .chip.down{color:var(--neg);background:rgba(240,121,107,.1)}
@@ -4100,6 +4120,30 @@ function KPI({ label, value, icon, sub }){
     <div class="k-val" style=${{marginTop:6}}><${Num} value=${value}/></div>
     ${sub&&html`<div class="k-foot">${sub}</div>`}</div>`;
 }
+// Animated SVG ring gauge (0..100%). grad = 'lime'|'warm'.
+function Ring({ pct, label, center, grad }){
+  const R=52, C=2*Math.PI*R, p=Math.max(0,Math.min(100,Number(pct)||0));
+  const ref=useRef(null);
+  useEffect(()=>{ const el=ref.current; if(!el) return; el.style.strokeDasharray=C; el.style.strokeDashoffset=C;
+    if(reduceMotion()){ el.style.strokeDashoffset=C*(1-p/100); return; }
+    void el.getBoundingClientRect(); const h=setTimeout(()=>{ el.style.strokeDashoffset=C*(1-p/100); },200); return ()=>clearTimeout(h);
+  },[p]);
+  const gid = grad==='warm'?'ringWarm':'ringLime';
+  return html`<div class="ring-card">
+    <div class="ring-g">
+      <svg width="128" height="128" viewBox="0 0 128 128">
+        <defs>
+          <linearGradient id="ringLime" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c8f14a"/><stop offset="1" stop-color="#33d6ac"/></linearGradient>
+          <linearGradient id="ringWarm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffc24b"/><stop offset="1" stop-color="#ff7a59"/></linearGradient>
+        </defs>
+        <circle cx="64" cy="64" r=${R} fill="none" stroke="rgba(255,255,255,.08)" stroke-width="11"/>
+        <circle ref=${ref} cx="64" cy="64" r=${R} fill="none" stroke=${'url(#'+gid+')'} stroke-width="11" stroke-linecap="round" transform="rotate(-90 64 64)" style=${{transition:'stroke-dashoffset 1.2s cubic-bezier(.2,.7,.3,1)'}}/>
+      </svg>
+      <div class="ring-mid"><div class="rv"><${Num} value=${center}/></div></div>
+    </div>
+    <div class="ring-lab">${label}</div>
+  </div>`;
+}
 
 /* ====================== LIGHTWEIGHT CHART PRIMITIVES (SVG) ====================== */
 const reduceMotion = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){ return false; } };
@@ -6743,6 +6787,32 @@ function DashboardView({ ctx, byBrand }){
         </div>
       </div>
     </div>
+    ${(()=>{ const arr=ctx.lang==='ar';
+      const load=emps.map(e=>({e,mt:employeeMetrics(db,e)})).filter(x=>x.mt.active>0).sort((a,b)=>b.mt.pct-a.mt.pct).slice(0,5);
+      if(!load.length && !fin) return null;
+      const collectionPct = (revenue+outstanding)>0 ? Math.round(revenue/(revenue+outstanding)*100) : 0;
+      const marginPct = revenue>0 ? Math.round((revenue-expensesM-payrollM)/revenue*100) : 0;
+      const pal=['#7c5cff','#33d6ac','#ffc24b','#ff7a59','#c8f14a','#5c7a12'];
+      const barColor=(p)=> p>90?'var(--neg)':p>65?'var(--warn)':'var(--pos)';
+      const capTxt=(p)=> p>90?(arr?'مضغوط':'Overloaded'):p>65?(arr?'متوازن':'Balanced'):(arr?'متاح':'Available');
+      return html`<div class="dash-prow">
+        <${Panel}><div class="panel-h"><h3>${arr?'توزيع التاسكات على الفريق':'Team task distribution'}</h3><span class="ph-sub">${arr?'مين مضغوط ومين فاضي':"who's loaded, who's free"}</span></div>
+          <div class="panel-b" style=${{paddingTop:6,paddingBottom:6}}>
+            ${load.length?load.map((x,i)=>{ const nm=x.e.fullName||x.e.name||'—'; const p=Math.min(100,x.mt.pct);
+              return html`<div class="tl-row" key=${x.e.id}>
+                <div class="tl-av" style=${{background:'linear-gradient(135deg,'+pal[i%pal.length]+',rgba(0,0,0,.25))',color:'#fff'}}>${(nm.trim()[0]||'?').toUpperCase()}</div>
+                <div class="tl-info"><b>${nm}${x.e.appRole?html`<span style=${{color:'var(--ink-3)',fontWeight:400}}> · ${x.e.appRole}</span>`:''}</b>
+                  <span>${x.mt.active} ${arr?'تاسك نشط':'active tasks'}</span>
+                  <div class="tl-bar"><i style=${{width:p+'%',background:barColor(p)}}></i></div></div>
+                <div class="tl-cap" style=${{color:barColor(p)}}>${capTxt(p)}</div></div>`; })
+            :html`<div class="muted" style=${{fontSize:12,padding:'10px 0'}}>${arr?'مفيش تاسكات موزّعة حاليًا.':'No active task load yet.'}</div>`}
+          </div><//>
+        ${fin?html`<${Panel}><div class="panel-h"><h3>${arr?'المؤشرات المالية':'Finance at a glance'}</h3><span class="ph-sub">${arr?'الشهر الحالي':'this month'}</span></div>
+          <div class="panel-b"><div class="rings-row">
+            <${Ring} pct=${collectionPct} center=${collectionPct+'%'} label=${arr?'نسبة التحصيل':'Collected'} grad="lime"/>
+            <${Ring} pct=${Math.max(0,marginPct)} center=${marginPct+'%'} label=${arr?'هامش الربح':'Net margin'} grad="warm"/>
+          </div></div><//>`:''}
+      </div>`; })()}
     ${(()=>{ if(!isAdminRole(role)) return null; // backup lives in an admin-only section — don't dead-end other roles
       const m=getBackupMeta(); const days=m.lastDownloadAt?((Date.now()-m.lastDownloadAt)/86400000):999;
       return days>7?html`<div class="backup-banner"><span>${ctx.lang==='ar'?'يُنصح بأخذ نسخة احتياطية. قم بتصدير بياناتك للحفاظ عليها.':'Backup recommended. Export your data to keep it safe.'}</span>
