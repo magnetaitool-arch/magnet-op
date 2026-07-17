@@ -279,6 +279,26 @@ body.theme-light .canvas{background:
 .kpi .k-val{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;position:relative}
 .kpi .k-val small{font-size:15px;color:var(--ink-3);font-weight:600;margin-left:2px}
 .kpi .k-foot{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--ink-3)}
+
+/* ===== Dashboard hero banner (on-brand image) ===== */
+.dash-hero{position:relative;overflow:hidden;border-radius:var(--r-xl);border:1px solid var(--line-2);
+  margin-bottom:18px;min-height:190px;display:flex;align-items:flex-end;
+  box-shadow:0 24px 60px -34px rgba(0,0,0,.85)}
+.dash-hero .dh-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 38%}
+.dash-hero .dh-ov{position:absolute;inset:0;background:
+  linear-gradient(90deg, rgba(7,8,6,.92) 0%, rgba(7,8,6,.62) 40%, rgba(7,8,6,.15) 100%),
+  linear-gradient(0deg, rgba(7,8,6,.7), transparent 55%)}
+[dir="rtl"] .dash-hero .dh-ov{background:
+  linear-gradient(270deg, rgba(7,8,6,.92) 0%, rgba(7,8,6,.62) 40%, rgba(7,8,6,.15) 100%),
+  linear-gradient(0deg, rgba(7,8,6,.7), transparent 55%)}
+.dash-hero .dh-c{position:relative;padding:24px 26px}
+.dash-hero .dh-eye{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--lime);font-weight:700;margin-bottom:8px}
+.dash-hero .dh-t{font-family:var(--display);font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.02em;line-height:1.08;margin:0}
+.dash-hero .dh-s{color:var(--ink-2);font-size:13.5px;margin:8px 0 0;max-width:52ch}
+.dash-hero .dh-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.dash-hero .dh-chip{background:rgba(255,255,255,.08);border:1px solid var(--line-2);border-radius:999px;padding:6px 13px;font-size:12px;color:var(--ink);backdrop-filter:blur(8px);font-weight:600}
+.dash-hero .dh-chip b{color:var(--lime);font-family:var(--mono);margin-inline-start:5px}
+@media(max-width:600px){.dash-hero{min-height:160px}.dash-hero .dh-img{object-position:center 30%}}
 .chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px}
 .chip.up{color:var(--pos);background:rgba(127,224,138,.1)}
 .chip.down{color:var(--neg);background:rgba(240,121,107,.1)}
@@ -6679,6 +6699,20 @@ function DashboardView({ ctx, byBrand }){
 
   return html`<div class="view">
     <${Head} eyebrow=${ctx.lang==='ar'?'غرفة القيادة':'Group Command'} title=${t(new Date().getHours()<12?'Good morning.':'Good evening.')} desc=${t('Live snapshot across Magnet and Spark Marketing.')}/>
+    <div class="dash-hero">
+      <img class="dh-img" src="/magnet-hero.jpg" alt="" loading="lazy"/>
+      <div class="dh-ov"></div>
+      <div class="dh-c">
+        <div class="dh-eye">Attract · Organize · Deliver</div>
+        <h2 class="dh-t">${ctx.lang==='ar'?`أهلاً ${(user.name||'').split(' ')[0]||''} — كل شغلك اتجمّع هنا`:`Welcome ${(user.name||'').split(' ')[0]||'back'} — everything pulled into one place`}</h2>
+        <p class="dh-s">${ctx.lang==='ar'?'نظرة حية على العملاء، المهام، والفلوس عبر ماجنت وسبارك.':'A live snapshot of clients, tasks and cash across Magnet and Spark.'}</p>
+        <div class="dh-chips">
+          <span class="dh-chip">${ctx.lang==='ar'?'عملاء نشطين':'Active clients'}<b>${byBrand(db.clients||[]).filter(c=>c.status==='Active').length}</b></span>
+          <span class="dh-chip">${ctx.lang==='ar'?'مشاريع':'Projects'}<b>${byBrand(db.projects||[]).filter(p=>!['Completed','Archived'].includes(p.status)).length}</b></span>
+          <span class="dh-chip">${ctx.lang==='ar'?'مهام النهاردة':'Due today'}<b>${(db.tasks||[]).filter(tk=>tk.status!=='Done'&&tk.dueDate===todayISO()).length}</b></span>
+        </div>
+      </div>
+    </div>
     ${(()=>{ if(!isAdminRole(role)) return null; // backup lives in an admin-only section — don't dead-end other roles
       const m=getBackupMeta(); const days=m.lastDownloadAt?((Date.now()-m.lastDownloadAt)/86400000):999;
       return days>7?html`<div class="backup-banner"><span>${ctx.lang==='ar'?'يُنصح بأخذ نسخة احتياطية. قم بتصدير بياناتك للحفاظ عليها.':'Backup recommended. Export your data to keep it safe.'}</span>
