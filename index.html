@@ -8663,6 +8663,21 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
   const ar=lang==='ar';
   const [id,setId]=useState(''); const [pw,setPw]=useState(''); const [show,setShow]=useState(false);
   const [remember,setRemember]=useState(true); const [err,setErr]=useState(''); const [busy,setBusy]=useState(false);
+  // Force autoplay everywhere (mobile Safari ignores the attribute unless muted is
+  // set as a PROPERTY and play() is called; retry on first interaction as a fallback).
+  const vidRef=useRef(null);
+  useEffect(()=>{
+    const v=vidRef.current; if(!v) return;
+    v.muted=true; v.defaultMuted=true; v.setAttribute('muted','');
+    const tryPlay=()=>{ const p=v.play(); if(p&&p.catch) p.catch(()=>{}); };
+    tryPlay();
+    v.addEventListener('loadeddata', tryPlay, {once:true});
+    const kick=()=>tryPlay();
+    document.addEventListener('touchstart', kick, {once:true, passive:true});
+    document.addEventListener('pointerdown', kick, {once:true});
+    document.addEventListener('visibilitychange', kick);
+    return ()=>{ document.removeEventListener('touchstart',kick); document.removeEventListener('pointerdown',kick); document.removeEventListener('visibilitychange',kick); };
+  }, []);
   const submit=async()=>{ setErr(''); if(!id||!pw){ setErr(ar?'أدخل البريد وكلمة المرور.':'Enter your email/username and password.'); return; }
     setBusy(true); const reason=await onLogin(id,pw,remember); setBusy(false);
     if(reason==='inactive') setErr(ar?'الحساب غير نشط. يرجى التواصل مع مالك النظام.':'Your account is inactive. Please contact the system owner.');
@@ -8692,7 +8707,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
     setBusy(false);
   };
   return html`<div class="cine" dir=${ar?'rtl':'ltr'}>
-    <video class="cine-vid" autoPlay muted loop playsInline poster="/magnet-logo.png">
+    <video ref=${vidRef} class="cine-vid" autoPlay muted loop playsInline preload="auto" poster="/magnet-logo.png">
       <source src="/magnet-login.mp4" type="video/mp4"/>
     </video>
     <div class="cine-scrim"></div>
