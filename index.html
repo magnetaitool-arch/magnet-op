@@ -500,6 +500,9 @@ body.theme-light .btn{ border-radius:10px; }
 /* modal */
 .ovl{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:7vh 20px;animation:fadeUp .18s}
 .modal{background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 22%),var(--bg-2);border:1px solid var(--line-2);border-radius:var(--r-xl);width:480px;max-width:96vw;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 50px 110px -34px rgba(0,0,0,.9);animation:slideUp .24s cubic-bezier(.2,.7,.2,1)}
+.modal.nudge{animation:modalNudge .2s ease}
+@keyframes modalNudge{0%{transform:scale(1)}40%{transform:scale(1.012)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.modal.nudge{animation:none}}
 .modal.wide{width:640px}
 @keyframes slideUp{from{transform:translateY(16px);opacity:.5}to{transform:none;opacity:1}}
 .modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
@@ -4222,11 +4225,15 @@ window.__charts = { CountUp, AnimatedKPI, DonutChart, ChartLegend, BarChart, HBa
 
 
 function Modal({ title, onClose, children, wide }) {
-  useEffect(()=>{ const h=e=>e.key==='Escape'&&onClose(); window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[]);
-  return html`<div class="ovl" onClick=${onClose}>
-    <div class="modal ${wide?'wide':''}" onClick=${e=>e.stopPropagation()}>
+  // Do NOT close on backdrop click or Escape — accidental clicks on empty space were
+  // wiping out everything the user typed. Only the × button (or the form's Cancel/Save)
+  // closes it now. A stray click on the backdrop gives a tiny nudge to the dialog instead.
+  const [nudge,setNudge]=useState(false);
+  const bump=()=>{ setNudge(true); setTimeout(()=>setNudge(false),200); };
+  return html`<div class="ovl" onClick=${bump}>
+    <div class="modal ${wide?'wide':''} ${nudge?'nudge':''}" onClick=${e=>e.stopPropagation()}>
       <div class="modal-h"><h3>${title}</h3>
-        <button class="icon-btn" onClick=${onClose}><span style=${{fontSize:18,lineHeight:1}}>×</span></button></div>
+        <button class="icon-btn" onClick=${onClose} title="Close"><span style=${{fontSize:18,lineHeight:1}}>×</span></button></div>
       <div class="modal-b">${children}</div>
     </div></div>`;
 }
