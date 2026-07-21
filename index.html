@@ -2359,8 +2359,34 @@ function canApproveRequest(role, reqType){
   return false;
 }
 
+// A logged-in ACCOUNT (acct-…) and the person's EMPLOYEE card (emp-…) are separate
+// records and are often NOT linked. Tasks are assigned by employee id, but the
+// session identifies by account id — so "my tasks" matched nothing for staff.
+// Resolve the employee by any reliable key (employeeId → id → email → username → name).
+function resolveEmployee(user, db){
+  if(!user || !db) return null; const emps=db.employees||[];
+  const norm=s=>String(s||'').trim().toLowerCase();
+  const em=norm(user.email), un=norm(user.username), nm=norm(user.name||user.fullName), eid=user.employeeId;
+  return (eid&&emps.find(e=>e.id===eid))
+    || emps.find(e=>e.id===user.id)
+    || (em&&emps.find(e=>norm(e.loginEmail)===em||norm(e.email)===em))
+    || (un&&emps.find(e=>norm(e.username)===un))
+    || (em&&em.indexOf('@')>0&&emps.find(e=>norm(e.loginEmail).split('@')[0]===em.split('@')[0]))
+    || (nm&&emps.find(e=>norm(e.fullName)===nm||norm(e.name)===nm))
+    || null;
+}
+// Every id/name that means "assigned to the current user" (account + linked employee).
+function assignKeys(user, db){
+  const set=new Set();
+  if(user){ [user.id,user.name,user.username,user.fullName].forEach(v=>v&&set.add(String(v))); }
+  const e=resolveEmployee(user,db); if(e){ [e.id,e.fullName,e.name].forEach(v=>v&&set.add(String(v))); }
+  return set;
+}
+// Is a task/deliverable's assignee the current user? (matches account OR employee)
+function assignedToMe(assignedTo, user, db){ if(assignedTo==null||assignedTo==='') return false; return assignKeys(user,db).has(String(assignedTo)); }
+
 // Restrict the records a role is allowed to see (Client = own; creatives = assigned)
-function filterRecordsByRole(coll, records, role, user){
+function filterRecordsByRole(coll, records, role, user, db){
   if(!user) return records;
   role = aliasRole(role);
   if(role==='Admin') return records;
@@ -2384,11 +2410,11 @@ function filterRecordsByRole(coll, records, role, user){
   // Tasks: every non-manager sees ONLY the tasks assigned to them. Managers
   // (Sales/PM/Marketing Director/Art Director) and Admin/Owner see everyone's.
   if(coll==='tasks' && !TASK_MANAGERS.includes(role)){
-    return records.filter(r=>r.assignedTo===user.id || r.assignedTo===user.name);
+    return records.filter(r=>assignedToMe(r.assignedTo, user, db));
   }
   // Deliverables stay scoped to their owner for the pure creative roles (unchanged).
   if((role==='Designer'||role==='Video Editor') && coll==='deliverables'){
-    return records.filter(r=>r.assignedTo===user.id || r.assignedTo===user.name);
+    return records.filter(r=>assignedToMe(r.assignedTo, user, db));
   }
   return records;
 }
@@ -4527,7 +4553,8 @@ function NotificationCenterView({ ctx }){
   const { db, role, user } = ctx;
   const [tab,setTab]=useState('all');
   const byTime=(a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0);
-  const isMine=(n)=>(!n.userId||n.userId===user.id)&&(!n.role||n.role===role||aliasRole(n.role)===aliasRole(role));
+  const _myKeys=assignKeys(user,db);
+  const isMine=(n)=>(!n.userId||_myKeys.has(String(n.userId)))&&(!n.role||n.role===role||aliasRole(n.role)===aliasRole(role));
   // Only ever show/act on notifications addressed to THIS user (or their role / broadcast).
   // Never expose or mark other people's personal notifications — same rule as the topbar bell.
   const base=[...(db.notifications||[])].filter(isMine).sort(byTime);
@@ -5702,8 +5729,9 @@ function App(){
   //    so e.g. a Manager sees Project-Manager-targeted ones). This is why the bell was empty for the Owner:
   //    24 of 32 notifications are role-targeted (HR/Sales/PM) and the old filter required an exact role match.
   const _seesAllNotifs = (role==='Owner' || aliasRole(role)==='Admin');
+  const _myKeys = assignKeys(user, db); // account id/name + linked employee id/name
   const notifs = (db.notifications||[])
-    .filter(n=> !n.userId || n.userId===user.id)
+    .filter(n=> !n.userId || _myKeys.has(String(n.userId)))
     .filter(n=> !n.role || _seesAllNotifs || n.role===role || aliasRole(n.role)===aliasRole(role));
   const unread = notifs.filter(n=>!n.read).length;
   // Sound + alert when a new notification or a new chat message (from someone else) arrives.
@@ -5728,7 +5756,7 @@ function App(){
     go };
 
   const byBrand = (arr)=> brand==='All'?arr:(arr||[]).filter(x=>!x.brand||x.brand===brand);
-  const visible = (coll)=> filterRecordsByRole(coll, byBrand(db[coll]||[]), role, user);
+  const visible = (coll)=> filterRecordsByRole(coll, byBrand(db[coll]||[]), role, user, db);
 
   // Public campaign form (?form=SLUG): a no-login, branded lead-capture page.
   const _formSlug = getFormSlug();
@@ -6631,7 +6659,7 @@ function DashboardView({ ctx, byBrand }){
 
   // CLIENT dashboard
   if(aliasRole(role)==='Client'){
-    const mine = (coll)=>filterRecordsByRole(coll, db[coll]||[], role, user);
+    const mine = (coll)=>filterRecordsByRole(coll, db[coll]||[], role, user, db);
     const dlv = mine('deliverables');
     return html`<div class="view">
       <${Head} eyebrow="Client Portal" title="Welcome back" desc="Your projects, approvals, invoices and files."/>
@@ -6677,8 +6705,8 @@ function DashboardView({ ctx, byBrand }){
   // Uses aliasRole so all creative role names — incl. the new "Creative" role — land here
   // (was an exact role==='Designer' check, so "Creative" fell through to the admin view).
   if(['Designer','Video Editor','Social Media','Art Director'].includes(aliasRole(role))){
-    const myTasks = (db.tasks||[]).filter(t=>t.assignedTo===user.id||t.assignedTo===user.name);
-    const myDlv = (db.deliverables||[]).filter(d=>d.assignedTo===user.id||d.assignedTo===user.name);
+    const myTasks = (db.tasks||[]).filter(t=>assignedToMe(t.assignedTo,user,db));
+    const myDlv = (db.deliverables||[]).filter(d=>assignedToMe(d.assignedTo,user,db));
     return html`<div class="view">
       <${Head} eyebrow="My Work" title=${(ctx.lang==='ar'?'أهلاً، ':'Hello, ')+(user.name||user.fullName||'')} desc=${ctx.lang==='ar'?'شغلك ومواعيدك النهاردة.':'Your assigned tasks and deadlines.'}/>
       <div class="grid g-4 stagger" style=${{marginBottom:18}}>
@@ -6830,7 +6858,7 @@ function DashboardView({ ctx, byBrand }){
       if(canCreateTasks(role)) acts.push([arr?'تاسك جديد':'New task',()=>ctx.openModal('tasks',{status:'Backlog',priority:'Normal'})]);
       if(canEdit('projects',role)) acts.push([arr?'مشروع جديد':'New project',()=>ctx.openModal('projects',{status:'Not Started',createInvoice:true})]);
       if(canEdit('invoices',role)&&fin) acts.push([arr?'فاتورة':'New invoice',()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:today,tax:5,invoiceNumber:nextInvoiceNumber(db)})]);
-      const myTasks=(db.tasks||[]).filter(tk=>(tk.assignedTo===user.id||tk.assignedTo===user.name)&&!['Done','Completed','Approved'].includes(tk.status)&&(tk.dueDate===today||isOverdue(tk.dueDate)));
+      const myTasks=(db.tasks||[]).filter(tk=>assignedToMe(tk.assignedTo,user,db)&&!['Done','Completed','Approved'].includes(tk.status)&&(tk.dueDate===today||isOverdue(tk.dueDate)));
       const approvals=(db.approvalRequests||[]).filter(r=>r.status==='Pending Approval');
       const meetings=(db.meetings||[]).filter(mt=>(mt.date||'').slice(0,10)===today&&mt.status!=='Cancelled');
       const recent=[...(db.clients||[]).map(x=>({t:'accounts',n:cNameOf(x),u:x.updatedAt,ic:'people',rec:x,coll:'clients'})),
@@ -8179,7 +8207,7 @@ function TasksView({ ctx, visible, ce }){
   const all=visible('tasks');
   const wk=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   const VIEWS={
-    'My Tasks':t=>t.assignedTo===user.id||t.assignedTo===user.name,
+    'My Tasks':t=>assignedToMe(t.assignedTo,user,db),
     'All Tasks':()=>true,
     'Today':t=>t.dueDate===todayISO(),
     'This Week':t=>t.dueDate&&t.dueDate>=todayISO()&&t.dueDate<=wk,
@@ -8426,7 +8454,7 @@ function ChatView({ ctx }){
     ...(db.projects||[]).slice(0,8).map(p=>({type:'Project',id:p.id,label:'Project · '+(p.projectName||p.name)})),
     ...(db.clients||[]).slice(0,8).map(c=>({type:'Client',id:c.id,label:'Client · '+(c.brandName||c.name)}))];
   const [chan,setChan]=useState(channels[0]); const [msg,setMsg]=useState(''); const [vis,setVis]=useState('Internal Only');
-  const all=filterRecordsByRole('chatMessages', db.chatMessages||[], role, user);
+  const all=filterRecordsByRole('chatMessages', db.chatMessages||[], role, user, db);
   const msgs=all.filter(m=>m.channelType===chan.type && (chan.type==='General'||m.channelId===chan.id));
   const send=()=>{ if(!msg)return;
     const v = role==='Client' ? 'Client Visible' : vis; // clients can only post client-visible, or their msg would be hidden from them
