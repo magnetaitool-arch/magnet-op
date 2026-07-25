@@ -6009,7 +6009,7 @@ const FORM_SCHEMAS = {
     {k:'createDefaultTasks',label:'Create default task checklist',type:'checkbox',group:'Notes'},
   ],
   tasks:[
-    {k:'title',label:'Task title',req:true,group:'Basic'},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Basic'},{k:'projectId',label:'Project',type:'ref',coll:'projects',req:true,group:'Basic'},{k:'assignedTeamId',label:'Assigned Team',type:'ref',coll:'teams',group:'Basic'},
+    {k:'title',label:'Task title',req:true,group:'Basic'},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Basic'},{k:'projectId',label:'Project',type:'ref',coll:'projects',req:true,group:'Basic',filterBy:(p,rec)=>!rec.clientId||p.clientId===rec.clientId},{k:'assignedTeamId',label:'Assigned Team',type:'ref',coll:'teams',group:'Basic'},
     {k:'taskType',label:'Task type',type:'select',opts:TASK_TYPES,group:'Basic'},{k:'status',label:'Status',type:'select',opts:ST.task,req:true,group:'Basic'},{k:'priority',label:'Priority',type:'select',opts:TASK_PRIORITIES,req:true,group:'Basic'},
     {k:'assignedTo',label:'Assigned to',type:'ref',coll:'employees',req:true,group:'Basic',filterBy:(e,rec,db)=>{ if(!rec.assignedTeamId) return true; const tm=(db.teams||[]).find(x=>x.id===rec.assignedTeamId); if(!tm) return true; const ids=new Set([...(tm.members||[]),tm.teamLeadId]); return ids.has(e.id); }},{k:'deliverableId',label:'Related deliverable',type:'ref',coll:'deliverables',group:'Basic'},
     {k:'startDate',label:'Start',type:'date',group:'Dates'},{k:'dueDate',label:'Due date',type:'date',req:true,group:'Dates'},{k:'estimatedHours',label:'Est. hours',type:'number',group:'Dates'},
@@ -6018,8 +6018,8 @@ const FORM_SCHEMAS = {
     {k:'clientVisible',label:'Visible to client',type:'checkbox',group:'Workflow'},
   ],
   deliverables:[
-    {k:'title',label:'Deliverable',req:true,group:'Basic'},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Basic'},{k:'projectId',label:'Project',type:'ref',coll:'projects',req:true,group:'Basic'},
-    {k:'taskId',label:'Related task',type:'ref',coll:'tasks',group:'Basic'},{k:'type',label:'Type',type:'select',opts:DELIVERABLE_TYPES,req:true,group:'Basic'},
+    {k:'title',label:'Deliverable',req:true,group:'Basic'},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Basic'},{k:'projectId',label:'Project',type:'ref',coll:'projects',req:true,group:'Basic',filterBy:(p,rec)=>!rec.clientId||p.clientId===rec.clientId},
+    {k:'taskId',label:'Related task',type:'ref',coll:'tasks',group:'Basic',filterBy:(x,rec)=>!rec.clientId||x.clientId===rec.clientId},{k:'type',label:'Type',type:'select',opts:DELIVERABLE_TYPES,req:true,group:'Basic'},
     {k:'platform',label:'Platform',type:'select',opts:DELIVERABLE_PLATFORMS,req:true,group:'Basic'},{k:'format',label:'Format',group:'Basic'},
     {k:'status',label:'Status',type:'select',opts:ST.deliverable,group:'Basic'},{k:'priority',label:'Priority',type:'select',opts:TASK_PRIORITIES,group:'Basic'},
     {k:'assignedTo',label:'Owner',type:'ref',coll:'employees',req:true,group:'Basic'},{k:'dueDate',label:'Due',type:'date',req:true,group:'Basic'},
