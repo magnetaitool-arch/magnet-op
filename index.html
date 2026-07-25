@@ -2663,7 +2663,11 @@ function normalizeProject(p){
     invoiceId:p.invoiceId||'', paymentStatus:p.paymentStatus||'',
     briefLink:p.briefLink||'', driveFolder:p.driveFolder||'', finalDeliveryFolder:p.finalDeliveryFolder||'', referencesLinks:p.referencesLinks||'', notes:p.notes||'',
   };
-  return Object.assign({},p,d,{name:p.name||d.projectName});
+  // projectName is the single source of truth for a project's name (it's the only
+  // name field the form edits). Force the generic `name` to mirror it so a stale
+  // legacy `name` (e.g. left over from duplicating another project) can never show
+  // the wrong project on task cards, tables, or dropdowns.
+  return Object.assign({},p,d,{name:d.projectName});
 }
 function normalizeTask(t){
   t=t||{};
