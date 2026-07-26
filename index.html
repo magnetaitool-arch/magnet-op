@@ -4366,6 +4366,30 @@ function Field({ f, value, onChange, db, rec }) {
         ${opts.length===0?html`<div class="muted" style=${{fontSize:12,padding:6}}>—</div>`:''}</div>
       </div></label>`;
   }
+  if(f.type==='items'){ // itemized line editor for invoices: rows of {itemName, quantity, unitPrice}
+    const ar=getLang()==='ar';
+    const arr=Array.isArray(value)?value:[];
+    const upd=(i,k,v)=>set(arr.map((row,idx)=>idx===i?Object.assign({},row,{[k]:v}):row));
+    const addRow=()=>set([...arr,{itemName:'',quantity:1,unitPrice:''}]);
+    const delRow=(i)=>set(arr.filter((_,idx)=>idx!==i));
+    const sub=arr.reduce((s,r)=>s+((Number(r.quantity)||0)*(Number(r.unitPrice)||0)),0);
+    const cell={background:'var(--fld-bg,rgba(255,255,255,.04))',border:'1px solid var(--line,#2a2f22)',borderRadius:8,color:'inherit',font:'inherit',padding:'8px 10px',width:'100%'};
+    return html`<label class="fld full"><span>${t(f.label)}</span>
+      <div style=${{display:'flex',flexDirection:'column',gap:8}}>
+        ${arr.map((row,i)=>html`<div key=${i} style=${{display:'grid',gridTemplateColumns:'1fr 62px 92px 84px 26px',gap:8,alignItems:'center'}}>
+          <input style=${cell} placeholder=${ar?'البند / الخدمة':'Item / service'} value=${row.itemName||''} onChange=${e=>upd(i,'itemName',e.target.value)}/>
+          <input style=${Object.assign({},cell,{textAlign:'center'})} type="number" min="0" placeholder=${ar?'كمية':'Qty'} value=${row.quantity==null?'':row.quantity} onChange=${e=>upd(i,'quantity',e.target.value===''?'':Number(e.target.value))}/>
+          <input style=${Object.assign({},cell,{textAlign:'right'})} type="number" min="0" placeholder=${ar?'السعر':'Price'} value=${row.unitPrice==null?'':row.unitPrice} onChange=${e=>upd(i,'unitPrice',e.target.value===''?'':Number(e.target.value))}/>
+          <span class="mono" style=${{textAlign:'right',fontSize:12,color:'var(--ink-2,#9aa08c)'}}>${money((Number(row.quantity)||0)*(Number(row.unitPrice)||0))}</span>
+          <button type="button" title=${ar?'حذف':'Remove'} onClick=${()=>delRow(i)} style=${{background:'none',border:'none',color:'var(--ink-3,#888)',cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}>×</button>
+        </div>`)}
+        <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:2,flexWrap:'wrap',gap:8}}>
+          <button type="button" class="btn btn-ghost" onClick=${addRow}>${ar?'+ إضافة بند':'+ Add item'}</button>
+          ${arr.length?html`<span class="mono" style=${{fontSize:13}}>${ar?'الإجمالي الفرعي':'Subtotal'}: <b>${money(sub)}</b></span>`
+            :html`<span class="muted" style=${{fontSize:11.5}}>${ar?'اختياري — سيبها فاضية لفاتورة بمبلغ واحد':'Optional — leave empty for a single-amount invoice'}</span>`}
+        </div>
+      </div></label>`;
+  }
   if(f.type==='checkbox') return html`<label class="fld" style=${{flexDirection:'row',alignItems:'center',gap:9}}>
     <input type="checkbox" checked=${!!value} onChange=${e=>set(e.target.checked)} style=${{width:16,height:16,accentColor:'var(--lime)'}}/>
     <span style=${{textTransform:'none',letterSpacing:0,fontSize:13,color:'var(--ink-2)'}}>${t(f.label)}</span></label>`;
@@ -6089,7 +6113,7 @@ const FORM_SCHEMAS = {
     {k:'internalNotes',label:'Internal notes',type:'textarea',group:'Notes'},
   ],
   revisions:[{k:'deliverableId',label:'Deliverable',type:'ref',coll:'deliverables'},{k:'note',label:'Note',type:'textarea',req:true},{k:'assignedTo',label:'Assignee',type:'ref',coll:'employees'},{k:'priority',label:'Priority',type:'select',opts:PRIORITIES},{k:'status',label:'Status',type:'select',opts:ST.revision},{k:'dueDate',label:'Due',type:'date'}],
-  invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date'},{k:'dueDate',label:'Due',type:'date'},{k:'amount',label:'Amount (pre-tax)',type:'number',req:true},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'}],
+  invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'items',label:'Items / services',type:'items',full:true},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date'},{k:'dueDate',label:'Due',type:'date'},{k:'amount',label:'Amount (pre-tax) — used only if no items above',type:'number',reqIf:r=>!(Array.isArray(r.items)&&r.items.some(i=>i&&(Number(i.unitPrice)>0||i.itemName)))},{k:'discount',label:'Discount',type:'number'},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'},{k:'notes',label:'Notes (shown on the invoice)',type:'textarea'}],
   payments:[{k:'invoiceId',label:'Invoice',type:'ref',coll:'invoices'},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'method',label:'Method',type:'select',opts:['Bank','Card','Cash','Cheque','Online']}],
   // Partner drawings/deposits ledger. NOT an expense: draws are profit
   // distributions, so they never touch net profit — they only move the
