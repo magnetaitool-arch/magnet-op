@@ -4703,7 +4703,9 @@ function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions
       ${cols.slice(0,Math.min(cols.length,5)).map((c,j)=>html`<span key=${j} class="sk sk-row" style=${{flex:j===0?2:1}}></span>`)}
     </div>`)}
   </div><//>`; }
-  if(rows.length===0 && empty){ return html`<${Panel}><${EmptyState} ...${empty}/><//>`; }
+  // Deploy 6: every table gets an empty state — the view's custom one if provided,
+  // otherwise EmptyState's sensible default (icon + "Nothing here yet").
+  if(rows.length===0){ return html`<${Panel}><${EmptyState} ...${empty||{}}/><//>`; }
   // data-label on each cell powers the mobile table-to-cards transform (CSS only).
   return html`<${Panel} pad=${false}>
     ${showSearch&&html`<div class="flex between center" style=${{padding:'10px 14px',borderBottom:'1px solid var(--line)',gap:10,flexWrap:'wrap'}}>
