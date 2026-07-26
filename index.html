@@ -5230,7 +5230,7 @@ function App(){
   const hhmm = ()=>{ const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); };
   const logActivity = (u, action, details)=>{
     const al = { id:uid('al'), entityType:'users', entityId:u.id, action, actorId:u.id, actorName:(u.fullName||u.username||'User'), details:details||'', createdAt:nowISO() };
-    setDb(d=>({...d, activityLogs:[al, ...(d.activityLogs||[])].slice(0,500)}));
+    setDb(d=>({...d, activityLogs:[al, ...(d.activityLogs||[])].slice(0,1000)}));
     cloudUpsert(cfg.current,'activityLogs',al);
   };
   // On login: log activity (shows as active) + auto check-in once per day.
@@ -5418,7 +5418,7 @@ function App(){
   /* ---- logging helpers ---- */
   const addActivity = (entityType, entityId, action, details) => {
     const rec = { id:uid('al'), entityType, entityId, action, actorId:user.id, actorName:user.name, details:details||'', createdAt:nowISO() };
-    setDb(d=>({...d, activityLogs:[rec, ...(d.activityLogs||[])].slice(0,500)}));
+    setDb(d=>({...d, activityLogs:[rec, ...(d.activityLogs||[])].slice(0,1000)}));
     cloudUpsert(cfg.current,'activityLogs',rec);
   };
   const addNotification = (userIdOrRole, title, message, entityType, entityId) => {
@@ -5474,10 +5474,21 @@ function App(){
     addActivity(coll, rec.id, 'created', rec.name||rec.title||rec.invoiceNumber||'');
     return rec;
   };
+  // Collections too high-frequency / system to audit — logging them would flood the trail.
+  const NO_AUDIT = new Set(['notifications','activityLogs','chatMessages','comments','gameScores','gameStats','_ratelimit','attendance','availability']);
   const updateRecord = (coll, id, updates) => {
-    const rec = {}; let out=null;
-    setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ out={...x,...updates,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
-    if(out) cloudUpsert(cfg.current, coll, out); // push THIS record immediately (no shared-closure race)
+    let out=null, _prev=null;
+    setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ _prev=x; out={...x,...updates,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
+    if(out){
+      cloudUpsert(cfg.current, coll, out); // push THIS record immediately (no shared-closure race)
+      // Deploy 5: audit trail for edits & status changes (create & delete are already logged).
+      if(!NO_AUDIT.has(coll)){
+        const _lbl=out.name||out.title||out.invoiceNumber||out.projectName||out.fullName||'';
+        if(updates && Object.prototype.hasOwnProperty.call(updates,'status') && _prev && _prev.status!==out.status)
+          addActivity(coll, id, 'status → '+(out.status||''), _lbl);
+        else addActivity(coll, id, 'updated', _lbl);
+      }
+    }
     return out;
   };
   const deleteRecord = (coll, id) => {
