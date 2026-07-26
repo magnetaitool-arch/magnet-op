@@ -3678,21 +3678,53 @@ function mergeDB(local, cloud){
   });
   return out;
 }
+// Deploy 4: save-feedback indicator. One small non-React pill (bottom-left) reflects
+// the current cloud-write state — Saving / Saved / Queued(offline) / Retrying / Failed.
+// PURELY VISUAL and fully guarded: it can never throw into or affect a save.
+let _moSaveHide=null;
+function moSaveStatus(state, n){
+  try{
+    const ar=(function(){ try{ return (JSON.parse(localStorage.getItem('tia_agency_os_appsettings')||'{}').language)==='ar'; }catch(e){ return false; } })();
+    const M={
+      saving:  {t:ar?'بيحفظ…':'Saving…',                 c:'#c8f31e', b:'rgba(200,243,30,.40)'},
+      saved:   {t:ar?'اتحفظ ✓':'Saved ✓',                 c:'#33d6ac', b:'rgba(51,214,172,.40)'},
+      queued:  {t:(ar?'في الانتظار · أوفلاين':'Queued · offline')+(n?(' · '+n):''), c:'#f5b301', b:'rgba(245,179,1,.40)'},
+      retrying:{t:ar?'بيعيد المحاولة…':'Retrying…',        c:'#6fb0ff', b:'rgba(111,176,255,.40)'},
+      failed:  {t:(ar?'فشل الحفظ — دوس للإعادة':'Failed — click to retry')+(n?(' · '+n):''), c:'#ff5d6c', b:'rgba(255,93,108,.45)'},
+    };
+    const m=M[state]; if(!m) return;
+    let el=document.getElementById('mo-save-status');
+    if(!el){ el=document.createElement('div'); el.id='mo-save-status';
+      el.style.cssText='position:fixed;left:14px;bottom:14px;z-index:10000;background:#151713;border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.05em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);user-select:none;transition:opacity .3s';
+      document.body.appendChild(el);
+    }
+    el.style.color=m.c; el.style.border='1px solid '+m.b; el.style.opacity='1'; el.textContent=m.t;
+    const clickable=(state==='failed'||state==='queued');
+    el.style.cursor=clickable?'pointer':'default';
+    el.onclick=clickable?function(){ try{ syncQueueDrain(); }catch(e){} }:null;
+    if(_moSaveHide){ clearTimeout(_moSaveHide); _moSaveHide=null; }
+    if(state==='saved'){ _moSaveHide=setTimeout(function(){ try{ if(el){ el.style.opacity='0'; setTimeout(function(){ try{ if(el&&el.style.opacity==='0') el.remove(); }catch(e){} },350); } }catch(e){} }, 1600); }
+  }catch(e){}
+}
 async function cloudUpsert(cfg, coll, rec){
   if(!cfgComplete(cfg) || !rec || !rec.id) return;
+  moSaveStatus('saving');
   try {
     const res = await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify([{ id:rec.id, coll, data:rec }]) });
-    if(!res.ok) syncQueuePush({ type:'upsert', coll, rec });      // server rejected -> retry later
-  } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); }      // offline -> durable queue, retry later
+    if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueLoad().length); }  // server rejected -> retry later
+    else moSaveStatus('saved');
+  } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueLoad().length); }      // offline -> durable queue, retry later
 }
 async function cloudDelete(cfg, id){
   if(!cfgComplete(cfg) || !id) return;
+  moSaveStatus('saving');
   try {
     const res = await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent(id)), { method:'DELETE', headers:_headers(cfg) });
-    if(!res.ok) syncQueuePush({ type:'delete', id });
-  } catch(e){ syncQueuePush({ type:'delete', id }); }
+    if(!res.ok){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueLoad().length); }
+    else moSaveStatus('saved');
+  } catch(e){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueLoad().length); }
 }
 async function cloudPushAll(cfg, db){
   if(!cfgComplete(cfg)) return;
@@ -3736,6 +3768,7 @@ async function syncQueueDrain(){
   try {
     const cfg=getCfg(); if(!cfgComplete(cfg)) return;
     const list=syncQueueLoad(); if(!list.length) return;
+    moSaveStatus('retrying');
     const keep=[];
     for(const item of list){
       let ok=false;
@@ -3753,7 +3786,8 @@ async function syncQueueDrain(){
       if(!ok){ item.tries=(item.tries||0)+1; keep.push(item); }
     }
     syncQueueSave(keep);
-    if(!keep.length) window.__moLastSync=Date.now();
+    if(!keep.length){ window.__moLastSync=Date.now(); moSaveStatus('saved'); }
+    else { const mt=keep.reduce(function(m,x){ return Math.max(m,x.tries||0); },0); moSaveStatus(mt>=3?'failed':'queued', keep.length); }
   } finally { _sqDraining=false; }
 }
 function syncQueueChip(){
@@ -3763,7 +3797,7 @@ function syncQueueChip(){
     if(!n){ if(el) el.remove(); return; }
     if(!el){
       el=document.createElement('div'); el.id='sync-pending-chip';
-      el.style.cssText='position:fixed;left:14px;bottom:14px;z-index:9999;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
+      el.style.cssText='position:fixed;left:14px;bottom:58px;z-index:9999;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
       el.onclick=function(){ syncQueueDrain(); };
       document.body.appendChild(el);
     }
