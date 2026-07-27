@@ -3545,10 +3545,61 @@ function _headers(cfg, extra){
   // them as a Bearer token makes PostgREST try (and fail) to decode a JWT, which
   // breaks anon access. For those, the apikey header alone authenticates as `anon`.
   var h = { apikey:cfg.key, 'Content-Type':'application/json' };
-  if(/^eyJ/.test(cfg.key||'')) h.Authorization = 'Bearer '+cfg.key;
+  // AUTH_V2 (flag-gated): if enabled AND a logged-in user's JWT is present, authenticate
+  // AS THAT USER so the server (RLS) enforces permissions. Flag OFF or no session ->
+  // falls through to the exact legacy behavior below (anon).
+  var _uj = (typeof AUTH_V2!=='undefined' && AUTH_V2 && AUTH_V2.enabled) ? sbAccessToken() : '';
+  if(_uj) h.Authorization = 'Bearer '+_uj;
+  else if(/^eyJ/.test(cfg.key||'')) h.Authorization = 'Bearer '+cfg.key;
   return Object.assign(h, extra||{});
 }
 function _rest(cfg, path){ return cfg.url.replace(/\/$/,'') + '/rest/v1/' + path; }
+/* ---- AUTH_V2 (additive, flag-gated) — JWT session layer. Inert until the '_cfg-authv2'
+   record has enabled:true AND the user's role is allowed; with the flag OFF the app
+   behaves exactly as before. Instant rollback = flip the flag (no redeploy). ---- */
+const SB_SESSION_KEY='tia_sb_session';
+let AUTH_V2={enabled:false, roles:[]};
+function getSbSession(){ try{ return JSON.parse(store.get(SB_SESSION_KEY)||'null'); }catch(e){ return null; } }
+function setSbSession(s){ try{ if(s) store.set(SB_SESSION_KEY, JSON.stringify(s)); else store.del(SB_SESSION_KEY); }catch(e){} }
+function sbAccessToken(){ try{ const s=getSbSession(); if(!s||!s.access_token) return ''; if(s.expires_at && (Number(s.expires_at)*1000) < (Date.now()+5000)) return ''; return s.access_token; }catch(e){ return ''; } }
+async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return; const r=await fetch(_rest(cfg,'records?id=eq._cfg-authv2&select=data'), { headers:{ apikey:cfg.key } }); if(r.ok){ const rows=await r.json(); const d=rows&&rows[0]&&rows[0].data; if(d){ AUTH_V2={ enabled:!!d.enabled, roles:Array.isArray(d.roles)?d.roles:[] }; } } }catch(e){} }
+try{ window.__authv2={ get:()=>AUTH_V2, session:getSbSession, token:sbAccessToken, reload:loadAuthV2Flag }; }catch(e){}
+/* ---- AUTH_V2 session management (Step 3): access+refresh tokens, auto-refresh,
+   wake/expiry handling. All inert unless AUTH_V2.enabled. Distinguishes an AUTH
+   failure (revoked/invalid refresh token -> must re-login) from a NETWORK failure
+   (keep the session, retry later -> offline recovery). ---- */
+function _authUrl(cfg, p){ return (cfg&&cfg.url||'').replace(/\/$/,'')+'/auth/v1/'+p; }
+let _sbRefreshP=null, _sbTimer=null;
+async function sbRefresh(cfg){
+  if(_sbRefreshP) return _sbRefreshP;                 // dedupe concurrent refreshes (single-flight)
+  _sbRefreshP=(async ()=>{
+    try{
+      const s=getSbSession(); if(!s||!s.refresh_token||!cfgComplete(cfg)) return null;
+      const r=await fetch(_authUrl(cfg,'token?grant_type=refresh_token'), { method:'POST', headers:{ apikey:cfg.key, 'Content-Type':'application/json' }, body:JSON.stringify({ refresh_token:s.refresh_token }) });
+      if(r.status>=400 && r.status<500){ setSbSession(null); return {invalid:true}; }   // revoked/invalid -> force re-login
+      if(!r.ok) return null;                            // 5xx -> keep session, retry later
+      const ns=await r.json();
+      if(ns && ns.access_token){ if(!ns.refresh_token) ns.refresh_token=s.refresh_token; setSbSession(ns); return ns; }
+      return null;
+    }catch(e){ return null; }                          // network error -> keep session (offline recovery)
+  })();
+  const out=await _sbRefreshP; _sbRefreshP=null; return out;
+}
+function scheduleSbRefresh(cfg){
+  try{ if(_sbTimer){ clearTimeout(_sbTimer); _sbTimer=null; }
+    if(!(AUTH_V2 && AUTH_V2.enabled)) return;
+    const s=getSbSession(); if(!s||!s.expires_at) return;
+    let ms=(Number(s.expires_at)*1000)-Date.now()-60000;   // refresh 60s before expiry (clock-drift margin)
+    ms=Math.max(2000, Math.min(ms, 2100000000));
+    _sbTimer=setTimeout(async ()=>{ await sbRefresh(cfg); scheduleSbRefresh(cfg); }, ms);
+  }catch(e){}
+}
+async function sbEnsureFresh(cfg){                        // on load / wake: refresh if near/after expiry, then (re)schedule
+  try{ if(!(AUTH_V2 && AUTH_V2.enabled)) return; const s=getSbSession(); if(!s||!s.access_token){ scheduleSbRefresh(cfg); return; }
+    if(!s.expires_at || (Number(s.expires_at)*1000) < (Date.now()+90000)) await sbRefresh(cfg);
+    scheduleSbRefresh(cfg);
+  }catch(e){}
+}
 
 /* ---- Accounts/auth via the service-role `accounts` Edge Function. Password
    hashes stay on the server and never reach the browser. A short-lived HMAC token
@@ -3574,10 +3625,17 @@ async function cloudLoadAll(cfg){
   // PostgREST caps every response at 1000 rows. Once the database grew past 1000
   // records, a single fetch silently dropped the tail — fresh devices "lost" the
   // newest clients. Page through with Range headers until the last page.
+  await sbEnsureFresh(cfg); // AUTH_V2: proactively refresh a near-expiry token before loading (no-op if flag off)
   const rows=[]; let start=0;
   for(;;){
-    const res = await fetch(_rest(cfg,'records?select=*&order=id.asc'),
+    let res = await fetch(_rest(cfg,'records?select=*&order=id.asc'),
       { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
+    if(res.status===401 && AUTH_V2 && AUTH_V2.enabled){ // revoked/expired JWT -> refresh once, then retry
+      const _rf=await sbRefresh(cfg);
+      if(_rf && _rf.invalid) throw new Error('Load failed (session expired)');
+      res = await fetch(_rest(cfg,'records?select=*&order=id.asc'),
+        { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
+    }
     if(!res.ok) throw new Error('Load failed ('+res.status+')');
     const chunk = await res.json();
     rows.push.apply(rows, chunk);
@@ -5277,12 +5335,21 @@ function App(){
     if(appSettings.requireVerification && res.user && res.user.role!=='Owner' && res.user.verified===false)
       return (lang==='ar') ? 'يجب تأكيد بريدك الإلكتروني أولاً (راجع رسالة التأكيد).' : 'Please verify your email first — check your inbox for the verification link.';
     if(res.token) setAcctToken(res.token, remember); // session token for account writes
+    // AUTH_V2 (flag-gated): additionally obtain a real Supabase session so data requests
+    // carry the user's JWT. NEVER blocks login — the legacy session already succeeded; on
+    // any failure the app simply keeps using the anon key. Only runs for allowed roles.
+    try {
+      if(AUTH_V2.enabled && res.user && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(res.user.role)>=0)){
+        const _sv = await acctApi(cfg.current, 'authv2', { identifier, password });
+        if(_sv && _sv.ok && _sv.session && _sv.session.access_token){ setSbSession(_sv.session); scheduleSbRefresh(cfg.current); } else { setSbSession(null); }
+      } else { setSbSession(null); }
+    } catch(e){ setSbSession(null); }
     try { AUTH.syncUsersFromCloud().catch(()=>{}); } catch(e){} // pull full team roster now that we have a token
     setSessionUser(res.user, remember); setAuthUser(res.user); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
     try { recordLogin(res.user); } catch(e){}
     return null;
   };
-  const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
+  const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
 
   // Magnet Radio — endless YouTube "radio" mix per station, low volume, topbar player.
   const musicGetOn = ()=>{ try { return localStorage.getItem('magnet_music')!=='off'; } catch(e){ return true; } };
@@ -5323,7 +5390,25 @@ function App(){
     });
   } catch(e){} });
   useEffect(()=>{ store.set(SESSION_KEY, JSON.stringify(session)); }, [session]);
-  useEffect(()=>{ if(cfgComplete(cfg.current)){ cloudLoadAll(cfg.current).then(d=>{ if(d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d)); }).catch(()=>{}); } }, []);
+  useEffect(()=>{ if(cfgComplete(cfg.current)){ loadAuthV2Flag(cfg.current); cloudLoadAll(cfg.current).then(d=>{ if(d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d)); }).catch(()=>{}); } }, []);
+  // AUTH_V2 (Step 3): multi-tab session sync + logout-all + wake/expiry refresh.
+  // Every handler no-ops when the flag is OFF, so legacy behavior is unchanged.
+  useEffect(()=>{
+    const onStorage=(e)=>{
+      if(!e || !(AUTH_V2 && AUTH_V2.enabled)) return;
+      if(e.key==='tia_current_user'){
+        const ns=e.newValue ? (()=>{ try{ return JSON.parse(e.newValue); }catch(_){ return null; } })() : null;
+        if(!ns && authUser){ try{ setAcctToken(null); }catch(_){} setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); }  // logged out in another tab -> log out here
+        else if(ns && !authUser){ setAuthUser(ns); setShowLogin(false); }                                                                          // logged in in another tab -> adopt here
+      } else if(e.key===SB_SESSION_KEY){ scheduleSbRefresh(cfg.current); }                                                                          // session refreshed elsewhere -> resync timer
+    };
+    const onWake=()=>{ if(!document.hidden) sbEnsureFresh(cfg.current); };   // browser sleep/wake + focus -> refresh if near expiry
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+    sbEnsureFresh(cfg.current);   // restore + refresh on mount, before protected screens depend on the token
+    return ()=>{ window.removeEventListener('storage', onStorage); window.removeEventListener('focus', onWake); document.removeEventListener('visibilitychange', onWake); };
+  }, [authUser]);
   // CLOUD LOG PRUNING — activity/notification rows accumulate forever in the cloud
   // (they are what pushed the database past 1000 records and slow every pull).
   // Once a day, the first Owner/Admin device online trims each log collection to

@@ -1,14 +1,14 @@
-// Magnet OS — accounts/auth Edge Function (service-role).
-// v6 = strict SUPERSET of v5: every existing action is byte-identical, plus ONE new
-// additive action `authv2` (the JWT layer). Legacy login/save/list/delete/verify/
-// changepw/forgot are unchanged, so existing clients never break. `authv2` is only
-// called when the client opts in (behind the AUTH_V2_ENABLED flag). It never touches
-// _accounts or profiles — it only syncs the Supabase Auth password and returns a session.
+// ROLLBACK BACKUP — accounts edge function, version 5 (the pre-AUTH_V2 production version).
+// This is the exact source live before the AUTH_V2 migration. To restore legacy auth
+// verbatim: deploy this file as the `accounts` function with --no-verify-jwt.
+//   supabase functions deploy accounts --no-verify-jwt --project-ref jdylrthffifbhyrrhuqd
+// NOTE: the AUTH_V2 version is a strict SUPERSET of this — with the AUTH_V2_ENABLED flag
+// OFF it behaves identically to this file, so the primary rollback is just toggling the
+// flag (no redeploy). This file is the belt-and-suspenders copy.
 const URL = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SECRET = KEY; // HMAC key material (server-only)
 const REST = URL.replace(/\/$/,'') + '/rest/v1/records';
-const AUTHB = URL.replace(/\/$/,'') + '/auth/v1';
 const RESEND = Deno.env.get('RESEND_API_KEY') || '';
 const FROM = Deno.env.get('FROM_EMAIL') || 'Magnet OS <onboarding@resend.dev>';
 const EMAIL_ENDPOINT = 'https://magnet-op.vercel.app/api/send-email';
@@ -40,25 +40,6 @@ async function dbUpsert(rows:any[]){ const r=await fetch(REST+'?on_conflict=id',
 async function dbDelete(id:string){ const r=await fetch(REST+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db del '+r.status); }
 const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.verifyToken; return c; };
 
-// ---- AUTH_V2 (additive) helpers: Supabase Auth Admin API + password grant ----
-async function adminFindUserByEmail(email:string){
-  try{
-    const r=await fetch(AUTHB+'/admin/users?per_page=200', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
-    if(!r.ok) return null;
-    const d=await r.json(); const list=(d && (d.users||d)) || [];
-    return (Array.isArray(list)?list:[]).find((u:any)=> String(u.email||'').toLowerCase()===email.toLowerCase()) || null;
-  }catch{ return null; }
-}
-async function adminSetPassword(uid:string, password:string){
-  try{ const r=await fetch(AUTHB+'/admin/users/'+uid, { method:'PUT', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' }, body:JSON.stringify({ password, email_confirm:true }) }); return r.ok; }catch{ return false; }
-}
-async function adminCreateUser(email:string, password:string){
-  try{ const r=await fetch(AUTHB+'/admin/users', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' }, body:JSON.stringify({ email, password, email_confirm:true }) }); if(!r.ok) return null; return await r.json(); }catch{ return null; }
-}
-async function passwordGrant(email:string, password:string){
-  try{ const r=await fetch(AUTHB+'/token?grant_type=password', { method:'POST', headers:{ apikey:KEY, 'Content-Type':'application/json' }, body:JSON.stringify({ email, password }) }); if(!r.ok) return null; return await r.json(); }catch{ return null; }
-}
-
 async function sendMail(to:string, subject:string, text:string):Promise<boolean>{
   if(!to) return false;
   try{
@@ -84,7 +65,7 @@ Deno.serve(async (req)=>{
   let body:any={}; try{ body=await req.json(); }catch{ return json({error:'bad json'},400); }
   const action=body.action;
   try{
-    if((action==='login'||action==='forgot'||action==='authv2') && await rlBlocked('login', body.identifier)){ return json({ ok:false, reason:'invalid' }); }
+    if((action==='login'||action==='forgot') && await rlBlocked(action, body.identifier)){ return json({ ok:false, reason:'invalid' }); }
     const rows=await dbAll();
     const accounts=rows.map((r:any)=>({ rowId:r.id, u:r.data||{} }));
     const findByLogin=(id:string)=>{ id=(id||'').trim().toLowerCase(); return accounts.find((a:any)=> (a.u.email||'').toLowerCase()===id || (a.u.username||'').toLowerCase()===id); };
@@ -101,26 +82,6 @@ Deno.serve(async (req)=>{
       await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]);
       return json({ ok:true, user:sanitize(u), token:await makeToken(u) });
     }
-
-    // ---- NEW additive action: JWT layer. Returns a real Supabase session in addition
-    // to (not instead of) the legacy flow. Verifies the SAME legacy password, then syncs
-    // the Supabase Auth password to it and issues a session. Never modifies _accounts. ----
-    if(action==='authv2'){
-      const rec=findByLogin(body.identifier);
-      if(!rec){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
-      if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
-      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
-      const email=String(rec.u.email||'').toLowerCase().trim();
-      if(!email || email.indexOf('@')<1) return json({ ok:false, reason:'no-email' });
-      let au=await adminFindUserByEmail(email);
-      if(au && au.id){ await adminSetPassword(au.id, body.password); }
-      else { au=await adminCreateUser(email, body.password); }
-      const session=await passwordGrant(email, body.password);
-      if(!session || !session.access_token) return json({ ok:false, reason:'session-failed' });
-      await rlClear('login', body.identifier);
-      return json({ ok:true, session, user:sanitize(rec.u) });
-    }
-
     if(action==='list'){ const p=await readToken(body.token); if(!p) return json({error:'unauthorized'},401); return json({ ok:true, users: accounts.map((a:any)=>sanitize(a.u)) }); }
     if(action==='save'){
       const p=await readToken(body.token);
