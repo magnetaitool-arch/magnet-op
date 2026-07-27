@@ -8372,6 +8372,7 @@ function ProjectProfile({ ctx, project, ce, onClose }){
           <${Kanban} items=${tasks} columns=${ST.task.filter(s=>!['Cancelled'].includes(s))} field="status"
             canMove=${canEdit('tasks', ctx.role)}
             onMove=${(id,s)=>ctx.updateRecord('tasks',id,{status:s})}
+            onUpdate=${(id,patch)=>ctx.updateRecord('tasks',id,patch)}
             render=${t=>html`<div><b style=${{fontSize:12,fontWeight:600}}>${t.title||t.name}</b>
               <div class="muted" style=${{fontSize:10.5,marginTop:4}}>${nameById(db.employees,t.assignedTo)}</div></div>`}/></div>`}
 
