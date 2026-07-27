@@ -5340,7 +5340,11 @@ function App(){
     // any failure the app simply keeps using the anon key. Only runs for allowed roles.
     try {
       if(AUTH_V2.enabled && res.user && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(res.user.role)>=0)){
-        const _sv = await acctApi(cfg.current, 'authv2', { identifier, password });
+        // Race the JWT fetch against a timeout so a slow/unreachable server can NEVER stall login.
+        const _sv = await Promise.race([
+          acctApi(cfg.current, 'authv2', { identifier, password }),
+          new Promise(r=>setTimeout(()=>r(null), 7000))
+        ]);
         if(_sv && _sv.ok && _sv.session && _sv.session.access_token){ setSbSession(_sv.session); scheduleSbRefresh(cfg.current); } else { setSbSession(null); }
       } else { setSbSession(null); }
     } catch(e){ setSbSession(null); }
