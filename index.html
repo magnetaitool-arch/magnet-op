@@ -9446,6 +9446,7 @@ function UsersView({ ctx }){
   const [edit,setEdit]=useState(null); // user being edited (or {} for new)
   const [reset,setReset]=useState(null); // user being password-reset
   const [access,setAccess]=useState(null); // user whose per-module access is being edited
+  const [bulkResult,setBulkResult]=useState(null); // result sheet after a team-wide password reset
   const saveAccess=(acc)=>{ const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===access.id); if(tu){ tu.access=acc; AUTH.saveUsers(list.map(x=>x.id===tu.id?tu:x)); ctx.addActivity('users',tu.id,'access updated',tu.fullName); } refresh(); setAccess(null); showProPopup('savedNotes', ar?'تم حفظ الصلاحيات':'Access saved'); };
   const refresh=()=>setUsers(AUTH.loadUsers());
   // Pull the full team roster from the cloud on open (token-gated Edge Function),
@@ -9483,6 +9484,21 @@ function UsersView({ ctx }){
     const list=AUTH.loadUsers(); const u=list.find(x=>x.id===reset.id); u.passwordHash=await AUTH.hashPassword(form._pw); u.isDefaultPassword=false;
     AUTH.saveUsers(list.map(x=>x.id===u.id?u:x)); ctx.addActivity('users',u.id,'password reset','for '+u.fullName+' by '+ctx.user.name);
     setReset(null); showProPopup('savedNotes', ar?'تمت إعادة التعيين':'Password reset'); };
+  // Owner-only: set ONE shared temp password for every active non-owner user at once, then show the sheet.
+  const resetAllPw=async()=>{
+    const pw=prompt(ar?'كلمة سر مؤقتة مشتركة لكل الفريق (٦ أحرف على الأقل):':'One shared temporary password for the whole team (min 6 chars):','Magnet@2026');
+    if(pw==null) return;
+    if(String(pw).length<6){ alert(ar?'كلمة السر قصيرة (٦ أحرف على الأقل).':'Password too short (min 6 chars).'); return; }
+    const list=AUTH.loadUsers();
+    const targets=list.filter(u=>u.role!=='Owner' && u.status!=='Inactive');
+    if(!targets.length){ alert(ar?'مفيش مستخدمين لإعادة التعيين.':'No users to reset.'); return; }
+    if(!confirm((ar?'هيتعيّن الباسورد ده لـ ':'This will set this password for ')+targets.length+(ar?' مستخدم (كل الفريق عدا الملاك). تمام؟':' users (everyone except Owners). Continue?'))) return;
+    for(const u of targets){ u.passwordHash=await AUTH.hashPassword(pw); u.isDefaultPassword=true; }
+    AUTH.saveUsers(list.map(x=>{ const m=targets.find(t=>t.id===x.id); return m||x; }));
+    ctx.addActivity('users','bulk','team password reset',targets.length+' users by '+ctx.user.name);
+    refresh();
+    setBulkResult({ pw, users:targets.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })) });
+  };
   const toggleStatus=(u)=>{ const list=AUTH.loadUsers();
     if(u.role==='Owner'&&u.status==='Active'&&AUTH.activeOwners(list).length<=1){ alert(ar?'لا يمكن إيقاف آخر مالك نشط.':'Cannot deactivate the last active Owner.'); return; }
     const t=list.find(x=>x.id===u.id); t.status=t.status==='Active'?'Inactive':'Active'; AUTH.saveUsers(list.map(x=>x.id===t.id?t:x)); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); refresh(); };
@@ -9493,6 +9509,7 @@ function UsersView({ ctx }){
 
   return html`<div class="view">
     <${Head} eyebrow=${t('System')} title=${ar?'المستخدمون والصلاحيات':'Users & Permissions'} desc=${ar?'إنشاء المستخدمين وإدارة الأدوار وكلمات المرور.':'Create login users, manage roles, and reset passwords.'}>
+      ${ctx.role==='Owner'&&html`<button class="btn btn-ghost" onClick=${resetAllPw}>${ar?'إعادة تعيين باسوردات الفريق':'Reset team passwords'}</button>`}
       <button class="btn btn-pri" onClick=${()=>setEdit({status:'Active',role:'Viewer'})}>${React.createElement(Icon.plus)} ${ar?'إنشاء مستخدم':'Create User'}</button>
     <//>
     ${anyDefault&&html`<div class="warn-note">${ar?'يجب تغيير كلمة المرور الافتراضية قبل الاستخدام الفعلي للفريق.':'Default password should be changed before real team usage.'}</div>`}
@@ -9518,6 +9535,20 @@ function UsersView({ ctx }){
     ${edit&&html`<${UserForm} user=${edit} ar=${ar} onClose=${()=>setEdit(null)} onSave=${save}/>`}
     ${reset&&html`<${PwResetForm} user=${reset} ar=${ar} onClose=${()=>setReset(null)} onSave=${doReset}/>`}
     ${access&&html`<${AccessDrawer} user=${access} ar=${ar} onClose=${()=>setAccess(null)} onSave=${saveAccess}/>`}
+    ${bulkResult&&html`<div class="ovl" onClick=${()=>setBulkResult(null)}>
+      <div class="modal" style=${{width:560,maxWidth:'96vw'}} onClick=${e=>e.stopPropagation()}>
+        <div class="modal-h"><div><h3 style=${{fontSize:17}}>${ar?'تم — كلمات مرور الفريق':'Done — team passwords'}</h3>
+          <div class="muted" style=${{fontSize:12,marginTop:2}}>${bulkResult.users.length} ${ar?'مستخدم. الباسورد المؤقت المشترك:':'users. Shared temporary password:'} <b style=${{color:'var(--lime)'}}>${bulkResult.pw}</b></div></div>
+          <button class="icon-btn" onClick=${()=>setBulkResult(null)}><span style=${{fontSize:18}}>×</span></button></div>
+        <div class="modal-b" style=${{maxHeight:'56vh',overflowY:'auto'}}>
+          <div class="warn-note" style=${{marginBottom:10}}>${ar?'ابعت لكل واحد بريده + الباسورد ده، وقولهم يغيّروه من Profile بعد الدخول.':'Send each person their email + this password; ask them to change it from Profile after signing in.'}</div>
+          <table class="tbl"><thead><tr><th>${ar?'الاسم':'Name'}</th><th>${ar?'البريد':'Email'}</th><th>${ar?'كلمة السر':'Password'}</th></tr></thead>
+            <tbody>${bulkResult.users.map(u=>html`<tr key=${u.email}><td><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.role}</div></td><td class="muted" style=${{fontSize:12}}>${u.email}</td><td class="mono">${bulkResult.pw}</td></tr>`)}</tbody></table>
+        </div>
+        <div class="form-foot">
+          <button class="btn btn-ghost" onClick=${()=>{ try{ navigator.clipboard.writeText(bulkResult.users.map(u=>u.fullName+' — '+u.email+' — '+bulkResult.pw).join('\n')); showProPopup('savedNotes', ar?'اتنسخ':'Copied'); }catch(e){} }}>${ar?'نسخ الكل':'Copy all'}</button>
+          <button class="btn btn-pri" onClick=${()=>setBulkResult(null)}>${ar?'تمام':'Done'}</button></div>
+      </div></div>`}
   </div>`;
 }
 function UserForm({ user, ar, onClose, onSave }){
