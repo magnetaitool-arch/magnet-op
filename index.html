@@ -1315,7 +1315,7 @@ body.theme-light .tbl thead th{background:#fff}
     var __ASK='tia_agency_os_appsettings';
     var __as={}; try{ __as=JSON.parse(localStorage.getItem(__ASK)||"{}"); }catch(_){ }
     if(!('enabledModules' in __as)){
-      __as.enabledModules=["dashboard","plans","leads","campaigns","briefs","clients","projects","tasks","deliverables","calendar","clientAssets","teams","candidates","employees","availability","freelancers","departments","workload","attendance","leaves","requests","approvalCenter","invoices","payments","collections","expenses","fixedCosts","partners","profitability","files","comments","notifications","leaderboard","arcade","users","rolesPermissions","backupCenter","settings"];
+      __as.enabledModules=["dashboard","plans","leads","campaigns","briefs","clients","projects","tasks","deliverables","calendar","clientAssets","teams","candidates","employees","availability","freelancers","departments","workload","attendance","leaves","payroll","requests","approvalCenter","invoices","payments","collections","expenses","fixedCosts","partners","profitability","files","comments","notifications","leaderboard","arcade","users","rolesPermissions","backupCenter","settings"];
       localStorage.setItem(__ASK, JSON.stringify(__as));
     }
     if(!__as.currency){ __as.currency='EGP'; localStorage.setItem(__ASK, JSON.stringify(__as)); }
@@ -2140,7 +2140,7 @@ const ROLES = ['Admin','Sales','Project Manager','Designer','Video Editor','Acco
 const SECTIONS = ['dashboard','accounts','leads','clients','projects','tasks','deliverables',
   'contacts','salesActivities','proposals','quotations','contracts',
   'invoices','payments','expenses','profitability','fixedCosts','partners','collections','plans','campaigns','briefs',
-  'employees','freelancers','departments','workload','availability','attendance','leaves','candidates',
+  'employees','freelancers','departments','workload','availability','attendance','leaves','payroll','candidates',
   'requests','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings',
   'files','comments','activityLogs','notifications','reports','sops','settings',
   'approvalCenter','automations','agents','workflow','rolesPermissions','users','teams',
@@ -2347,7 +2347,7 @@ const MODULE_CATALOG = [
   {group:'Content & Ops', items:[['calendar','Content Calendar'],['clientAssets','Client Assets'],['revisionsHub','Revision Control'],['workflow','Workflow'],['requests','Requests'],['approvalCenter','Approval Center'],['meetings','Meeting Notes'],['chat','Chat'],['shareCenter','Share Center']]},
   {group:'Sales', items:[['campaigns','Campaigns'],['briefs','Client Briefs'],['contacts','Contacts'],['salesActivities','Sales Activities'],['proposals','Proposals'],['quotations','Quotations'],['contracts','Contracts'],['documents','Document Center']]},
   {group:'Finance', items:[['invoices','Invoices'],['payments','Payments'],['collections','Collections'],['expenses','Expenses'],['fixedCosts','Fixed Costs & Subscriptions'],['partners','Partners & Settlement'],['profitability','Profitability']]},
-  {group:'Team / HR', items:[['candidates','Recruitment'],['teams','Teams'],['employees','Employees'],['availability','Team Availability'],['freelancers','Freelancers'],['departments','Departments'],['workload','Workload'],['attendance','Attendance'],['leaves','Leaves']]},
+  {group:'Team / HR', items:[['candidates','Recruitment'],['teams','Teams'],['employees','Employees'],['availability','Team Availability'],['freelancers','Freelancers'],['departments','Departments'],['workload','Workload'],['attendance','Attendance'],['leaves','Leaves'],['payroll','Payroll']]},
   {group:'Intelligence', items:[['automations','Automations'],['agents','AI Agents'],['reports','Reports']]},
   {group:'Workspace', items:[['files','Files / Assets'],['comments','Comments'],['activityLogs','Activity Log'],['notifications','Notifications'],['sops','SOPs / KB']]},
   {group:'Fun', items:[['leaderboard','Leaderboard'],['arcade','Arcade']]},
@@ -5933,7 +5933,7 @@ function App(){
     {group:'Intelligence', items:[['automations','Automations','bolt'],['agents','AI Agents','spark']]},
     {group:'Sales', items:[['campaigns','Campaigns','spark'],['briefs','Client Briefs','fileText'],['contacts','Contacts','people'],['salesActivities','Sales Activities','pulse'],['proposals','Proposals','fileText'],['quotations','Quotations','scale'],['contracts','Contracts','shield'],['documents','Document Center','fileText']]},
     {group:'Finance', items:[['invoices','Invoices','finance'],['payments','Payments','wallet'],['collections','Collections','calendar'],['expenses','Expenses','trendDown'],['fixedCosts','Fixed Costs','refresh'],['partners','Partners & Settlement','people'],['profitability','Profitability','trend']]},
-    {group:'Team / HR', items:[['candidates','Recruitment','target'],['teams','Teams','people'],['employees','Employees','people'],['availability','Team Availability','pulse'],['freelancers','Freelancers','people'],['departments','Departments','grid'],['workload','Workload','pulse'],['attendance','Attendance','clock'],['leaves','Leaves','calendar']]},
+    {group:'Team / HR', items:[['candidates','Recruitment','target'],['teams','Teams','people'],['employees','Employees','people'],['availability','Team Availability','pulse'],['freelancers','Freelancers','people'],['departments','Departments','grid'],['workload','Workload','pulse'],['attendance','Attendance','clock'],['leaves','Leaves','calendar'],['payroll','Payroll','wallet']]},
     {group:'Workspace', items:[['files','Files / Assets','docs'],['comments','Comments','mail'],['activityLogs','Activity Log','clock'],['notifications','Notifications','bell'],['reports','Reports','fileText'],['sops','SOPs / KB','layers']]},
     {group:'Fun', items:[['leaderboard','Leaderboard','trend'],['arcade','Arcade','bolt']]},
     {group:'System', items:[['users','Users & Permissions','people'],['rolesPermissions','Roles & Permissions','shield'],['backupCenter','Backup Center','download'],['dataHealth','Data Health','pulse'],['systemQA','System QA','check'],['settings','Settings','settings']]},
@@ -6455,6 +6455,7 @@ function renderRoute(route, ctx, x){
     case 'workload': return html`<${WorkloadView} ctx=${ctx}/>`;
     case 'attendance': return html`<${AttendanceView} ctx=${ctx} ce=${ce('attendance')}/>`;
     case 'leaves': return html`<${LeavesView} ctx=${ctx} ce=${ce('leaves')}/>`;
+    case 'payroll': return html`<${PayrollView} ctx=${ctx}/>`;
 
     case 'files': return simpleList('files','Files / Assets','Operations', ctx, x, ce('files'),
       [{k:'title',label:'File'},{k:'type',label:'Type'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'status',label:'Status',tag:true},
@@ -7667,6 +7668,38 @@ function employeeMetrics(db, e){
   };
 }
 
+function PayrollView({ ctx }){
+  const { db } = ctx;
+  const ar = ctx.lang==='ar';
+  const [month,setMonth] = useState(thisMonth());
+  const emps = (db.employees||[]).filter(e=>!['Archived','Terminated','Resigned'].includes(e.status));
+  const runs = (db.employeePayments||[]).filter(p=>p.month===month);
+  const runFor = (id)=> runs.find(p=>p.employeeId===id);
+  const totalNet = runs.reduce((s,p)=>s+(empPaymentNet(p)||0),0);
+  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:22,daysWorked:22,applyStatutory:'Yes',paymentStatus:'Pending'});
+  return html`<div class="view">
+    <${Head} eyebrow=${t('Finance & Payroll')} title=${ar?'المرتبات':'Payroll'} desc=${ar?'احسب مرتب كل موظف بأيام الشغل، البونص، الخصم والـKPI — واطبع القسيمة.':'Compute each salary from days worked, bonus, deductions and KPIs — and print the payslip.'}>
+      <input type="month" class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}/>
+    <//>
+    <div class="grid g-3 stagger" style=${{marginBottom:18}}>
+      <${KPI} label=${ar?'موظفين':'Employees'} value=${emps.length} icon="people"/>
+      <${KPI} label=${ar?'مرتبات الشهر':'Runs this month'} value=${runs.length} icon="check"/>
+      <${KPI} label=${ar?'إجمالي الصافي':'Total net'} value=${money(totalNet)} icon="wallet"/>
+    </div>
+    <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
+      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'الصافي':'Net'}</th><th></th></tr></thead>
+    <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
+      <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
+      <td class="num">${e.salary?money(e.salary):'—'}</td>
+      <td class="num muted">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||22)):'—'}</td>
+      <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
+      <td class="right cell-actions">
+        <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
+        ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة':'Payslip'}</button>`:''}
+      </td></tr>`; })}</tbody></table></div><//>
+    ${emps.length===0?html`<${EmptyState} title=${ar?'مفيش موظفين':'No employees'} text=${ar?'ضيف موظفين الأول من شاشة Employees.':'Add employees first from the Employees screen.'} icon="people"/>`:''}
+  </div>`;
+}
 function WorkloadView({ ctx }){
   const { db } = ctx;
   const emps = (db.employees||[]).filter(e=>!['Archived','Terminated','Resigned'].includes(e.status));
