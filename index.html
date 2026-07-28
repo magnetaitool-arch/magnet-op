@@ -2460,7 +2460,7 @@ const ST = {
   invoice:['Draft','Pending Internal Approval','Approved Internally','Invoice Draft','Invoice Sent','Sent','Partially Paid','Paid','Overdue','Cancelled'],
   expense:['Pending','Approved','Paid'],
   employee:['Active','Probation','On Leave','Remote','Paused','Suspended','Resigned','Terminated','Freelancer','Archived'],
-  attendance:['Present','Late','Absent','Remote','Half Day','Leave','Sick Leave'],
+  attendance:['Present','Late','Absent','Remote','Half Day','Leave','Sick Leave','Weekend Work'],
   leave:['Requested','Approved','Rejected','Cancelled'],
   empPayment:['Pending','Approved','Paid','Delayed','Cancelled'],
   request:['Draft','Pending Approval','Approved','Rejected','Changes Requested','Cancelled','Completed'],
@@ -2509,6 +2509,27 @@ const COMM_CHANNELS = ['WhatsApp','Email','Phone','Slack','In-person'];
 /* ============================ HR OPTION LISTS ============================ */
 const EMPLOYMENT_TYPES = ['Full-time','Part-time','Freelancer','Intern','Contractor','Commission-based'];
 const WORK_MODES = ['Office','Remote','Hybrid','Field / Shooting'];
+// ---- Attendance rules engine — official hours 10:00–18:00, week Sun–Thu, Fri+Sat OFF ----
+const ATT_START_MIN = 10*60;                 // 10:00 AM official start
+const ATT_END_MIN   = 18*60;                 // 6:00 PM official end
+const ATT_DAYNAMES  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const _hm2min = (t)=>{ if(!t) return null; const p=String(t).split(':'); return (+p[0]||0)*60+(+p[1]||0); };
+// Derives dayName / weekend / late-minutes / working-hours / status from a raw attendance record.
+// A manual, non-work status (Absent/Leave/Sick Leave/Half Day/Remote) is respected; auto ones are refined.
+function computeAttendance(rec){
+  rec = rec||{};
+  let dow=null; try{ if(rec.date) dow=new Date(rec.date+'T00:00:00').getDay(); }catch(e){}
+  const isWeekend = dow===5 || dow===6;                          // Friday + Saturday
+  const dayName = (dow!=null) ? ATT_DAYNAMES[dow] : '';
+  const ci=_hm2min(rec.checkIn), co=_hm2min(rec.checkOut);
+  let hours=0; if(ci!=null && co!=null){ let m=co-ci; if(m<0)m+=1440; hours=Math.round(m/60*100)/100; }
+  const lateMin = (!isWeekend && ci!=null && ci>ATT_START_MIN) ? (ci-ATT_START_MIN) : 0;
+  const derived = isWeekend ? (ci!=null?'Weekend Work':'Weekend')
+                            : (ci==null?'Absent':(lateMin>0?'Late':'Present'));
+  const manualKept = rec.status && !['Present','Late','Weekend','Weekend Work',''].includes(rec.status);
+  const status = manualKept ? rec.status : derived;              // keep Absent/Leave/Sick/Half Day/Remote as set
+  return { dayName, isWeekend, lateMin, hours, status };
+}
 const HR_DEPARTMENTS = ['Management','Sales','Account Management','Project Management','Creative','Graphic Design','Video Editing','Media Buying','Web / Development','Finance','HR','Operations'];
 const LEAVE_TYPES = ['Annual','Sick','Emergency','Unpaid','Work From Home','Shooting Day','Other'];
 const PAYMENT_METHODS = ['Bank','Wallet','Cash','Cheque','Online'];
@@ -7911,7 +7932,7 @@ function AttendanceView({ ctx, ce }){
   const monthsList=()=>{ const set=new Set((db.attendance||[]).map(r=>(r.date||'').slice(0,7)).filter(Boolean)); set.add(thisMonth()); return [...set].sort().reverse(); };
   return html`<div class="view">
     <${Head} eyebrow="Team / HR" title="Attendance & Payroll" desc="Auto check-in/out from login + payroll computed from days worked.">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('attendance',{date:todayISO(),status:'Present',workMode:'Office'})}>${React.createElement(Icon.plus)} Log attendance</button>`}<//>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('attendance',{date:todayISO(),status:'Present',workMode:'Office',source:'manual',createdBy:(ctx.user&&ctx.user.id)||'',createdByName:(ctx.user&&ctx.user.name)||'Manual'})}>${React.createElement(Icon.plus)} Log attendance</button>`}<//>
     <${Panel} title=${(ar?'ملخّص الشهر · ':'Monthly summary · ')+month} sub=${(ar?'المرتب المستحق = اليومي × أيام الحضور':'Earned = daily rate × days present')}>
       <div class="flex gap8" style=${{marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <select class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}>${monthsList().map(m=>html`<option key=${m} value=${m}>${m}</option>`)}</select>
@@ -7928,7 +7949,7 @@ function AttendanceView({ ctx, ce }){
       </tr>`)}</tbody></table></div>
     <//>
     <${DataTable} db=${db} rows=${(db.attendance||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('attendance',r)):null} onDelete=${(ctx.canDelete&&ctx.canDelete('attendance'))?(r=>ctx.delRec('attendance',r.id,r.employeeName)):null}
-      cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'workMode',label:'Mode'},{k:'status',label:'Status',tag:true}]}/></div>`;
+      cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'day',label:'Day',render:r=>computeAttendance(r).dayName||'—'},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'late',label:'Late',render:r=>{const c=computeAttendance(r);return c.lateMin?html`<span class="mono" style=${{color:'var(--neg)'}}>${c.lateMin}m</span>`:html`<span class="muted">—</span>`;}},{k:'hours',label:'Hrs',render:r=>{const c=computeAttendance(r);return c.hours?html`<span class="mono">${c.hours}h</span>`:html`<span class="muted">—</span>`;}},{k:'status',label:'Status',render:r=>{const s=computeAttendance(r).status;return html`<${Tag} type=${s==='Absent'?'neg':(s==='Late'?'warn':((s==='Present'||s==='Weekend Work')?'ok':''))}>${s}<//>`;}},{k:'source',label:'Added by',render:r=>r.source==='manual'?(r.createdByName||'Manual'):(r.source==='request'?'Request':'Auto')}]}/></div>`;
 }
 
 // Leave balance for an employee this year (allowance from settings − approved days used).
