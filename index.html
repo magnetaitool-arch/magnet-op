@@ -2220,6 +2220,7 @@ const ROLE_ALIAS = {
   Accountant:'Accountant',
   Viewer:'Client',
   'Media Buyer':'Marketing Director',
+  'Operation Assistant':'HR', 'Ops Assistant':'HR',   // attendance/HR-ops access (add/edit attendance, leaves, requests)
 };
 // Dropdown options that ALWAYS include a user's current role even if it's an older
 // name not in the simple 7 — so nothing ever looks mis-selected for existing staff.
@@ -7840,7 +7841,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
   const e = normalizeEmployee(byId(db.employees, emp.id) || emp);
   const seeSalary = canSeeSalary(role);
   const seeAccess = canManageAccess(role);
-  const TABS = ['Overview','Tasks','Projects & Clients','Performance', ...(seeSalary?['Salary & Payments']:[]),'Documents', ...(seeAccess?['Access']:[]),'Notes / Activity'];
+  const TABS = ['Overview','Tasks','Projects & Clients','Performance','Attendance', ...(seeSalary?['Salary & Payments']:[]),'Documents', ...(seeAccess?['Access']:[]),'Notes / Activity'];
   const [tab,setTab]=useState('Overview');
   const m = employeeMetrics(db,e);
   const myTasks=(db.tasks||[]).filter(t=>t.assignedTo===e.id||t.assignedTo===e.name);
@@ -7916,6 +7917,21 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
             extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button>`}
             cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
 
+        ${tab==='Attendance'&&html`<div>
+          ${(()=>{ const recs=(db.attendance||[]).filter(a=>a.employeeId===e.id).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+            const late=recs.reduce((s,r)=>s+computeAttendance(r).lateMin,0);
+            const present=recs.filter(r=>{const c=computeAttendance(r);return c.status==='Present'||c.status==='Weekend Work';}).length;
+            const weekend=recs.filter(r=>computeAttendance(r).isWeekend&&_hm2min(r.checkIn)!=null).length;
+            return html`<div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:14}}>${stat('Records',recs.length)}${stat('Present',present)}${stat('Weekend work',weekend)}${stat('Late total',late+' min',late?'var(--neg)':null)}</div>
+            ${recs.length===0?html`<${EmptyState} title="No attendance yet" text="Records appear from auto check-in or manual entry." icon="clock"/>`
+            :html`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Day</th><th>In</th><th>Out</th><th class="right">Late</th><th class="right">Hrs</th><th>Status</th></tr></thead>
+              <tbody>${recs.slice(0,90).map(r=>{const c=computeAttendance(r);return html`<tr key=${r.id}>
+                <td>${fmtDate(r.date)}</td><td class="muted">${c.dayName}</td><td>${r.checkIn||'—'}</td><td>${r.checkOut||'—'}</td>
+                <td class="right mono" style=${{color:c.lateMin?'var(--neg)':'var(--ink-3)'}}>${c.lateMin?c.lateMin+'m':'—'}</td>
+                <td class="right mono">${c.hours?c.hours+'h':'—'}</td>
+                <td><${Tag} type=${c.status==='Absent'?'neg':(c.status==='Late'?'warn':((c.status==='Present'||c.status==='Weekend Work')?'ok':''))}>${c.status}<//></td></tr>`;})}</tbody></table></div>`}`; })()}
+        </div>`}
+
         ${tab==='Documents'&&html`<div class="grid g-2" style=${{gap:10}}>
           ${[['Contract','contractLink'],['NDA','ndaLink'],['CV','cvLink'],['National ID','nationalIdLink'],['Portfolio','portfolioLink'],['Drive folder','driveFolder']].map(d=>html`<div class="lrow" key=${d[1]}>
             <div class="li-ic">${React.createElement(Icon.fileText)}</div><div class="li-t"><b>${d[0]}</b><span>${e[d[1]]?'Linked':'Not provided'}</span></div>
@@ -7948,7 +7964,13 @@ function AttendanceView({ ctx, ce }){
   const ar = getLang()==='ar'; // follow the app language
   const seeSalary = canSeeSalary(role); // hide salary/payroll columns from PMs etc.
   const [month,setMonth]=useState(thisMonth());
+  const [view,setView]=useState('records'); // records | calendar
   const workDays = Number(appSettings.workDaysPerMonth)||26;
+  const calCells=()=>{ const pr=String(month).split('-').map(Number),y=pr[0],mo=pr[1]; const firstDow=new Date(y,mo-1,1).getDay(),last=new Date(y,mo,0).getDate();
+    const cells=[]; for(let i=0;i<firstDow;i++) cells.push(null);
+    for(let d=1;d<=last;d++){ const ds=month+'-'+String(d).padStart(2,'0'); const recs=(db.attendance||[]).filter(r=>r.date===ds);
+      let present=0,late=0; recs.forEach(r=>{const c=computeAttendance(r); if(c.status==='Present'||c.status==='Weekend Work')present++; if(c.lateMin>0)late++;});
+      const dow=new Date(y,mo-1,d).getDay(); cells.push({d,ds,present,late,count:recs.length,weekend:dow===5||dow===6}); } return cells; };
   const hrsBetween=(a,b)=>{ if(!a||!b)return 0; const pa=String(a).split(':'),pb=String(b).split(':'); let d=((+pb[0]||0)*60+(+pb[1]||0))-((+pa[0]||0)*60+(+pa[1]||0)); if(d<0)d+=1440; return d/60; };
   const monthRecs=(db.attendance||[]).filter(r=>(r.date||'').slice(0,7)===month);
   const byEmp={};
@@ -7960,6 +7982,7 @@ function AttendanceView({ ctx, ce }){
   const monthsList=()=>{ const set=new Set((db.attendance||[]).map(r=>(r.date||'').slice(0,7)).filter(Boolean)); set.add(thisMonth()); return [...set].sort().reverse(); };
   return html`<div class="view">
     <${Head} eyebrow="Team / HR" title="Attendance & Payroll" desc="Auto check-in/out from login + payroll computed from days worked.">
+      <div class="seg"><button class=${view==='records'?'on':''} onClick=${()=>setView('records')}>${ar?'سجلات':'Records'}</button><button class=${view==='calendar'?'on':''} onClick=${()=>setView('calendar')}>${ar?'كاليندر':'Calendar'}</button></div>
       ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('attendance',{date:todayISO(),status:'Present',workMode:'Office',source:'manual',createdBy:(ctx.user&&ctx.user.id)||'',createdByName:(ctx.user&&ctx.user.name)||'Manual'})}>${React.createElement(Icon.plus)} Log attendance</button>`}<//>
     <${Panel} title=${(ar?'ملخّص الشهر · ':'Monthly summary · ')+month} sub=${(ar?'المرتب المستحق = اليومي × أيام الحضور':'Earned = daily rate × days present')}>
       <div class="flex gap8" style=${{marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
@@ -7976,8 +7999,17 @@ function AttendanceView({ ctx, ce }){
         <td data-label="Earned" class="right mono lime">${e.salary?money(e.earned):'—'}</td>`:''}
       </tr>`)}</tbody></table></div>
     <//>
-    <${DataTable} db=${db} rows=${(db.attendance||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('attendance',r)):null} onDelete=${(ctx.canDelete&&ctx.canDelete('attendance'))?(r=>ctx.delRec('attendance',r.id,r.employeeName)):null}
-      cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'day',label:'Day',render:r=>computeAttendance(r).dayName||'—'},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'late',label:'Late',render:r=>{const c=computeAttendance(r);return c.lateMin?html`<span class="mono" style=${{color:'var(--neg)'}}>${c.lateMin}m</span>`:html`<span class="muted">—</span>`;}},{k:'hours',label:'Hrs',render:r=>{const c=computeAttendance(r);return c.hours?html`<span class="mono">${c.hours}h</span>`:html`<span class="muted">—</span>`;}},{k:'status',label:'Status',render:r=>{const s=computeAttendance(r).status;return html`<${Tag} type=${s==='Absent'?'neg':(s==='Late'?'warn':((s==='Present'||s==='Weekend Work')?'ok':''))}>${s}<//>`;}},{k:'source',label:'Added by',render:r=>r.source==='manual'?(r.createdByName||'Manual'):(r.source==='request'?'Request':'Auto')}]}/></div>`;
+    ${view==='calendar'?html`<${Panel} title=${(ar?'كاليندر · ':'Calendar · ')+month} sub=${ar?'كل يوم: عدد الحاضرين والمتأخرين (الجمعة/السبت off)':'Per day: present + late counts (Fri/Sat off)'}>
+      <div style=${{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6}}>
+        ${(ar?['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت']:['Sun','Mon','Tue','Wed','Thu','Fri','Sat']).map(d=>html`<div class="muted" key=${d} style=${{fontSize:11,textAlign:'center',fontWeight:600,padding:'4px 0'}}>${d}</div>`)}
+        ${calCells().map((c,i)=> c===null?html`<div key=${'e'+i}></div>`:html`<div key=${c.ds} style=${{padding:8,minHeight:74,borderRadius:10,background:'rgba(255,255,255,.03)',opacity:c.weekend?0.5:1,border:c.ds===todayISO()?'1px solid var(--lime)':'1px solid rgba(255,255,255,.05)'}}>
+          <div style=${{fontWeight:700,fontSize:13}}>${c.d}${c.weekend?html`<span class="muted" style=${{fontSize:9}}> off</span>`:''}</div>
+          ${c.count?html`<div style=${{marginTop:6,display:'flex',flexDirection:'column',gap:2}}><span style=${{fontSize:10.5,color:'var(--lime)'}}>${c.present} ${ar?'حاضر':'present'}</span>${c.late?html`<span style=${{fontSize:10.5,color:'var(--warn)'}}>${c.late} ${ar?'متأخر':'late'}</span>`:''}</div>`:html`<div class="muted" style=${{fontSize:10,marginTop:6}}>—</div>`}
+        </div>`)}
+      </div>
+    <//>`
+    :html`<${DataTable} db=${db} rows=${(db.attendance||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('attendance',r)):null} onDelete=${(ctx.canDelete&&ctx.canDelete('attendance'))?(r=>ctx.delRec('attendance',r.id,r.employeeName)):null}
+      cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'day',label:'Day',render:r=>computeAttendance(r).dayName||'—'},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'late',label:'Late',render:r=>{const c=computeAttendance(r);return c.lateMin?html`<span class="mono" style=${{color:'var(--neg)'}}>${c.lateMin}m</span>`:html`<span class="muted">—</span>`;}},{k:'hours',label:'Hrs',render:r=>{const c=computeAttendance(r);return c.hours?html`<span class="mono">${c.hours}h</span>`:html`<span class="muted">—</span>`;}},{k:'status',label:'Status',render:r=>{const s=computeAttendance(r).status;return html`<${Tag} type=${s==='Absent'?'neg':(s==='Late'?'warn':((s==='Present'||s==='Weekend Work')?'ok':''))}>${s}<//>`;}},{k:'source',label:'Added by',render:r=>r.source==='manual'?(r.createdByName||'Manual'):(r.source==='request'?'Request':'Auto')}]}/>`}</div>`;
 }
 
 // Leave balance for an employee this year (allowance from settings − approved days used).
