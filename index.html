@@ -7612,9 +7612,29 @@ function employeeMetrics(db, e){
   const wk = todayISO(); const in7=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   const dueWeek = active.filter(t=>t.dueDate && t.dueDate>=wk && t.dueDate<=in7);
   const completedMonth = mine.filter(t=>t.status==='Done' && monthOf(t.updatedAt)===thisMonth());
-  const capTasks = Math.max(1,(e.capacityPerWeek||40)/8); // ~1 task per 8h capacity
-  const pct = Math.round(active.length/capTasks*100);
-  return { active:active.length, overdue:overdue.length, dueToday:dueToday.length, dueWeek:dueWeek.length, completedMonth:completedMonth.length, pct, tag:workloadTag(pct) };
+  // ---- Hours-based capacity engine ----
+  const capHoursWeek = Number(e.capacityPerWeek)||40;                 // weekly capacity (hrs)
+  const dailyHours   = Number(e.workingHours)||Math.round(capHoursWeek/5)||8; // per working day (hrs)
+  const estActive = active.reduce((s,t)=>s+(Number(t.estimatedHours)||0),0);  // total hrs of open work
+  const estToday  = dueToday.reduce((s,t)=>s+(Number(t.estimatedHours)||0),0); // hrs due today
+  const estWeek   = dueWeek.reduce((s,t)=>s+(Number(t.estimatedHours)||0),0);  // hrs due this week
+  const anyEstimates = active.some(t=>Number(t.estimatedHours)>0);
+  // Weekly load %: real hours when estimated; else fall back to the count model so the board is never blank.
+  const capTasks = Math.max(1, capHoursWeek/8);
+  const pct = anyEstimates ? Math.round(estActive/Math.max(1,capHoursWeek)*100) : Math.round(active.length/capTasks*100);
+  const round1 = n => Math.round(n*10)/10;
+  return {
+    active:active.length, overdue:overdue.length, dueToday:dueToday.length, dueWeek:dueWeek.length,
+    completedMonth:completedMonth.length, pct, tag:workloadTag(pct),
+    // hours engine (0 when nobody has filled estimatedHours yet)
+    capHoursWeek, dailyHours,
+    estActive:round1(estActive), estToday:round1(estToday), estWeek:round1(estWeek),
+    pctToday: Math.round(estToday/Math.max(1,dailyHours)*100),
+    pctWeek:  anyEstimates ? Math.round(estActive/Math.max(1,capHoursWeek)*100) : pct,
+    remainingToday: round1(Math.max(0, dailyHours-estToday)),
+    overToday:      round1(Math.max(0, estToday-dailyHours)),
+    hoursMode: anyEstimates
+  };
 }
 
 function WorkloadView({ ctx }){
@@ -7637,11 +7657,13 @@ function WorkloadView({ ctx }){
       <${KPI} label="Overdue tasks" value=${totalOverdue} icon="trendDown"/>
     </div>
     <${Panel} pad=${false}><div style=${{overflowX:'auto'}}><table class="tbl"><thead><tr>
-      <th>Person</th><th>Role</th><th class="right">Active</th><th class="right">Today</th><th class="right">Week</th><th class="right">Overdue</th><th class="right">Done (mo)</th><th class="right">Cap</th><th>Load</th></tr></thead>
+      <th>Person</th><th>Role</th><th class="right">Active</th><th class="right">Today</th><th class="right">Week</th><th class="right">Overdue</th><th class="right">Done (mo)</th><th class="right">Cap</th><th class="right">Hrs/wk</th><th class="right">Today h</th><th>Load</th></tr></thead>
     <tbody>${rows.map(r=>html`<tr key=${r.e.id}><td><b>${r.e.fullName||r.e.name}</b></td><td class="muted">${r.e.jobTitle||r.e.role}</td>
       <td class="num">${r.active}</td><td class="num">${r.dueToday}</td><td class="num">${r.dueWeek}</td>
       <td class="num" style=${{color:r.overdue?'var(--neg)':'var(--ink-3)'}}>${r.overdue}</td>
       <td class="num">${r.completedMonth}</td><td class="num muted">${r.e.capacityPerWeek||40}h</td>
+      <td class="num" style=${{color:r.pctWeek>100?'var(--neg)':'var(--ink-2)'}}>${r.estActive?r.estActive+'h':'—'}</td>
+      <td class="num" title="hours due today / working day" style=${{color:r.overToday>0?'var(--neg)':'var(--ink-3)'}}>${r.estToday?r.estToday+'/'+r.dailyHours+'h':'—'}</td>
       <td><div class="flex center" style=${{gap:10,minWidth:160}}><div class="meter" style=${{flex:1}}><i style=${{width:Math.min(100,r.pct)+'%',background:r.pct>100?'var(--neg)':'linear-gradient(90deg,var(--lime-deep),var(--lime))'}}></i></div>
         <span class="mono" style=${{fontSize:11,color:'var(--ink-3)',minWidth:34}}>${r.pct}%</span><${Tag} type=${r.tag.type}>${r.tag.label}<//></div></td></tr>`)}</tbody></table></div><//></div>`;
 }
