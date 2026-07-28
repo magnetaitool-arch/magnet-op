@@ -7697,7 +7697,10 @@ function PayrollView({ ctx }){
   const runs = (db.employeePayments||[]).filter(p=>p.month===month);
   const runFor = (id)=> runs.find(p=>p.employeeId===id);
   const totalNet = runs.reduce((s,p)=>s+(empPaymentNet(p)||0),0);
-  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:22,daysWorked:22,applyStatutory:'Yes',paymentStatus:'Pending'});
+  // Pre-fill days worked from ACTUAL attendance this month (unique days with a check-in) on a 30-day basis,
+  // so someone who joined/attended mid-month is auto-prorated (salary ÷ 30 × attended days).
+  const attendedDays = (id)=> new Set((db.attendance||[]).filter(a=>a.employeeId===id && (a.date||'').slice(0,7)===month && _hm2min(a.checkIn)!=null).map(a=>a.date)).size;
+  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:30,daysWorked:attendedDays(e.id),applyStatutory:'Yes',paymentStatus:'Pending'});
   return html`<div class="view">
     <${Head} eyebrow=${t('Finance & Payroll')} title=${ar?'المرتبات':'Payroll'} desc=${ar?'احسب مرتب كل موظف بأيام الشغل، البونص، الخصم والـKPI — واطبع القسيمة.':'Compute each salary from days worked, bonus, deductions and KPIs — and print the payslip.'}>
       <input type="month" class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}/>
@@ -7712,7 +7715,7 @@ function PayrollView({ ctx }){
     <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
       <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
       <td class="num">${e.salary?money(e.salary):'—'}</td>
-      <td class="num muted">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||22)):'—'}</td>
+      <td class="num muted" title="attended days / month basis">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||30)):(attendedDays(e.id)+'/30')}</td>
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
       <td class="right cell-actions">
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
@@ -8718,6 +8721,9 @@ function RequestDetail({ ctx, req, onClose }){
     ${r.description?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'الوصف':'Description'}</div><div style=${{marginTop:6,fontSize:13}}>${r.description}</div></div>`:''}
     ${r.reason?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'السبب':'Reason'}</div><div style=${{marginTop:6,fontSize:13}}>${r.reason}</div></div>`:''}
     ${r.managerComment?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'تعليق المدير':'Manager comment'}</div><div style=${{marginTop:6,fontSize:13}}>${r.managerComment}</div></div>`:''}
+    ${(()=>{ const shown=new Set(['id','requestNumber','title','requestType','priority','status','requestedByName','requestedBy','requestedByRole','assignedManagerId','assignedManagerName','leaveType','startDate','date','endDate','days','fromTime','from','toTime','to','amount','description','reason','managerComment','createdAt','updatedAt','_del','approvedBy','approvedAt','rejectedBy','rejectedAt','employeeId','coll','source','requestId','deliverableId','invoiceId','proposalId','projectId','clientId','verified','read']);
+       const extra=Object.keys(r).filter(k=>!shown.has(k) && r[k]!=null && r[k]!=='' && typeof r[k]!=='object');
+       return extra.length?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'تفاصيل إضافية':'More details'}</div><div class="flex" style=${{gap:16,flexWrap:'wrap',marginTop:8}}>${extra.map(k=>_stat(k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase()), String(r[k])))}</div></div>`:''; })()}
     ${canApr?html`<div style=${{marginTop:8}}>
       <input class="sel" style=${{width:'100%',marginBottom:10}} placeholder=${arr?'تعليق المدير (اختياري)…':'Manager comment (optional)…'} value=${comment} onChange=${e=>setComment(e.target.value)}/>
       <div class="flex gap8">
