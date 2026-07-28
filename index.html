@@ -5633,6 +5633,20 @@ function App(){
   };
   // Collections too high-frequency / system to audit — logging them would flood the trail.
   const NO_AUDIT = new Set(['notifications','activityLogs','chatMessages','comments','gameScores','gameStats','_ratelimit','attendance','availability']);
+  // Cross-manager accountability: notify (in-app + email) the OTHER managers when a manager deletes anything
+  // or edits a sensitive record. Sensitive = finance + salary/payroll. Auto-computed-only updates are skipped.
+  const MGR_SENSITIVE = new Set(['invoices','payments','employees','employeePayments','expenses','contracts','payroll','fixedCosts','partners','partnerSettlements']);
+  const MGR_COMPUTED = new Set(['proratedBase','grossSalary','socialInsurance','socialInsuranceEmployer','incomeTax','totalDeductions','netAmount','updatedAt','updatedBy']);
+  const notifyManagers = (action, coll, label) => {
+    try{
+      const actorId = user && user.id;
+      const mgrs = (AUTH.loadUsers()||[]).filter(u=> u && u.status!=='Inactive'
+        && (u.role==='Owner'||u.role==='Manager'||aliasRole(u.role)==='Admin')
+        && u.id!==actorId && u.id!=='local-admin');
+      const who = (user && user.name) || 'A manager';
+      mgrs.forEach(m=> addNotification(m.id, who+' '+action+' '+coll, who+' '+action+' a '+coll+' record'+(label?(' — '+label):''), coll, null));
+    }catch(e){}
+  };
   const updateRecord = (coll, id, updates) => {
     let out=null, _prev=null;
     setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ _prev=x; out={...x,...updates,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
@@ -5645,6 +5659,11 @@ function App(){
           addActivity(coll, id, 'status → '+(out.status||''), _lbl);
         else addActivity(coll, id, 'updated', _lbl);
       }
+      // Notify other managers on a sensitive edit (skip auto-computed-only updates).
+      if(MGR_SENSITIVE.has(coll) && aliasRole(role)==='Admin'){
+        const meaningful=Object.keys(updates||{}).filter(k=>!MGR_COMPUTED.has(k));
+        if(meaningful.length) notifyManagers('edited', coll, out.name||out.title||out.invoiceNumber||out.fullName||'');
+      }
     }
     return out;
   };
@@ -5652,11 +5671,14 @@ function App(){
     // Defense in depth: protected finance collections (invoices/payments) may only be
     // deleted by Owner/Admin. Regular roles are blocked even if a button somehow renders.
     if(PROTECTED_DELETE.includes(coll) && !isAdminRole(role)){ console.warn('Blocked delete of protected collection:', coll); return; }
+    const _r=(db[coll]||[]).find(x=>x.id===id)||{};
+    const _lbl=_r.name||_r.title||_r.invoiceNumber||_r.projectName||_r.fullName||'';
     setDb(d=>({...d,[coll]:(d[coll]||[]).filter(x=>x.id!==id)}));
     // Write a TOMBSTONE (not a hard delete) so the deletion propagates through the
     // 5s poll on every device and can never resurrect from a stale local copy.
     cloudUpsert(cfg.current, coll, { id, _del:true, updatedAt:nowISO() });
-    addActivity(coll,id,'deleted','');
+    addActivity(coll,id,'deleted',_lbl);
+    notifyManagers('deleted', coll, _lbl); // alert the other managers (in-app + email)
   };
   const getRecords = (coll) => db[coll]||[];
 
