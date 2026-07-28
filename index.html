@@ -5780,7 +5780,7 @@ function App(){
     const num = rec.invoiceNumber||rec.proposalNumber||rec.quotationNumber||rec.contractNumber||rec.id;
     const subject = type.charAt(0).toUpperCase()+type.slice(1)+' '+num+' — '+(brand||'Magnet');
     try { await sendEmail({ to, subject, html:_docHTML(type, rec, db) }); showProPopup('syncSuccess','Email sent to '+to); }
-    catch(e){ alert('Email failed: '+e.message+'\n\nMake sure RESEND_API_KEY is set in Netlify (see setup notes).'); }
+    catch(e){ alert('Email failed: '+e.message+'\n\nMake sure RESEND_API_KEY is set in Vercel (see setup notes).'); }
   };
 
   /* ---- AI agents ---- */
@@ -8094,8 +8094,8 @@ function SettingsView({ ctx, x }){
 
     <${Panel} title=${ctx.lang==='ar'?'الإيميل (الإشعارات والمستندات)':'Email (notifications & documents)'} className="mb18">
       <p class="muted" style=${{fontSize:12.5,lineHeight:1.6,marginBottom:12}}>${ctx.lang==='ar'
-        ?'الإرسال يتم عبر خدمة Resend من خلال دالة Netlify. أضف RESEND_API_KEY (و FROM_EMAIL اختياريًا) في إعدادات Netlify ثم أعد النشر.'
-        :'Email is sent via Resend through a Netlify Function. Add RESEND_API_KEY (and optionally FROM_EMAIL) in your Netlify site settings, then redeploy.'}</p>
+        ?'الإرسال يتم عبر خدمة Resend من خلال دالة Vercel. أضف RESEND_API_KEY (و FROM_EMAIL اختياريًا) في Environment Variables على Vercel ثم أعد النشر. لإرسال لكل الفريق فعّل دومين في resend.com/domains.'
+        :'Email is sent via Resend through a Vercel Function. Add RESEND_API_KEY (and optionally FROM_EMAIL) in your Vercel Environment Variables, then redeploy. To email anyone, verify a domain at resend.com/domains.'}</p>
       <label class="flex center gap8" style=${{fontSize:13,cursor:'pointer',marginBottom:12}}>
         <input type="checkbox" checked=${!!ctx.appSettings.emailNotifications} onChange=${e=>ctx.applyAppSettings({emailNotifications:e.target.checked})}/>
         <span>${ctx.lang==='ar'?'إرسال إشعارات بالبريد عند إسناد المهام والموافقات':'Email team members on task assignments & approvals'}</span></label>
@@ -8104,7 +8104,7 @@ function SettingsView({ ctx, x }){
           <input value=${email} placeholder="you@example.com" onChange=${e=>setEmail(e.target.value)}/></label>
         <button class="btn btn-ghost" onClick=${async()=>{ if(!email){alert('Enter an email first.');return;}
           try{ await sendEmail({to:email,subject:'Magnet OS — test email',text:'This is a test from your Magnet OS deployment. If you got this, email is working.'}); showProPopup('syncSuccess','Test email sent to '+email); }
-          catch(err){ alert('Test failed: '+err.message+'\n\nCheck that RESEND_API_KEY is set in Netlify and you redeployed.'); } }}>${ctx.lang==='ar'?'إرسال اختبار':'Send test'}</button>
+          catch(err){ alert('Test failed: '+err.message+'\n\nCheck that RESEND_API_KEY is set in Vercel and you redeployed.'); } }}>${ctx.lang==='ar'?'إرسال اختبار':'Send test'}</button>
       </div>
     <//>
 
