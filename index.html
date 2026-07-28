@@ -3948,7 +3948,7 @@ async function verifyPassword(pw, hash){
 }
 
 /* ---- user store (localStorage) ---- */
-function loadUsers(){ try { return JSON.parse(store.get(AUTH_KEYS.users)||'[]'); } catch(e){ return []; } }
+function loadUsers(){ try { return (JSON.parse(store.get(AUTH_KEYS.users)||'[]')||[]).filter(u=>u && !u._del); } catch(e){ return []; } }
 function saveUsers(list){ store.set(AUTH_KEYS.users, JSON.stringify(list)); try { cloudPushUsers(list); } catch(e){} }
 
 /* ---- shared team accounts: sync through the cloud `records` table (coll='_accounts')
@@ -3991,8 +3991,9 @@ async function cloudPullUsers(){
 // Saves WITHOUT re-pushing to avoid a sync loop.
 async function syncUsersFromCloud(){
   const cloud=await cloudPullUsers(); if(!cloud) return loadUsers();
-  const byId={}; loadUsers().forEach(u=>byId[u.id]=u); cloud.forEach(u=>byId[u.id]=u);
-  const merged=Object.values(byId);
+  const byId={}; loadUsers().forEach(u=>byId[u.id]=u);
+  cloud.forEach(u=>{ if(u && u._del) delete byId[u.id]; else if(u) byId[u.id]=u; }); // cloud deletions purge locally — deleted accounts never come back
+  const merged=Object.values(byId).filter(u=>u && !u._del);
   store.set(AUTH_KEYS.users, JSON.stringify(merged));
   return merged;
 }
