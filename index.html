@@ -5706,7 +5706,7 @@ function App(){
   const approveRequest = (req, comment) => {
     updateRecord('approvalRequests', req.id, { status:'Approved', approvedBy:user.id, approvedAt:nowISO(), managerComment:comment||req.managerComment||'' });
     addActivity('approvalRequests', req.id, 'request approved', req.title);
-    addNotification(req.requestedBy,'Request approved',`${req.title} was approved`,'requests',req.id);
+    addNotification(req.requestedBy,'Request approved',`${req.title} was approved`+(comment?(' — '+comment):''),'requests',req.id);
     triggerWebhook('requestApprovedWebhook',{request:req});
     awardPoints(POINTS.requestApproved,'Approval');
     // side-effects by type
@@ -5742,11 +5742,11 @@ function App(){
   const rejectRequest = (req, comment) => {
     updateRecord('approvalRequests', req.id, { status:'Rejected', rejectedBy:user.id, rejectedAt:nowISO(), managerComment:comment||'' });
     addActivity('approvalRequests', req.id, 'request rejected', req.title);
-    addNotification(req.requestedBy,'Request rejected',`${req.title} was rejected`,'requests',req.id);
+    addNotification(req.requestedBy,'Request rejected',`${req.title} was rejected`+(comment?(' — '+comment):''),'requests',req.id);
     showProPopup('requestRejected',req.title);
     triggerWebhook('requestRejectedWebhook',{request:req});
   };
-  const requestChanges = (req, comment) => { updateRecord('approvalRequests',req.id,{status:'Changes Requested',managerComment:comment||''}); addActivity('approvalRequests',req.id,'changes requested',req.title); addNotification(req.requestedBy,'Changes requested',req.title,'requests',req.id); };
+  const requestChanges = (req, comment) => { updateRecord('approvalRequests',req.id,{status:'Changes Requested',managerComment:comment||''}); addActivity('approvalRequests',req.id,'changes requested',req.title); addNotification(req.requestedBy,'Changes requested',req.title+(comment?(' — '+comment):''),'requests',req.id); };
 
   /* ---- chat ---- */
   const sendChat = (channelType, channelId, message, visibility, extra) => {
@@ -8691,7 +8691,7 @@ function RequestDetail({ ctx, req, onClose }){
   const arr=getLang()==='ar';
   return html`<${Modal} title=${r.requestNumber+' · '+r.title} wide=${true} onClose=${onClose}>
     <div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:16}}>
-      ${_stat(arr?'النوع':'Type',t(r.requestType))}${_stat(arr?'الأولوية':'Priority',t(r.priority))}${_stat(arr?'الحالة':'Status',t(r.status))}${_stat(arr?'مقدم الطلب':'By',r.requestedByName)}${r.amount?_stat(arr?'المبلغ':'Amount',money(r.amount)):''}</div>
+      ${_stat(arr?'النوع':'Type',t(r.requestType))}${_stat(arr?'الأولوية':'Priority',t(r.priority))}${_stat(arr?'الحالة':'Status',t(r.status))}${_stat(arr?'مقدم الطلب':'By',r.requestedByName)}${r.leaveType?_stat(arr?'نوع الإجازة':'Leave type',t(r.leaveType)):''}${(r.startDate||r.date)?_stat(arr?'من':'From',fmtDate(r.startDate||r.date)):''}${r.endDate?_stat(arr?'إلى':'To',fmtDate(r.endDate)):''}${r.days?_stat(arr?'أيام':'Days',r.days):''}${(r.fromTime||r.from)?_stat(arr?'من (وقت)':'From',(r.fromTime||r.from)):''}${(r.toTime||r.to)?_stat(arr?'إلى (وقت)':'To',(r.toTime||r.to)):''}${r.amount?_stat(arr?'المبلغ':'Amount',money(r.amount)):''}</div>
     ${r.description?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'الوصف':'Description'}</div><div style=${{marginTop:6,fontSize:13}}>${r.description}</div></div>`:''}
     ${r.reason?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'السبب':'Reason'}</div><div style=${{marginTop:6,fontSize:13}}>${r.reason}</div></div>`:''}
     ${r.managerComment?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'تعليق المدير':'Manager comment'}</div><div style=${{marginTop:6,fontSize:13}}>${r.managerComment}</div></div>`:''}
