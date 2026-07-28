@@ -7697,10 +7697,13 @@ function PayrollView({ ctx }){
   const runs = (db.employeePayments||[]).filter(p=>p.month===month);
   const runFor = (id)=> runs.find(p=>p.employeeId===id);
   const totalNet = runs.reduce((s,p)=>s+(empPaymentNet(p)||0),0);
-  // Pre-fill days worked from ACTUAL attendance this month (unique days with a check-in) on a 30-day basis,
-  // so someone who joined/attended mid-month is auto-prorated (salary ÷ 30 × attended days).
-  const attendedDays = (id)=> new Set((db.attendance||[]).filter(a=>a.employeeId===id && (a.date||'').slice(0,7)===month && _hm2min(a.checkIn)!=null).map(a=>a.date)).size;
-  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:30,daysWorked:attendedDays(e.id),applyStatutory:'Yes',paymentStatus:'Pending'});
+  // 30-day basis (Fri/Sat are PAID rest days). A full month = 30 paid days. Someone who JOINED mid-month is
+  // auto-prorated from their start date. Unpaid absences are entered by the owner (safer than auto-docking a
+  // missed login), and bonuses/deductions/KPI are added in the pay-run form.
+  const paidDays = (e)=>{ try{ const pr=String(month).split('-').map(Number); const last=new Date(pr[0],pr[1],0).getDate();
+    let start=1; if(e.startDate && String(e.startDate).slice(0,7)===month) start=Number(String(e.startDate).slice(8,10))||1;
+    return Math.max(0, Math.min(30, Math.round((last-start+1)/last*30))); }catch(_){ return 30; } };
+  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:30,daysWorked:paidDays(e),applyStatutory:'Yes',paymentStatus:'Pending'});
   return html`<div class="view">
     <${Head} eyebrow=${t('Finance & Payroll')} title=${ar?'المرتبات':'Payroll'} desc=${ar?'احسب مرتب كل موظف بأيام الشغل، البونص، الخصم والـKPI — واطبع القسيمة.':'Compute each salary from days worked, bonus, deductions and KPIs — and print the payslip.'}>
       <input type="month" class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}/>
@@ -7715,7 +7718,7 @@ function PayrollView({ ctx }){
     <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
       <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
       <td class="num">${e.salary?money(e.salary):'—'}</td>
-      <td class="num muted" title="attended days / month basis">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||30)):(attendedDays(e.id)+'/30')}</td>
+      <td class="num muted" title="paid days / 30">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||30)):(paidDays(e)+'/30')}</td>
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
       <td class="right cell-actions">
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
