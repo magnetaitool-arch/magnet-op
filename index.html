@@ -8531,7 +8531,7 @@ function TasksView({ ctx, visible, ce }){
             <div class="flex between center" style=${{marginTop:8}}><span class="muted" style=${{fontSize:11}}>${nameById(db.employees,t.assignedTo)}</span>
               ${d.overdue?html`<span class="mono" style=${{fontSize:10,color:'var(--neg)'}}>${d.delayDays}d late</span>`:t.dueDate?html`<span class="muted" style=${{fontSize:10}}>${fmtDate(t.dueDate)}</span>`:''}</div></div>`;}}/>`
       : html`<${DataTable} db=${db} rows=${rows} extraActions=${t=>html`<button class="mini" onClick=${()=>setSel(t)}>${ctx.lang==='ar'?'فتح':'Open'}</button>`}
-          canEditFlag=${ce} onDelete=${ce?(r=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة؟':'Delete this task?'))) ctx.deleteRecord('tasks',r.id); }):null}
+          canEditFlag=${ce} onDelete=${canCreateTasks(role)?(r=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة؟':'Delete this task?'))) ctx.deleteRecord('tasks',r.id); }):null}
           cols=${[{k:'title',label:'Task',render:r=>r.title||r.name},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'assignedTo',label:'Assignee',ref:true,coll:'employees'},{k:'status',label:'Status',tag:true},{k:'priority',label:'Priority'},{k:'dueDate',label:'Due',render:r=>{const d=calculateTaskDelay(r);return html`<span style=${{color:d.overdue?'var(--neg)':'var(--ink-2)'}}>${fmtDate(r.dueDate)}</span>`;}}]}/>`}
     ${sel&&html`<${TaskDetail} ctx=${ctx} task=${sel} ce=${ce} onClose=${()=>setSel(null)}/>`}
   </div>`;
@@ -8540,6 +8540,8 @@ function TasksView({ ctx, visible, ce }){
 function TaskDetail({ ctx, task, ce, onClose }){
   const { db, role } = ctx;
   const t = normalizeTask(byId(db.tasks,task.id)||task);
+  // Assignees can change status; only managers (task creators) may edit-all or delete a task.
+  const canManage = canCreateTasks(role) || (ctx.user && t.createdBy && t.createdBy===ctx.user.id);
   const [newCheck,setNewCheck]=useState('');
   const delay=calculateTaskDelay(t);
   const upd=(p)=>ctx.updateRecord('tasks',t.id,p);
@@ -8561,8 +8563,8 @@ function TaskDetail({ ctx, task, ce, onClose }){
           <button class="mini" onClick=${()=>setStatus('Client Review')}>→ Client Review</button>
           <button class="mini pri" onClick=${()=>setStatus('Done')}>Mark Done</button>
           <button class="mini" onClick=${()=>setStatus('Blocked')}>Block</button>
-          <button class="btn btn-ghost" style=${{padding:'5px 10px'}} onClick=${()=>{onClose();ctx.openModal('tasks',t);}}>Edit all fields</button>
-          <button class="btn btn-ghost danger" style=${{padding:'5px 10px'}} onClick=${()=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة نهائيًا؟':'Delete this task permanently?'))){ ctx.deleteRecord('tasks',t.id); onClose(); } }}>${ctx.lang==='ar'?'حذف':'Delete'}</button></div>`}
+          ${canManage&&html`<button class="btn btn-ghost" style=${{padding:'5px 10px'}} onClick=${()=>{onClose();ctx.openModal('tasks',t);}}>Edit all fields</button>
+          <button class="btn btn-ghost danger" style=${{padding:'5px 10px'}} onClick=${()=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة نهائيًا؟':'Delete this task permanently?'))){ ctx.deleteRecord('tasks',t.id); onClose(); } }}>${ctx.lang==='ar'?'حذف':'Delete'}</button>`}</div>`}
         ${t.brief?html`<div class="panel" style=${{padding:12,marginBottom:14}}><div class="eyebrow">Brief</div><div style=${{marginTop:6,fontSize:13,lineHeight:1.6,whiteSpace:'pre-wrap'}}>${t.brief}</div></div>`:''}
         ${t.requirements?html`<div class="panel" style=${{padding:12,marginBottom:14}}><div class="eyebrow">Requirements</div><div style=${{marginTop:6,fontSize:13,lineHeight:1.6}}>${t.requirements}</div></div>`:''}
         <div class="eyebrow" style=${{marginBottom:8}}>Checklist</div>
