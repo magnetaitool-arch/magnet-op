@@ -3411,6 +3411,14 @@ function runDataHealth(db){
   add('warn','Employees without a role',(db.employees||[]).filter(e=>!e.role&&!e.jobTitle).length,'employees');
   let missingIds=0; COLLECTIONS.forEach(c=>(db[c]||[]).forEach(r=>{ if(!r||!r.id) missingIds++; }));
   add('neg','Records with missing IDs',missingIds,'settings');
+  // Silent-intake guard: the website hiring/contact forms feed candidates+leads. If NOTHING has
+  // arrived for days, the public form is probably broken (it used to fail silently and show the
+  // applicant a fake "success"). Surfacing it here means we find out in a day, not a month.
+  const _lastIn=(coll)=>{ let m=''; (db[coll]||[]).forEach(r=>{ const d=r&&(r.appliedAt||r.createdAt); if(d&&d>m) m=d; }); return m; };
+  const _daysAgo=(iso)=>{ if(!iso) return 999; try{ return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }catch(e){ return 999; } };
+  const _candQ=_daysAgo(_lastIn('candidates')), _leadQ=_daysAgo(_lastIn('leads'));
+  if(_candQ>=7) add('neg','No website applications for '+(_candQ>900?'a long time':_candQ+' days')+' — check the hiring form',1,'candidates');
+  if(_leadQ>=14) add('warn','No website leads for '+(_leadQ>900?'a long time':_leadQ+' days')+' — check the contact form',1,'leads');
   return warns;
 }
 
