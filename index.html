@@ -2673,32 +2673,39 @@ const empPaymentNet = (p)=> computePayrun(p).net;
 function generatePayslip(p, emp){
   const ar=getAppSettings().language==='ar';
   const pr=computePayrun(p);
-  const partial = pr.daysWorked!==pr.daysInMonth, kpiPos = pr.kpi>0, kpiNeg = pr.kpi<0;
+  const kpiPos = pr.kpi>0, kpiNeg = pr.kpi<0;
   const nm=(emp&&(emp.fullName||emp.name))||'—';
+  const job=(emp&&emp.jobTitle)||'';
+  const code=(emp&&(emp.employeeCode||''))||'';
+  const method=(p.paymentMethod||(emp&&emp.paymentMethod)||(ar?'تحويل بنكي':'Bank transfer'));
+  const acct=(emp&&(emp.walletNumber||emp.bankAccount))||'';
+  const bank=(emp&&emp.bankName)||'';
   const e=s=>String(s==null?'':s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
-  const row=(l,v,neg)=>'<tr><td>'+e(l)+'</td><td style="text-align:right;color:'+(neg?'#e6a01e':'#f3f5ef')+'">'+(neg?'- ':'')+e(money(v))+'</td></tr>';
-  const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>Payslip — '+e(nm)+'</title>'
-    +'<style>body{background:#070807;color:#f3f5ef;font-family:system-ui,Arial;max-width:560px;margin:0 auto;padding:40px}h1{color:#c8f31e;font-size:20px;letter-spacing:.14em;margin:0}h2{font-size:13px;color:#c8f31e;margin-top:22px}table{width:100%;border-collapse:collapse}td{padding:8px;border-bottom:1px solid #23261f;font-size:13px}.tot td{border-top:2px solid #c8f31e;font-weight:800;font-size:15px}.muted{color:#9a9a98}.msg{margin-top:20px;padding:14px 16px;border:1px solid #23261f;border-radius:10px;font-size:12.5px;line-height:1.7;color:#d7dacb}@media print{body{background:#fff;color:#111}h1,h2{color:#5b7d00}.msg{border-color:#ccc;color:#333}}</style></head><body>'
-    +'<div style="display:flex;justify-content:space-between;align-items:center"><h1>MAGNET</h1><span class="muted" style="font-size:11px">'+(ar?'قسيمة راتب':'Payslip')+' · '+e(p.month||'')+'</span></div>'
-    +'<h2>'+e(nm)+(emp&&emp.jobTitle?(' — '+e(emp.jobTitle)):'')+'</h2>'
-    +'<h2>'+(ar?'المستحقات':'Earnings')+'</h2><table>'
-    + row(ar?'الراتب الأساسي (شهري)':'Base salary (monthly)', pr.base)
-    + (partial?row((ar?'أيام العمل ':'Days worked ')+pr.daysWorked+'/'+pr.daysInMonth+(ar?' — المستحق':' — earned'), pr.proratedBase):'')
+  const row=(l,v,neg)=>'<tr><td class="lbl">'+e(l)+'</td><td class="amt'+(neg?' neg':'')+'">'+(neg?'− ':'')+e(money(v))+'</td></tr>';
+  const chip=(l,v)=>v?('<span class="chip">'+e(l)+' <b>'+e(v)+'</b></span>'):'';
+  const earn = row(ar?'الراتب الأساسي (شهري)':'Base salary (monthly)', pr.base)
+    + row((ar?'المستحق · ':'Earned · ')+pr.daysWorked+'/'+pr.daysInMonth+(ar?' يوم':' days'), pr.proratedBase)
     + (pr.bonus?row((ar?'بونص':'Bonus')+(p.bonusReason?(' — '+e(p.bonusReason)):''),pr.bonus):'')
     + (kpiPos?row((ar?'حافز KPI':'KPI bonus')+(p.kpiNote?(' — '+e(p.kpiNote)):''),pr.kpiBonus):'')
-    + (pr.commission?row(ar?'عمولة':'Commission',pr.commission):'')+(pr.overtime?row(ar?'إضافي (أوفر تايم)':'Overtime',pr.overtime):'')
-    + '<tr class="tot"><td>'+(ar?'الإجمالي':'Gross')+'</td><td style="text-align:right">'+e(money(pr.gross))+'</td></tr></table>'
-    +'<h2>'+(ar?'الاستقطاعات':'Deductions')+'</h2><table>'
-    + (pr.statutory?row(ar?'تأمينات اجتماعية (حصة الموظف)':'Social insurance (employee)', pr.insuranceEmp, true):'')
+    + (pr.commission?row(ar?'عمولة':'Commission',pr.commission):'')+(pr.overtime?row(ar?'إضافي':'Overtime',pr.overtime):'');
+  const ded = (pr.statutory?row(ar?'تأمينات اجتماعية':'Social insurance', pr.insuranceEmp, true):'')
     + (pr.statutory?row(ar?'ضريبة الدخل':'Income tax', pr.incomeTax, true):'')
     + (pr.penalties?row((ar?'جزاءات / تأخير':'Penalties / late')+(p.penaltyReason?(' — '+e(p.penaltyReason)):''),pr.penalties,true):'')
     + (kpiNeg?row((ar?'خصم KPI':'KPI deduction')+(p.kpiNote?(' — '+e(p.kpiNote)):''),pr.kpiDed,true):'')
-    + (pr.advance?row(ar?'سلفة / قرض':'Advance / loan',pr.advance,true):'')+(pr.otherDed?row(ar?'خصومات أخرى':'Other deductions',pr.otherDed,true):'')
-    + '<tr class="tot"><td>'+(ar?'إجمالي الخصومات':'Total deductions')+'</td><td style="text-align:right;color:#e6a01e">- '+e(money(pr.totalDeductions))+'</td></tr></table>'
-    +'<table style="margin-top:14px"><tr class="tot"><td>'+(ar?'صافي المستحق':'Net pay')+'</td><td style="text-align:right;color:#c8f31e">'+e(money(pr.net))+'</td></tr></table>'
-    + (p.payslipMessage?('<div class="msg">'+e(p.payslipMessage).replace(/\n/g,'<br/>')+'</div>'):'')
-    + (pr.statutory?('<p class="muted" style="margin-top:20px;font-size:10.5px">'+(ar?'المعدلات افتراضية وتُراجع مع المحاسب. تأمين صاحب العمل (غير مخصوم من الموظف): ':'Rates are defaults — verify with your accountant. Employer insurance (not deducted from the employee): ')+e(money(pr.insuranceEmployer))+'</p>'):'')
-    +'<p class="muted" style="font-size:10px">Magnet OS · '+e(p.month||'')+'</p></body></html>';
+    + (pr.advance?row(ar?'سلفة / قرض':'Advance / loan',pr.advance,true):'')+(pr.otherDed?row(ar?'خصومات أخرى':'Other deductions',pr.otherDed,true):'');
+  const hasDed = pr.totalDeductions>0;
+  const css='*{box-sizing:border-box}body{background:#f4f5f2;color:#14170f;font-family:Inter,system-ui,-apple-system,Arial,sans-serif;margin:0;padding:28px 14px}.doc{max-width:640px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 44px rgba(0,0,0,.09);border:1px solid #e7e9e2}.hd{display:flex;justify-content:space-between;align-items:center;padding:22px 28px;background:#0d0f0a;color:#fff}.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px}.dot{width:22px;height:22px;border-radius:6px;background:#c8f31e;display:inline-block}.meta{text-align:right;font-size:10.5px;color:#a7ab9c;letter-spacing:.16em;text-transform:uppercase}.emp{padding:22px 28px 8px}.nm{font-size:23px;font-weight:800;letter-spacing:-.01em}.sub{color:#6b7060;font-size:13px;margin-top:3px}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.chip{font-size:12px;background:#f2f4ec;border:1px solid #e6e9df;border-radius:999px;padding:5px 12px;color:#565c49}.chip b{color:#14170f}.hero{margin:16px 28px 20px;padding:18px 22px;border-radius:14px;background:linear-gradient(135deg,#14170d,#1e2413);color:#fff;display:flex;justify-content:space-between;align-items:flex-end}.hl{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#9aa08b}.hv{font-size:32px;font-weight:800;color:#c8f31e;margin-top:5px;line-height:1}.hpay{text-align:right;font-size:12px;color:#cfd3c4;line-height:1.6}.sec{padding:0 28px}.sec h3{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#8a8f7d;margin:18px 0 4px}table{width:100%;border-collapse:collapse}td{padding:9px 0;border-bottom:1px solid #f0f2ec;font-size:13.5px}.lbl{color:#3f4437}.amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.amt.neg{color:#c2410c}.tot td{border-bottom:none;border-top:2px solid #14170f;font-weight:800;font-size:14.5px;padding-top:11px}.net{margin:16px 28px 22px;padding:16px 22px;border-radius:12px;background:#eef4e0;border:1px solid #dce7c4;display:flex;justify-content:space-between;align-items:center}.net .l{font-weight:800}.net .v{font-size:23px;font-weight:800;color:#2f6d12}.msg{margin:0 28px 20px;padding:14px 16px;background:#fbfcf8;border:1px solid #eef0ea;border-radius:10px;font-size:12.5px;line-height:1.7;color:#4a4f40}.ft{padding:14px 28px;border-top:1px solid #eef0ea;color:#9aa08b;font-size:10.5px;display:flex;justify-content:space-between}@media print{body{background:#fff;padding:0}.doc{box-shadow:none;border:none}}';
+  const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>Payslip — '+e(nm)+'</title><style>'+css+'</style></head><body><div class="doc">'
+    +'<div class="hd"><div class="brand"><span class="dot"></span>MAGNET</div><div class="meta">'+(ar?'قسيمة راتب':'Payslip')+' · '+e(p.month||'')+'</div></div>'
+    +'<div class="emp"><div class="nm">'+e(nm)+'</div><div class="sub">'+e(job)+(code?(' · '+e(code)):'')+'</div>'
+    +'<div class="chips">'+chip(ar?'الشهر':'Period', p.month||'')+chip(ar?'الأيام':'Days', pr.daysWorked+'/'+pr.daysInMonth)+chip(ar?'طريقة الدفع':'Method', method)+(acct?chip(bank||(ar?'الحساب':'Account'), acct):'')+'</div></div>'
+    +'<div class="hero"><div><div class="hl">'+(ar?'صافي المستحق':'Net pay')+'</div><div class="hv">'+e(money(pr.net))+'</div></div><div class="hpay">'+e(method)+(acct?('<br/>'+e(acct)):'')+(bank?('<br/>'+e(bank)):'')+'</div></div>'
+    +'<div class="sec"><h3>'+(ar?'المستحقات':'Earnings')+'</h3><table>'+earn+'<tr class="tot"><td>'+(ar?'الإجمالي':'Gross')+'</td><td class="amt">'+e(money(pr.gross))+'</td></tr></table></div>'
+    +(hasDed?('<div class="sec"><h3>'+(ar?'الاستقطاعات':'Deductions')+'</h3><table>'+ded+'<tr class="tot"><td>'+(ar?'إجمالي الخصومات':'Total deductions')+'</td><td class="amt neg">− '+e(money(pr.totalDeductions))+'</td></tr></table></div>'):'')
+    +'<div class="net"><span class="l">'+(ar?'صافي المستحق':'Net pay')+'</span><span class="v">'+e(money(pr.net))+'</span></div>'
+    +(p.payslipMessage?('<div class="msg">'+e(p.payslipMessage).replace(/\n/g,'<br/>')+'</div>'):'')
+    +'<div class="ft"><span>Magnet OS · '+e(p.month||'')+'</span><span>'+(ar?'شكرًا لمجهودك':'Thank you for your work')+'</span></div>'
+    +'</div></body></html>';
   try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){}
 }
 // workload classification
@@ -7726,7 +7733,7 @@ function PayrollView({ ctx }){
   const paidDays = (e)=>{ try{ const pr=String(month).split('-').map(Number); const last=new Date(pr[0],pr[1],0).getDate();
     let start=1; if(e.startDate && String(e.startDate).slice(0,7)===month) start=Number(String(e.startDate).slice(8,10))||1;
     return Math.max(0, Math.min(30, Math.round((last-start+1)/last*30))); }catch(_){ return 30; } };
-  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:30,daysWorked:paidDays(e),applyStatutory:'Yes',paymentStatus:'Pending'});
+  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:30,daysWorked:paidDays(e),applyStatutory:'No',paymentStatus:'Pending'});
   return html`<div class="view">
     <${Head} eyebrow=${t('Finance & Payroll')} title=${ar?'المرتبات':'Payroll'} desc=${ar?'احسب مرتب كل موظف بأيام الشغل، البونص، الخصم والـKPI — واطبع القسيمة.':'Compute each salary from days worked, bonus, deductions and KPIs — and print the payslip.'}>
       <input type="month" class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}/>
@@ -7909,7 +7916,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
             ${stat('Salary',money(e.salary)+' '+(e.currency||''))}${stat('Bonus',money(e.bonus))}${stat('Commission',(e.commissionRate||0)+'%')}${stat('Deductions',money(e.deductions))}</div>
           <div class="panel" style=${{padding:12,marginBottom:14}}><div class="muted" style=${{fontSize:13,lineHeight:1.9}}>
             Method: ${e.paymentMethod} · Schedule: ${e.paymentSchedule}<br/>Bank: ${e.bankName||'—'} ${e.bankAccount||''} ${e.walletNumber?' · Wallet '+e.walletNumber:''}</div></div>
-          <div class="flex between center" style=${{margin:'4px 0 8px'}}><span class="eyebrow">Payment history</span>${ce&&html`<button class="mini" onClick=${()=>{onClose();ctx.openModal('employeePayments',{employeeId:e.id,month:thisMonth(),baseSalary:e.salary,daysInMonth:22,daysWorked:22,applyStatutory:'Yes',paymentStatus:'Pending'});}}>+ Add payment</button>`}</div>
+          <div class="flex between center" style=${{margin:'4px 0 8px'}}><span class="eyebrow">Payment history</span>${ce&&html`<button class="mini" onClick=${()=>{onClose();ctx.openModal('employeePayments',{employeeId:e.id,month:thisMonth(),baseSalary:e.salary,daysInMonth:30,daysWorked:30,applyStatutory:'No',paymentStatus:'Pending'});}}>+ Add payment</button>`}</div>
           <${DataTable} db=${db} rows=${(db.employeePayments||[]).filter(p=>p.employeeId===e.id)}
             canEditFlag=${ce}
             onEdit=${ce?(r=>{onClose();ctx.openModal('employeePayments',r);}):null}
