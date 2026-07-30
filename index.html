@@ -2689,26 +2689,26 @@ function payslipWhatsApp(p, emp){
   else if(num.startsWith('1') && num.length===10) num='20'+num;
   const nm=(emp&&(emp.fullName||emp.name))||'';
   const cur=(emp&&emp.currency)||'EGP';
+  // Message is ALWAYS English (owner's choice) regardless of the app's UI language.
   const L=[];
-  L.push((ar?'مرتب شهر ':'Payslip — ')+(p.month||''));
-  L.push('MAGNET');
+  L.push('*MAGNET — Payslip '+(p.month||'')+'*');
   L.push('');
-  L.push((ar?'الاسم: ':'Name: ')+nm);
-  L.push((ar?'الأساسي: ':'Base: ')+money(pr.base)+' '+cur);
-  L.push((ar?'الأيام: ':'Days: ')+pr.daysWorked+'/'+pr.daysInMonth);
-  if(pr.proratedBase!==pr.base) L.push((ar?'المستحق عن الأيام: ':'Earned for days: ')+money(pr.proratedBase)+' '+cur);
-  if(pr.bonus) L.push((ar?'بونص: +':'Bonus: +')+money(pr.bonus)+(p.bonusReason?(' ('+p.bonusReason+')'):''));
-  if(pr.kpiBonus) L.push((ar?'حافز KPI: +':'KPI bonus: +')+money(pr.kpiBonus));
-  if(pr.commission) L.push((ar?'عمولة: +':'Commission: +')+money(pr.commission));
-  if(pr.overtime) L.push((ar?'إضافي: +':'Overtime: +')+money(pr.overtime));
-  if(pr.totalDeductions) L.push((ar?'إجمالي الخصومات: −':'Total deductions: −')+money(pr.totalDeductions));
+  L.push('Name: '+nm);
+  L.push('Base salary: '+money(pr.base)+' '+cur);
+  L.push('Days: '+pr.daysWorked+'/'+pr.daysInMonth);
+  if(pr.proratedBase!==pr.base) L.push('Earned for days: '+money(pr.proratedBase)+' '+cur);
+  if(pr.bonus) L.push('Bonus: +'+money(pr.bonus)+(p.bonusReason?(' ('+p.bonusReason+')'):''));
+  if(pr.kpiBonus) L.push('KPI bonus: +'+money(pr.kpiBonus));
+  if(pr.commission) L.push('Commission: +'+money(pr.commission));
+  if(pr.overtime) L.push('Overtime: +'+money(pr.overtime));
+  if(pr.totalDeductions) L.push('Total deductions: -'+money(pr.totalDeductions));
   L.push('');
-  L.push((ar?'الصافي: ':'NET: ')+money(pr.net)+' '+cur);
+  L.push('*NET PAY: '+money(pr.net)+' '+cur+'*');
   const method=p.paymentMethod||(emp&&emp.paymentMethod)||'';
-  if(method) L.push((ar?'طريقة الدفع: ':'Paid via: ')+method);
+  if(method) L.push('Paid via: '+method);
   if(p.payslipMessage){ L.push(''); L.push(p.payslipMessage); }
   L.push('');
-  L.push(ar?'شكرًا لمجهودك.':'Thank you for your work.');
+  L.push('Thank you for your work.');
   window.open('https://wa.me/'+num+'?text='+encodeURIComponent(L.join('\n')), '_blank');
 }
 function generatePayslip(p, emp){
