@@ -2367,7 +2367,7 @@ function moduleEnabled(key, appSettings){
   return MODULE_ALWAYS_ON.includes(key) || en.includes(key);
 }
 // HR-specific permission helpers
-const canSeeSalary    = (role) => { const a=aliasRole(role); return a==='Admin' || a==='Accountant'; };
+const canSeeSalary    = (role) => { const a=aliasRole(role); return a==='Admin' || a==='Accountant' || a==='HR'; };
 const canEditEmployee = (role) => aliasRole(role)==='Admin';
 const canManageAccess = (role) => aliasRole(role)==='Admin';
 const canSeeEmployeePrivate = (role) => { const a=aliasRole(role); return a==='Admin' || a==='Accountant' || a==='Project Manager'; };
@@ -8022,7 +8022,7 @@ function PayrollView({ ctx }){
         return html`<td class="num" title=${'billable late minutes ('+GRACE_MIN+' min/day forgiven)'} style=${{color:shown?'var(--neg)':'var(--ink-3)'}}>${shown?shown+'m':'—'}</td>`; })()}
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
       <td>${!p?html`<${Tag}>${ar?'لسه':'Not run'}<//>`:(String(p.paymentStatus)==='Paid'?html`<${Tag} type="ok">${ar?'اتدفع':'Paid'}<//>`:html`<${Tag} type="warn">${p.paymentStatus||(ar?'معلّق':'Pending')}<//>`)}</td>
-      <td class="right cell-actions">
+      <td class="right cell-actions" style=${{whiteSpace:'normal'}}>
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
         ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة PDF':'Payslip PDF'}</button>`:''}
         ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e,()=>markPaid(p))}>${ar?'واتساب':'WhatsApp'}</button>`:''}
