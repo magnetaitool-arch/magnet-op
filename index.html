@@ -4616,8 +4616,11 @@ function Field({ f, value, onChange, db, rec }) {
     <input type="checkbox" checked=${!!value} onChange=${e=>set(e.target.checked)} style=${{width:16,height:16,accentColor:'var(--lime)'}}/>
     <span style=${{textTransform:'none',letterSpacing:0,fontSize:13,color:'var(--ink-2)'}}>${t(f.label)}</span></label>`;
   return html`<label class="fld ${f.full?'full':''}"><span>${t(f.label)}${isUrl(value)?html` · <${Ln} href=${value}>${getLang()==='ar'?'فتح ↗':'Open ↗'}<//>`:''}</span>
-    <input type=${f.type||'text'} value=${value==null?'':value}
-      onChange=${e=>{ const v=e.target.value; set(f.type==='number' ? (v===''?'':Number(v)) : v); }} /></label>`;
+    <input type=${f.type==='number'?'text':(f.type||'text')} inputMode=${f.type==='number'?'decimal':null} value=${value==null?'':value}
+      onChange=${e=>{ let v=e.target.value;
+        if(f.type==='number'){ v=v.replace(/[^0-9.\-]/g,''); const n=Number(v);
+          set(v===''?'':((v.slice(-1)==='.'||v==='-'||isNaN(n))?v:n)); }   // type freely; no spinner arrows
+        else set(v); }} /></label>`;
 }
 /* Live pay-run maths shown INSIDE the form, so the total is visible while typing
    (daily rate, days actually paid after absence, every add/deduct, and the net). */
