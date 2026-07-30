@@ -2662,7 +2662,10 @@ function computePayrun(p, cfg){
   cfg=cfg||payrollCfg(); p=p||{};
   const base=Number(p.baseSalary)||Number(p.grossSalary)||0;
   const daysInMonth=Number(p.daysInMonth)>0?Number(p.daysInMonth):22;
-  const daysWorked=(p.daysWorked===''||p.daysWorked==null)?daysInMonth:Math.max(0,Number(p.daysWorked)||0);
+  const daysWorkedRaw=(p.daysWorked===''||p.daysWorked==null)?daysInMonth:Math.max(0,Number(p.daysWorked)||0);
+  // Unpaid absence days are simply subtracted from the days being paid.
+  const absentDays=Math.max(0,Number(p.absentDays)||0);
+  const daysWorked=Math.max(0, daysWorkedRaw-absentDays);
   // NOT capped at daysInMonth: paying 25 days against a 22-working-day month is legitimate
   // (e.g. carry-over days from the previous month), and must pay MORE than one month.
   const proratedBase=Math.round(base*daysWorked/Math.max(1,daysInMonth));
@@ -2670,7 +2673,7 @@ function computePayrun(p, cfg){
   const kpi=Number(p.kpiAmount)||0, kpiBonus=Math.max(0,kpi), kpiDed=Math.max(0,-kpi);
   const advance=Number(p.advance)||0, penalties=Number(p.penalties)||0, otherDed=Number(p.deductions)||0;
   const statutory = p.applyStatutory!=='No' && p.applyStatutory!==false;   // default ON ("official")
-  const wrap = extra => Object.assign({base,daysInMonth,daysWorked,proratedBase,bonus,commission,overtime,kpi,kpiBonus,kpiDed,advance,penalties,otherDed}, extra);
+  const wrap = extra => Object.assign({base,daysInMonth,daysWorked,daysWorkedRaw,absentDays,proratedBase,bonus,commission,overtime,kpi,kpiBonus,kpiDed,advance,penalties,otherDed}, extra);
   if(statutory){
     const pr=egyptPayroll(proratedBase,{bonus:bonus+kpiBonus,commission,overtime,advance,penalties:penalties+kpiDed,deductions:otherDed},cfg);
     return wrap(Object.assign({statutory:true}, pr));
@@ -4614,6 +4617,35 @@ function Field({ f, value, onChange, db, rec }) {
     <input type=${f.type||'text'} value=${value==null?'':value}
       onChange=${e=>{ const v=e.target.value; set(f.type==='number' ? (v===''?'':Number(v)) : v); }} /></label>`;
 }
+/* Live pay-run maths shown INSIDE the form, so the total is visible while typing
+   (daily rate, days actually paid after absence, every add/deduct, and the net). */
+function PayCalcPanel({ rec, ar }){
+  const pr = computePayrun(rec||{});
+  const daily = pr.base / Math.max(1, pr.daysInMonth);
+  const line = (l,v,neg)=>html`<div class="flex between" style=${{fontSize:12.5,padding:'3px 0'}}>
+    <span class="muted">${l}</span><span class="mono" style=${{color:neg?'var(--neg)':'var(--ink)'}}>${(neg?'− ':'')+money(v)}</span></div>`;
+  return html`<div class="panel" style=${{padding:'12px 14px',marginTop:12,background:'rgba(200,243,30,.05)',border:'1px solid rgba(200,243,30,.22)'}}>
+    <div class="flex between center" style=${{marginBottom:8}}>
+      <span class="eyebrow" style=${{color:'var(--lime)'}}>${ar?'الحساب المباشر':'Live calculation'}</span>
+      <span class="muted mono" style=${{fontSize:11}}>${(ar?'اليومية ':'daily ')+money(Math.round(daily))+' × '+pr.daysWorked+(ar?' يوم':' d')}</span>
+    </div>
+    ${line((ar?'الأساسي ÷ ':'Base ÷ ')+pr.daysInMonth+(ar?' يوم عمل':' work days'), pr.base)}
+    ${pr.absentDays?html`<div class="flex between" style=${{fontSize:12.5,padding:'3px 0'}}><span class="muted">${ar?'غياب بدون مرتب':'Unpaid absence'}</span><span class="mono" style=${{color:'var(--neg)'}}>${'− '+pr.absentDays+(ar?' يوم':' d')}</span></div>`:''}
+    ${line((ar?'المستحق عن ':'Earned for ')+pr.daysWorked+'/'+pr.daysInMonth+(ar?' يوم':' days'), pr.proratedBase)}
+    ${pr.bonus?line(ar?'بونص':'Bonus', pr.bonus):''}
+    ${pr.kpiBonus?line(ar?'حافز KPI':'KPI bonus', pr.kpiBonus):''}
+    ${pr.commission?line(ar?'عمولة':'Commission', pr.commission):''}
+    ${pr.overtime?line(ar?'إضافي':'Overtime', pr.overtime):''}
+    ${pr.penalties?line((ar?'جزاء تأخير':'Late penalty')+(Number(rec&&rec.lateMinutes)?(' ('+Number(rec.lateMinutes)+'m)'):''), pr.penalties, true):''}
+    ${pr.kpiDed?line(ar?'خصم KPI':'KPI deduction', pr.kpiDed, true):''}
+    ${pr.advance?line(ar?'سلفة':'Advance', pr.advance, true):''}
+    ${pr.otherDed?line(ar?'خصومات أخرى':'Other deductions', pr.otherDed, true):''}
+    ${pr.statutory?line(ar?'تأمينات + ضريبة':'Insurance + tax', pr.insuranceEmp+pr.incomeTax, true):''}
+    <div class="flex between center" style=${{marginTop:8,paddingTop:8,borderTop:'2px solid rgba(200,243,30,.35)'}}>
+      <b style=${{fontSize:13}}>${ar?'الصافي المستحق':'NET PAY'}</b>
+      <b class="mono" style=${{fontSize:19,color:'var(--lime)'}}>${money(pr.net)}</b></div>
+  </div>`;
+}
 function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const [rec, setRec] = useState(initial||{});
   const [err, setErr] = useState('');
@@ -4662,6 +4694,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
         <span class="step-dot">${i<step?'✓':(i+1)}</span><span class="step-lab">${s.label}</span></div>`)}</div>
       <div class="step-prog"><i style=${{width:pct+'%'}}></i></div>
       <div style=${{maxHeight:'50vh',overflowY:'auto',paddingRight:4,marginTop:14}}>${cur.groups.map(renderGroup)}</div>
+      ${(schema||[]).some(f=>f.k==='daysInMonth')?html`<${PayCalcPanel} rec=${rec} ar=${ar}/>`:''}
       ${err&&html`<div class="neg" style=${{fontSize:12,marginTop:10}}>${err}</div>`}
       <div class="form-foot" style=${{alignItems:'center'}}>
         <button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button>
@@ -6476,7 +6509,7 @@ const FORM_SCHEMAS = {
     {k:'reason',label:'Reason',type:'textarea'},{k:'notes',label:'Notes',type:'textarea'}],
   employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',type:'month',req:true,group:'Pay run'},{k:'periodFrom',label:'Period from',type:'date',group:'Pay run'},{k:'periodTo',label:'Period to',type:'date',group:'Pay run'},{k:'daysInMonth',label:'Working days in month',type:'number',group:'Pay run'},{k:'daysWorked',label:'Days worked',type:'number',group:'Pay run'},
     {k:'baseSalary',label:'Gross base salary (EGP)',type:'number',group:'Earnings'},{k:'bonus',label:'Bonus',type:'number',group:'Earnings'},{k:'bonusReason',label:'Bonus reason',group:'Earnings'},{k:'kpiAmount',label:'KPI adjustment (+ / −)',type:'number',group:'Earnings'},{k:'kpiNote',label:'KPI note',group:'Earnings'},{k:'commission',label:'Commission',type:'number',group:'Earnings'},{k:'overtime',label:'Overtime',type:'number',group:'Earnings'},
-    {k:'lateMinutes',label:'Late minutes (from attendance)',type:'number',group:'Deductions'},{k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties / late',type:'number',group:'Deductions'},{k:'penaltyReason',label:'Penalty reason',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
+    {k:'absentDays',label:'Absent days (unpaid)',type:'number',group:'Deductions'},{k:'lateMinutes',label:'Late minutes (from attendance)',type:'number',group:'Deductions'},{k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties / late',type:'number',group:'Deductions'},{k:'penaltyReason',label:'Penalty reason',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
     {k:'paymentMethod',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payout'},{k:'paymentStatus',label:'Status',type:'select',opts:ST.empPayment,group:'Payout'},{k:'applyStatutory',label:'Apply insurance & tax (official)',type:'select',opts:['Yes','No'],group:'Payout'},{k:'payslipMessage',label:'Payslip message',type:'textarea',group:'Payout'},{k:'receiptLink',label:'Receipt link',group:'Payout'},{k:'notes',label:'Notes',type:'textarea',group:'Payout'}],
   performanceReviews:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'reviewPeriod',label:'Period',req:true},{k:'reviewerId',label:'Reviewer',type:'ref',coll:'employees'},{k:'qualityScore',label:'Quality',type:'number'},{k:'speedScore',label:'Speed',type:'number'},{k:'communicationScore',label:'Communication',type:'number'},{k:'teamworkScore',label:'Teamwork',type:'number'},{k:'creativityScore',label:'Creativity',type:'number'},{k:'attendanceScore',label:'Attendance',type:'number'},{k:'strengths',label:'Strengths',type:'textarea'},{k:'improvements',label:'Improvements',type:'textarea'},{k:'goalsNextPeriod',label:'Goals next period',type:'textarea'},{k:'reviewDate',label:'Review date',type:'date'},{k:'nextReviewDate',label:'Next review',type:'date'}],
   freelancers:[{k:'name',label:'Name',req:true},{k:'specialty',label:'Specialty'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'rateType',label:'Rate type',type:'select',opts:['Per project','Per hour','Per deliverable','Monthly']},{k:'rate',label:'Rate',type:'number'},{k:'status',label:'Status',type:'select',opts:['Active','Available','Busy','Blacklisted']}],
@@ -7847,6 +7880,12 @@ function PayrollView({ ctx }){
   const totalNet = runs.reduce((s,p)=>s+(empPaymentNet(p)||0),0);
   const prevMonthOf = (ym)=>{ const p=String(ym).split('-').map(Number); const d=new Date(p[0],p[1]-2,1);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+  // Two legitimate ways to value a day. '30' = monthly salary / 30 calendar days (the Egyptian norm —
+  // Fri/Sat are paid, a day is worth less). 'work' = salary / actual Sun-Thu working days (a day is
+  // worth more). Same full-month result; they differ on extra days and absences. Owner's choice.
+  const basis = ((ctx.appSettings&&ctx.appSettings.payrollBasis)==='work') ? 'work' : '30';
+  const basisDays = (ym)=> basis==='work' ? monthWorkDays(ym) : 30;
+  const calDaysBetween = (y,m,d1,d2)=> Math.max(0, d2-d1+1);
   // Days to PAY = working days of this month from the start date, PLUS any working days still owed from
   // the month they joined when that month was never paid (e.g. joined 28 Jun → those 3 days ride on July).
   const daysToPay = (e)=>{
@@ -7855,11 +7894,13 @@ function PayrollView({ ctx }){
       const last=new Date(p[0],p[1],0).getDate();
       const sd=String(e.startDate||'');
       let from=1; if(sd.slice(0,7)===month) from=Number(sd.slice(8,10))||1;
-      let n=workDaysBetween(p[0],p[1],from,last);
+      const span=(y,mm,d1,d2)=> basis==='work' ? workDaysBetween(y,mm,d1,d2) : calDaysBetween(y,mm,d1,d2);
+      let n=span(p[0],p[1],from,last);
+      if(basis!=='work' && from===1) n=30;                       // a full calendar month always pays 30
       if(sd && sd.slice(0,7)===prevMonthOf(month)){
         const paidThen=(db.employeePayments||[]).some(x=>x.employeeId===e.id && x.month===sd.slice(0,7));
         if(!paidThen){ const sp=sd.split('-').map(Number);
-          n += workDaysBetween(sp[0],sp[1],Number(sd.slice(8,10))||1,new Date(sp[0],sp[1],0).getDate()); }
+          n += span(sp[0],sp[1],Number(sd.slice(8,10))||1,new Date(sp[0],sp[1],0).getDate()); }
       }
       return n;
     }catch(_){ return monthWorkDays(month); }
@@ -7881,7 +7922,7 @@ function PayrollView({ ctx }){
     if(p) return ctx.openModal('employeePayments', p);
     const li=lateInfo(e);
     const per=payPeriod({month}, e);
-    ctx.openModal('employeePayments', { employeeId:e.id, month, baseSalary:e.salary, daysInMonth:monthWorkDays(month), daysWorked:paidDays(e),
+    ctx.openModal('employeePayments', { employeeId:e.id, month, baseSalary:e.salary, daysInMonth:basisDays(month), daysWorked:paidDays(e),
       periodFrom:per.from, periodTo:per.to,
       lateMinutes:li.totalLate, penalties:li.deduction,
       penaltyReason: li.totalLate?('Late '+li.totalLate+' min over '+li.lateDays+' day(s) — '+GRACE_MIN+' min/day grace'):'',
@@ -7890,6 +7931,11 @@ function PayrollView({ ctx }){
   return html`<div class="view">
     <${Head} eyebrow=${t('Finance & Payroll')} title=${ar?'المرتبات':'Payroll'} desc=${ar?'احسب مرتب كل موظف بأيام الشغل، البونص، الخصم والـKPI — واطبع القسيمة.':'Compute each salary from days worked, bonus, deductions and KPIs — and print the payslip.'}>
       <input type="month" class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}/>
+      <select class="sel" title=${ar?'أساس حساب اليومية':'How a day is valued'} value=${basis}
+        onChange=${e=>ctx.applyAppSettings({payrollBasis:e.target.value})}>
+        <option value="30">${ar?'أساس ٣٠ يوم (المرتب ÷ ٣٠)':'30-day basis (salary ÷ 30)'}</option>
+        <option value="work">${ar?'أيام العمل (المرتب ÷ ٢٢)':'Working days (salary ÷ 22)'}</option>
+      </select>
     <//>
     <div class="grid g-3 stagger" style=${{marginBottom:18}}>
       <${KPI} label=${ar?'موظفين':'Employees'} value=${emps.length} icon="people"/>
@@ -7903,7 +7949,7 @@ function PayrollView({ ctx }){
     <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
       <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
       <td class="num">${e.salary?money(e.salary):'—'}</td>
-      <td class="num muted" title="paid days / 30">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||monthWorkDays(month))):(paidDays(e)+'/'+monthWorkDays(month))}</td>
+      <td class="num muted" title="paid days / 30">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||basisDays(month))):(paidDays(e)+'/'+basisDays(month))}</td>
       ${(()=>{ const li=lateInfo(e); const shown=p?(Number(p.lateMinutes)||0):li.totalLate;
         return html`<td class="num" title=${'billable late minutes ('+GRACE_MIN+' min/day forgiven)'} style=${{color:shown?'var(--neg)':'var(--ink-3)'}}>${shown?shown+'m':'—'}</td>`; })()}
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
