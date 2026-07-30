@@ -1321,7 +1321,7 @@ body.theme-light .tbl thead th{background:#fff}
     if(!__as.currency){ __as.currency='EGP'; localStorage.setItem(__ASK, JSON.stringify(__as)); }
     // migrate: ensure newer CRM modules appear for existing installs (no manual toggle needed)
     if(Array.isArray(__as.enabledModules)){
-      ["accounts","leads","campaigns","briefs","invoices","payments","expenses","fixedCosts","partners","profitability","plans","requests","approvalCenter","collections","rolesPermissions","teams","proposals","quotations","contracts","contacts","salesActivities","documents","reports","meetings","workflow","chat","sops"].forEach(function(k){ if(__as.enabledModules.indexOf(k)<0) __as.enabledModules.push(k); });
+      ["accounts","leads","campaigns","briefs","invoices","payments","expenses","fixedCosts","partners","profitability","plans","requests","approvalCenter","collections","rolesPermissions","teams","proposals","quotations","contracts","contacts","salesActivities","documents","reports","meetings","workflow","chat","sops","payroll","attendance","workload","leaves"].forEach(function(k){ if(__as.enabledModules.indexOf(k)<0) __as.enabledModules.push(k); });
       localStorage.setItem(__ASK, JSON.stringify(__as));
     }
   } catch(e){}
