@@ -2675,6 +2675,26 @@ function computePayrun(p, cfg){
 // netAmount helper for employee payments — full pay-run net.
 const empPaymentNet = (p)=> computePayrun(p).net;
 // Printable payslip with the full Egypt payroll breakdown.
+// The exact period a pay-run covers. Uses the stored periodFrom/periodTo when present; otherwise
+// derives it from the month (and the employee's start date, so a mid-month joiner reads correctly).
+function payPeriod(p, emp){
+  p=p||{};
+  let from=p.periodFrom||'', to=p.periodTo||'';
+  if(!from || !to){
+    try{
+      const m=String(p.month||'').split('-').map(Number);
+      if(m.length>=2 && m[0]){
+        const last=new Date(m[0],m[1],0).getDate();
+        const mm=String(m[1]).padStart(2,'0');
+        let d1=1;
+        if(emp && emp.startDate && String(emp.startDate).slice(0,7)===p.month) d1=Number(String(emp.startDate).slice(8,10))||1;
+        if(!from) from=p.month+'-'+String(d1).padStart(2,'0');
+        if(!to) to=p.month+'-'+String(last).padStart(2,'0');
+      }
+    }catch(_){}
+  }
+  return { from, to };
+}
 // Opens WhatsApp with a ready-written salary summary for this employee (Egyptian numbers auto-
 // normalised to international). WhatsApp cannot attach a file from a link, so the PDF is sent
 // separately — this covers the message itself in one click.
@@ -2694,6 +2714,8 @@ function payslipWhatsApp(p, emp){
   L.push('*MAGNET — Payslip '+(p.month||'')+'*');
   L.push('');
   L.push('Name: '+nm);
+  const _per=payPeriod(p, emp);
+  if(_per.from && _per.to) L.push('Period: '+fmtDate(_per.from)+' to '+fmtDate(_per.to));
   L.push('Base salary: '+money(pr.base)+' '+cur);
   L.push('Days: '+pr.daysWorked+'/'+pr.daysInMonth);
   if(pr.proratedBase!==pr.base) L.push('Earned for days: '+money(pr.proratedBase)+' '+cur);
@@ -2712,9 +2734,10 @@ function payslipWhatsApp(p, emp){
   L.push('Thank you for your work.');
   window.open('https://wa.me/'+num+'?text='+encodeURIComponent(L.join('\n')), '_blank');
 }
-function generatePayslip(p, emp){
+function payslipHTML(p, emp){
   const ar=getAppSettings().language==='ar';
   const pr=computePayrun(p);
+  const per=payPeriod(p, emp);
   const kpiPos = pr.kpi>0, kpiNeg = pr.kpi<0;
   const nm=(emp&&(emp.fullName||emp.name))||'—';
   const job=(emp&&emp.jobTitle)||'';
@@ -2740,7 +2763,7 @@ function generatePayslip(p, emp){
   const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>Payslip — '+e(nm)+'</title><style>'+css+'</style></head><body><div class="doc">'
     +'<div class="hd"><div class="brand"><span class="dot"></span>MAGNET</div><div class="meta">'+(ar?'قسيمة راتب':'Payslip')+' · '+e(p.month||'')+'</div></div>'
     +'<div class="emp"><div class="nm">'+e(nm)+'</div><div class="sub">'+e(job)+(code?(' · '+e(code)):'')+'</div>'
-    +'<div class="chips">'+chip(ar?'الشهر':'Period', p.month||'')+chip(ar?'الأيام':'Days', pr.daysWorked+'/'+pr.daysInMonth)+chip(ar?'طريقة الدفع':'Method', method)+(acct?chip(bank||(ar?'الحساب':'Account'), acct):'')+'</div></div>'
+    +'<div class="chips">'+chip(ar?'الفترة':'Period', (per.from&&per.to)?(fmtDate(per.from)+' → '+fmtDate(per.to)):(p.month||''))+chip(ar?'الأيام':'Days', pr.daysWorked+'/'+pr.daysInMonth)+chip(ar?'طريقة الدفع':'Method', method)+(acct?chip(bank||(ar?'الحساب':'Account'), acct):'')+'</div></div>'
     +'<div class="hero"><div><div class="hl">'+(ar?'صافي المستحق':'Net pay')+'</div><div class="hv">'+e(money(pr.net))+'</div></div><div class="hpay">'+e(method)+(acct?('<br/>'+e(acct)):'')+(bank?('<br/>'+e(bank)):'')+'</div></div>'
     +'<div class="sec"><h3>'+(ar?'المستحقات':'Earnings')+'</h3><table>'+earn+'<tr class="tot"><td>'+(ar?'الإجمالي':'Gross')+'</td><td class="amt">'+e(money(pr.gross))+'</td></tr></table></div>'
     +(hasDed?('<div class="sec"><h3>'+(ar?'الاستقطاعات':'Deductions')+'</h3><table>'+ded+'<tr class="tot"><td>'+(ar?'إجمالي الخصومات':'Total deductions')+'</td><td class="amt neg">− '+e(money(pr.totalDeductions))+'</td></tr></table></div>'):'')
@@ -2748,7 +2771,25 @@ function generatePayslip(p, emp){
     +(p.payslipMessage?('<div class="msg">'+e(p.payslipMessage).replace(/\n/g,'<br/>')+'</div>'):'')
     +'<div class="ft"><span>Magnet OS · '+e(p.month||'')+'</span><span>'+(ar?'شكرًا لمجهودك':'Thank you for your work')+'</span></div>'
     +'</div></body></html>';
+  return doc;
+}
+// Print / save-as-PDF the payslip.
+function generatePayslip(p, emp){
+  const doc=payslipHTML(p, emp);
   try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){}
+}
+// Email the SAME payslip to the employee as a proper receipt (HTML body, keeps the full design).
+async function emailPayslip(p, emp){
+  const ar=getAppSettings().language==='ar';
+  const to=(emp&&(emp.email||emp.loginEmail))||'';
+  if(!to){ alert(ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add one in their profile.'); return; }
+  const nm=(emp&&(emp.fullName||emp.name))||'';
+  try{
+    await sendEmail({ to, subject:'Magnet — Payslip '+(p.month||''), html:payslipHTML(p, emp) });
+    showProPopup('syncSuccess', (ar?'اتبعتت لـ ':'Sent to ')+to);
+  }catch(err){
+    alert((ar?'الإرسال فشل: ':'Send failed: ')+(err&&err.message||err)+'\n\n'+(ar?'اتأكد إن إشعارات الإيميل مفعّلة في الإعدادات.':'Check that email notifications are enabled in Settings.'));
+  }
 }
 // workload classification
 function workloadTag(pct){ if(pct>100) return {label:'Overloaded',type:'neg'}; if(pct>=81) return {label:'Full',type:'warn'}; if(pct>=51) return {label:'Healthy',type:'ok'}; return {label:'Light',type:''}; }
@@ -6425,7 +6466,7 @@ const FORM_SCHEMAS = {
     {k:'changeType',label:'Type',type:'select',opts:['Raise','Promotion','Adjustment','Cut'],req:true},
     {k:'oldSalary',label:'Old salary (EGP)',type:'number'},{k:'newSalary',label:'New salary (EGP)',type:'number',req:true},
     {k:'reason',label:'Reason',type:'textarea'},{k:'notes',label:'Notes',type:'textarea'}],
-  employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',type:'month',req:true,group:'Pay run'},{k:'daysInMonth',label:'Working days in month',type:'number',group:'Pay run'},{k:'daysWorked',label:'Days worked',type:'number',group:'Pay run'},
+  employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',type:'month',req:true,group:'Pay run'},{k:'periodFrom',label:'Period from',type:'date',group:'Pay run'},{k:'periodTo',label:'Period to',type:'date',group:'Pay run'},{k:'daysInMonth',label:'Working days in month',type:'number',group:'Pay run'},{k:'daysWorked',label:'Days worked',type:'number',group:'Pay run'},
     {k:'baseSalary',label:'Gross base salary (EGP)',type:'number',group:'Earnings'},{k:'bonus',label:'Bonus',type:'number',group:'Earnings'},{k:'bonusReason',label:'Bonus reason',group:'Earnings'},{k:'kpiAmount',label:'KPI adjustment (+ / −)',type:'number',group:'Earnings'},{k:'kpiNote',label:'KPI note',group:'Earnings'},{k:'commission',label:'Commission',type:'number',group:'Earnings'},{k:'overtime',label:'Overtime',type:'number',group:'Earnings'},
     {k:'lateMinutes',label:'Late minutes (from attendance)',type:'number',group:'Deductions'},{k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties / late',type:'number',group:'Deductions'},{k:'penaltyReason',label:'Penalty reason',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
     {k:'paymentMethod',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payout'},{k:'paymentStatus',label:'Status',type:'select',opts:ST.empPayment,group:'Payout'},{k:'applyStatutory',label:'Apply insurance & tax (official)',type:'select',opts:['Yes','No'],group:'Payout'},{k:'payslipMessage',label:'Payslip message',type:'textarea',group:'Payout'},{k:'receiptLink',label:'Receipt link',group:'Payout'},{k:'notes',label:'Notes',type:'textarea',group:'Payout'}],
@@ -7817,7 +7858,9 @@ function PayrollView({ ctx }){
   const openRun = (e,p)=>{
     if(p) return ctx.openModal('employeePayments', p);
     const li=lateInfo(e);
+    const per=payPeriod({month}, e);
     ctx.openModal('employeePayments', { employeeId:e.id, month, baseSalary:e.salary, daysInMonth:30, daysWorked:paidDays(e),
+      periodFrom:per.from, periodTo:per.to,
       lateMinutes:li.totalLate, penalties:li.deduction,
       penaltyReason: li.totalLate?('Late '+li.totalLate+' min over '+li.lateDays+' day(s) — '+GRACE_MIN+' min/day grace'):'',
       applyStatutory:'No', paymentStatus:'Pending' });
@@ -7844,6 +7887,7 @@ function PayrollView({ ctx }){
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
         ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة PDF':'Payslip PDF'}</button>`:''}
         ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e)}>${ar?'واتساب':'WhatsApp'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>emailPayslip(p,e)}>${ar?'إيميل':'Email'}</button>`:''}
       </td></tr>`; })}</tbody></table></div><//>
     ${emps.length===0?html`<${EmptyState} title=${ar?'مفيش موظفين':'No employees'} text=${ar?'ضيف موظفين الأول من شاشة Employees.':'Add employees first from the Employees screen.'} icon="people"/>`:''}
   </div>`;
@@ -8023,7 +8067,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
             canEditFlag=${ce}
             onEdit=${ce?(r=>{onClose();ctx.openModal('employeePayments',r);}):null}
             onDelete=${ce?(r=>ctx.delRec('employeePayments',r.id,(e.fullName||e.name||'')+' · '+(r.month||''))):null}
-            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button><button class="mini" onClick=${()=>payslipWhatsApp(r,e)}>${ctx.lang==='ar'?'واتساب':'WhatsApp'}</button>`}
+            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button><button class="mini" onClick=${()=>payslipWhatsApp(r,e)}>${ctx.lang==='ar'?'واتساب':'WhatsApp'}</button><button class="mini" onClick=${()=>emailPayslip(r,e)}>${ctx.lang==='ar'?'إيميل':'Email'}</button>`}
             cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
 
         ${tab==='Attendance'&&html`<div>
