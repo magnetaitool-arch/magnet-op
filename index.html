@@ -2520,6 +2520,12 @@ const ATT_START_MIN = 10*60;                 // 10:00 AM official start
 const ATT_END_MIN   = 18*60;                 // 6:00 PM official end
 const ATT_DAYNAMES  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const _hm2min = (t)=>{ if(!t) return null; const p=String(t).split(':'); return (+p[0]||0)*60+(+p[1]||0); };
+// Working week is Sun–Thu (Fri/Sat off), so a payroll "month" is its WORKING days — normally 22 —
+// and the daily rate is salary ÷ those working days. Weekends are never counted or charged.
+const isWorkDay = (y,m,d)=>{ const w=new Date(y,m-1,d).getDay(); return w!==5 && w!==6; };
+const workDaysBetween = (y,m,d1,d2)=>{ let n=0; for(let d=d1;d<=d2;d++) if(isWorkDay(y,m,d)) n++; return n; };
+const monthWorkDays = (ym)=>{ try{ const p=String(ym).split('-').map(Number); if(!p[0]) return 22;
+  return workDaysBetween(p[0],p[1],1,new Date(p[0],p[1],0).getDate()); }catch(_){ return 22; } };
 // Derives dayName / weekend / late-minutes / working-hours / status from a raw attendance record.
 // A manual, non-work status (Absent/Leave/Sick Leave/Half Day/Remote) is respected; auto ones are refined.
 function computeAttendance(rec){
@@ -2657,7 +2663,9 @@ function computePayrun(p, cfg){
   const base=Number(p.baseSalary)||Number(p.grossSalary)||0;
   const daysInMonth=Number(p.daysInMonth)>0?Number(p.daysInMonth):22;
   const daysWorked=(p.daysWorked===''||p.daysWorked==null)?daysInMonth:Math.max(0,Number(p.daysWorked)||0);
-  const proratedBase=Math.round(base*Math.min(daysWorked,daysInMonth)/daysInMonth);
+  // NOT capped at daysInMonth: paying 25 days against a 22-working-day month is legitimate
+  // (e.g. carry-over days from the previous month), and must pay MORE than one month.
+  const proratedBase=Math.round(base*daysWorked/Math.max(1,daysInMonth));
   const bonus=Number(p.bonus)||0, commission=Number(p.commission)||0, overtime=Number(p.overtime)||0;
   const kpi=Number(p.kpiAmount)||0, kpiBonus=Math.max(0,kpi), kpiDed=Math.max(0,-kpi);
   const advance=Number(p.advance)||0, penalties=Number(p.penalties)||0, otherDed=Number(p.deductions)||0;
@@ -2761,7 +2769,7 @@ function payslipHTML(p, emp){
   const hasDed = pr.totalDeductions>0;
   const css='*{box-sizing:border-box}body{background:#f4f5f2;color:#14170f;font-family:Inter,system-ui,-apple-system,Arial,sans-serif;margin:0;padding:28px 14px}.doc{max-width:640px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 12px 44px rgba(0,0,0,.09);border:1px solid #e7e9e2}.hd{display:flex;justify-content:space-between;align-items:center;padding:22px 28px;background:#0d0f0a;color:#fff}.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px}.dot{width:22px;height:22px;border-radius:6px;background:#c8f31e;display:inline-block}.meta{text-align:right;font-size:10.5px;color:#a7ab9c;letter-spacing:.16em;text-transform:uppercase}.emp{padding:22px 28px 8px}.nm{font-size:23px;font-weight:800;letter-spacing:-.01em}.sub{color:#6b7060;font-size:13px;margin-top:3px}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.chip{font-size:12px;background:#f2f4ec;border:1px solid #e6e9df;border-radius:999px;padding:5px 12px;color:#565c49}.chip b{color:#14170f}.hero{margin:16px 28px 20px;padding:18px 22px;border-radius:14px;background:linear-gradient(135deg,#14170d,#1e2413);color:#fff;display:flex;justify-content:space-between;align-items:flex-end}.hl{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#9aa08b}.hv{font-size:32px;font-weight:800;color:#c8f31e;margin-top:5px;line-height:1}.hpay{text-align:right;font-size:12px;color:#cfd3c4;line-height:1.6}.sec{padding:0 28px}.sec h3{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#8a8f7d;margin:18px 0 4px}table{width:100%;border-collapse:collapse}td{padding:9px 0;border-bottom:1px solid #f0f2ec;font-size:13.5px}.lbl{color:#3f4437}.amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.amt.neg{color:#c2410c}.tot td{border-bottom:none;border-top:2px solid #14170f;font-weight:800;font-size:14.5px;padding-top:11px}.net{margin:16px 28px 22px;padding:16px 22px;border-radius:12px;background:#eef4e0;border:1px solid #dce7c4;display:flex;justify-content:space-between;align-items:center}.net .l{font-weight:800}.net .v{font-size:23px;font-weight:800;color:#2f6d12}.msg{margin:0 28px 20px;padding:14px 16px;background:#fbfcf8;border:1px solid #eef0ea;border-radius:10px;font-size:12.5px;line-height:1.7;color:#4a4f40}.ft{padding:14px 28px;border-top:1px solid #eef0ea;color:#9aa08b;font-size:10.5px;display:flex;justify-content:space-between}@media print{body{background:#fff;padding:0}.doc{box-shadow:none;border:none}}';
   const doc='<!doctype html><html dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><title>Payslip — '+e(nm)+'</title><style>'+css+'</style></head><body><div class="doc">'
-    +'<div class="hd"><div class="brand"><span class="dot"></span>MAGNET</div><div class="meta">'+(ar?'قسيمة راتب':'Payslip')+' · '+e(p.month||'')+'</div></div>'
+    +'<div class="hd"><div class="brand"><img src="https://magnet-op.vercel.app/magnet-logo.png" alt="Magnet" style="height:30px;width:auto;display:block"/></div><div class="meta">'+(ar?'قسيمة راتب':'Payslip')+' · '+e(p.month||'')+'</div></div>'
     +'<div class="emp"><div class="nm">'+e(nm)+'</div><div class="sub">'+e(job)+(code?(' · '+e(code)):'')+'</div>'
     +'<div class="chips">'+chip(ar?'الفترة':'Period', (per.from&&per.to)?(fmtDate(per.from)+' → '+fmtDate(per.to)):(p.month||''))+chip(ar?'الأيام':'Days', pr.daysWorked+'/'+pr.daysInMonth)+chip(ar?'طريقة الدفع':'Method', method)+(acct?chip(bank||(ar?'الحساب':'Account'), acct):'')+'</div></div>'
     +'<div class="hero"><div><div class="hl">'+(ar?'صافي المستحق':'Net pay')+'</div><div class="hv">'+e(money(pr.net))+'</div></div><div class="hpay">'+e(method)+(acct?('<br/>'+e(acct)):'')+(bank?('<br/>'+e(bank)):'')+'</div></div>'
@@ -7837,12 +7845,26 @@ function PayrollView({ ctx }){
   const runs = (db.employeePayments||[]).filter(p=>p.month===month);
   const runFor = (id)=> runs.find(p=>p.employeeId===id);
   const totalNet = runs.reduce((s,p)=>s+(empPaymentNet(p)||0),0);
-  // 30-day basis (Fri/Sat are PAID rest days). A full month = 30 paid days. Someone who JOINED mid-month is
-  // auto-prorated from their start date. Unpaid absences are entered by the owner (safer than auto-docking a
-  // missed login), and bonuses/deductions/KPI are added in the pay-run form.
-  const paidDays = (e)=>{ try{ const pr=String(month).split('-').map(Number); const last=new Date(pr[0],pr[1],0).getDate();
-    let start=1; if(e.startDate && String(e.startDate).slice(0,7)===month) start=Number(String(e.startDate).slice(8,10))||1;
-    return Math.max(0, Math.min(30, Math.round((last-start+1)/last*30))); }catch(_){ return 30; } };
+  const prevMonthOf = (ym)=>{ const p=String(ym).split('-').map(Number); const d=new Date(p[0],p[1]-2,1);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+  // Days to PAY = working days of this month from the start date, PLUS any working days still owed from
+  // the month they joined when that month was never paid (e.g. joined 28 Jun → those 3 days ride on July).
+  const daysToPay = (e)=>{
+    try{
+      const p=String(month).split('-').map(Number); if(!p[0]) return monthWorkDays(month);
+      const last=new Date(p[0],p[1],0).getDate();
+      const sd=String(e.startDate||'');
+      let from=1; if(sd.slice(0,7)===month) from=Number(sd.slice(8,10))||1;
+      let n=workDaysBetween(p[0],p[1],from,last);
+      if(sd && sd.slice(0,7)===prevMonthOf(month)){
+        const paidThen=(db.employeePayments||[]).some(x=>x.employeeId===e.id && x.month===sd.slice(0,7));
+        if(!paidThen){ const sp=sd.split('-').map(Number);
+          n += workDaysBetween(sp[0],sp[1],Number(sd.slice(8,10))||1,new Date(sp[0],sp[1],0).getDate()); }
+      }
+      return n;
+    }catch(_){ return monthWorkDays(month); }
+  };
+  const paidDays = daysToPay;
   // Lateness comes straight from the attendance engine — no manual counting. A daily grace window is
   // forgiven, and only the minutes beyond it cost money, charged at the employee's own hourly rate
   // (salary ÷ 30 days ÷ working hours). The owner can still edit or zero it in the form.
@@ -7859,7 +7881,7 @@ function PayrollView({ ctx }){
     if(p) return ctx.openModal('employeePayments', p);
     const li=lateInfo(e);
     const per=payPeriod({month}, e);
-    ctx.openModal('employeePayments', { employeeId:e.id, month, baseSalary:e.salary, daysInMonth:30, daysWorked:paidDays(e),
+    ctx.openModal('employeePayments', { employeeId:e.id, month, baseSalary:e.salary, daysInMonth:monthWorkDays(month), daysWorked:paidDays(e),
       periodFrom:per.from, periodTo:per.to,
       lateMinutes:li.totalLate, penalties:li.deduction,
       penaltyReason: li.totalLate?('Late '+li.totalLate+' min over '+li.lateDays+' day(s) — '+GRACE_MIN+' min/day grace'):'',
@@ -7873,16 +7895,19 @@ function PayrollView({ ctx }){
       <${KPI} label=${ar?'موظفين':'Employees'} value=${emps.length} icon="people"/>
       <${KPI} label=${ar?'مرتبات الشهر':'Runs this month'} value=${runs.length} icon="check"/>
       <${KPI} label=${ar?'إجمالي الصافي':'Total net'} value=${money(totalNet)} icon="wallet"/>
+      <${KPI} label=${ar?'اتدفع':'Paid'} value=${runs.filter(p=>String(p.paymentStatus)==='Paid').length+'/'+emps.length} icon="check"/>
+      <${KPI} label=${ar?'لسه':'Remaining'} value=${emps.length-runs.length} icon="alert"/>
     </div>
     <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
-      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'تأخير':'Late'}</th><th class="right">${ar?'الصافي':'Net'}</th><th></th></tr></thead>
+      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'تأخير':'Late'}</th><th class="right">${ar?'الصافي':'Net'}</th><th>${ar?'الحالة':'Status'}</th><th></th></tr></thead>
     <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
       <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
       <td class="num">${e.salary?money(e.salary):'—'}</td>
-      <td class="num muted" title="paid days / 30">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||30)):(paidDays(e)+'/30')}</td>
+      <td class="num muted" title="paid days / 30">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||monthWorkDays(month))):(paidDays(e)+'/'+monthWorkDays(month))}</td>
       ${(()=>{ const li=lateInfo(e); const shown=p?(Number(p.lateMinutes)||0):li.totalLate;
         return html`<td class="num" title=${'billable late minutes ('+GRACE_MIN+' min/day forgiven)'} style=${{color:shown?'var(--neg)':'var(--ink-3)'}}>${shown?shown+'m':'—'}</td>`; })()}
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
+      <td>${!p?html`<${Tag}>${ar?'لسه':'Not run'}<//>`:(String(p.paymentStatus)==='Paid'?html`<${Tag} type="ok">${ar?'اتدفع':'Paid'}<//>`:html`<${Tag} type="warn">${p.paymentStatus||(ar?'معلّق':'Pending')}<//>`)}</td>
       <td class="right cell-actions">
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
         ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة PDF':'Payslip PDF'}</button>`:''}
@@ -8062,7 +8087,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
                 <td class="right mono" style=${{color:d>=0?'var(--lime)':'var(--neg)'}}>${(d>=0?'+':'')+money(d)}${o?html`<span class="muted" style=${{fontSize:10}}> (${(d>=0?'+':'')+pct}%)</span>`:''}</td>
                 <td class="muted" style=${{fontSize:12}}>${s.reason||'—'}</td>
                 ${ce?html`<td class="right cell-actions"><button class="mini" onClick=${()=>{onClose();ctx.openModal('salaryChanges',s);}}>${ctx.lang==='ar'?'تعديل':'Edit'}</button></td>`:''}</tr>`; })}</tbody></table></div>`; })()}
-          <div class="flex between center" style=${{margin:'4px 0 8px'}}><span class="eyebrow">Payment history</span>${ce&&html`<button class="mini" onClick=${()=>{onClose();ctx.openModal('employeePayments',{employeeId:e.id,month:thisMonth(),baseSalary:e.salary,daysInMonth:30,daysWorked:30,applyStatutory:'No',paymentStatus:'Pending'});}}>+ Add payment</button>`}</div>
+          <div class="flex between center" style=${{margin:'4px 0 8px'}}><span class="eyebrow">Payment history</span>${ce&&html`<button class="mini" onClick=${()=>{onClose();ctx.openModal('employeePayments',{employeeId:e.id,month:thisMonth(),baseSalary:e.salary,daysInMonth:monthWorkDays(thisMonth()),daysWorked:monthWorkDays(thisMonth()),applyStatutory:'No',paymentStatus:'Pending'});}}>+ Add payment</button>`}</div>
           <${DataTable} db=${db} rows=${(db.employeePayments||[]).filter(p=>p.employeeId===e.id)}
             canEditFlag=${ce}
             onEdit=${ce?(r=>{onClose();ctx.openModal('employeePayments',r);}):null}
