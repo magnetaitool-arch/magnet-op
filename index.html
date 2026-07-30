@@ -5781,7 +5781,8 @@ function App(){
         && (u.role==='Owner'||u.role==='Manager'||aliasRole(u.role)==='Admin')
         && u.id!==actorId && u.id!=='local-admin');
       const who = (user && user.name) || 'A manager';
-      mgrs.forEach(m=> addNotification(m.id, who+' '+action+' '+coll, who+' '+action+' a '+coll+' record'+(label?(' — '+label):''), coll, null));
+      const what=(coll==='employeePayments'?'a pay run':(coll==='invoices'?'an invoice':(coll==='payments'?'a payment':coll)));
+      mgrs.forEach(m=> addNotification(m.id, 'Deleted: '+what, who+' deleted '+what+(label?(' — '+label):'')+'.', coll, null));
     }catch(e){}
   };
   const updateRecord = (coll, id, updates) => {
@@ -5795,11 +5796,6 @@ function App(){
         if(updates && Object.prototype.hasOwnProperty.call(updates,'status') && _prev && _prev.status!==out.status)
           addActivity(coll, id, 'status → '+(out.status||''), _lbl);
         else addActivity(coll, id, 'updated', _lbl);
-      }
-      // Notify other managers on a sensitive edit (skip auto-computed-only updates).
-      if(MGR_SENSITIVE.has(coll) && aliasRole(role)==='Admin'){
-        const meaningful=Object.keys(updates||{}).filter(k=>!MGR_COMPUTED.has(k));
-        if(meaningful.length) notifyManagers('edited', coll, out.name||out.title||out.invoiceNumber||out.fullName||'');
       }
     }
     return out;
