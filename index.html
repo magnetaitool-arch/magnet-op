@@ -4626,26 +4626,17 @@ function PayCalcPanel({ rec, ar }){
   const daily = pr.base / Math.max(1, pr.daysInMonth);
   const line = (l,v,neg)=>html`<div class="flex between" style=${{fontSize:12.5,padding:'3px 0'}}>
     <span class="muted">${l}</span><span class="mono" style=${{color:neg?'var(--neg)':'var(--ink)'}}>${(neg?'− ':'')+money(v)}</span></div>`;
-  return html`<div class="panel" style=${{padding:'10px 13px',marginTop:10,maxHeight:'26vh',overflowY:'auto',background:'rgba(200,243,30,.05)',border:'1px solid rgba(200,243,30,.22)'}}>
-    <div class="flex between center" style=${{marginBottom:8}}>
-      <span class="eyebrow" style=${{color:'var(--lime)'}}>${ar?'الحساب المباشر':'Live calculation'}</span>
-      <span class="muted mono" style=${{fontSize:11}}>${(ar?'اليومية ':'daily ')+money(Math.round(daily))+' × '+pr.daysWorked+(ar?' يوم':' d')}</span>
-    </div>
-    ${line((ar?'الأساسي ÷ ':'Base ÷ ')+pr.daysInMonth+(ar?' يوم عمل':' work days'), pr.base)}
-    ${pr.absentDays?html`<div class="flex between" style=${{fontSize:12.5,padding:'3px 0'}}><span class="muted">${ar?'غياب بدون مرتب':'Unpaid absence'}</span><span class="mono" style=${{color:'var(--neg)'}}>${'− '+pr.absentDays+(ar?' يوم':' d')}</span></div>`:''}
-    ${line((ar?'المستحق عن ':'Earned for ')+pr.daysWorked+'/'+pr.daysInMonth+(ar?' يوم':' days'), pr.proratedBase)}
-    ${pr.bonus?line(ar?'بونص':'Bonus', pr.bonus):''}
-    ${pr.kpiBonus?line(ar?'حافز KPI':'KPI bonus', pr.kpiBonus):''}
-    ${pr.commission?line(ar?'عمولة':'Commission', pr.commission):''}
-    ${pr.overtime?line(ar?'إضافي':'Overtime', pr.overtime):''}
-    ${pr.penalties?line((ar?'جزاء تأخير':'Late penalty')+(Number(rec&&rec.lateMinutes)?(' ('+Number(rec.lateMinutes)+'m)'):''), pr.penalties, true):''}
-    ${pr.kpiDed?line(ar?'خصم KPI':'KPI deduction', pr.kpiDed, true):''}
-    ${pr.advance?line(ar?'سلفة':'Advance', pr.advance, true):''}
-    ${pr.otherDed?line(ar?'خصومات أخرى':'Other deductions', pr.otherDed, true):''}
-    ${pr.statutory?line(ar?'تأمينات + ضريبة':'Insurance + tax', pr.insuranceEmp+pr.incomeTax, true):''}
-    <div class="flex between center" style=${{marginTop:8,paddingTop:8,borderTop:'2px solid rgba(200,243,30,.35)'}}>
-      <b style=${{fontSize:13}}>${ar?'الصافي المستحق':'NET PAY'}</b>
-      <b class="mono" style=${{fontSize:19,color:'var(--lime)'}}>${money(pr.net)}</b></div>
+  // ONE compact bar (never steals room from the fields): daily rate, what's added/deducted, and the net.
+  const adds = pr.bonus+pr.kpiBonus+pr.commission+pr.overtime;
+  const cut  = pr.totalDeductions;
+  return html`<div style=${{marginTop:10,padding:'9px 13px',borderRadius:10,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',background:'rgba(200,243,30,.06)',border:'1px solid rgba(200,243,30,.24)'}}>
+    <span class="mono muted" style=${{fontSize:11}}>${money(Math.round(pr.base/Math.max(1,pr.daysInMonth)))+' × '+pr.daysWorked+'/'+pr.daysInMonth+(ar?' يوم':'d')}</span>
+    ${pr.absentDays?html`<span class="mono" style=${{fontSize:11,color:'var(--neg)'}}>${(ar?'غياب ':'absent ')+pr.absentDays+'d'}</span>`:''}
+    ${adds?html`<span class="mono" style=${{fontSize:11,color:'var(--lime)'}}>${'+'+money(adds)}</span>`:''}
+    ${cut?html`<span class="mono" style=${{fontSize:11,color:'var(--neg)'}}>${'−'+money(cut)}</span>`:''}
+    <span style=${{flex:1}}></span>
+    <span class="eyebrow" style=${{fontSize:10}}>${ar?'الصافي':'NET'}</span>
+    <b class="mono" style=${{fontSize:18,color:'var(--lime)',lineHeight:1}}>${money(pr.net)}</b>
   </div>`;
 }
 function RecordForm({ schema, initial, db, onSave, onClose, role }) {
@@ -4696,7 +4687,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
       <div class="stepper">${steps.map((s,i)=>html`<div key=${s.key} class="step ${i===step?'on':''} ${i<step?'done':''}" onClick=${()=>i<step&&setStep(i)}>
         <span class="step-dot">${i<step?'✓':(i+1)}</span><span class="step-lab">${s.label}</span></div>`)}</div>
       <div class="step-prog"><i style=${{width:pct+'%'}}></i></div>
-      <div style=${{maxHeight:(hasPayCalc?'32vh':'50vh'),overflowY:'auto',paddingRight:4,marginTop:14}}>${cur.groups.map(renderGroup)}</div>
+      <div style=${{maxHeight:(hasPayCalc?'46vh':'52vh'),overflowY:'auto',paddingRight:4,marginTop:14}}>${cur.groups.map(renderGroup)}</div>
       ${hasPayCalc?html`<${PayCalcPanel} rec=${rec} ar=${ar}/>`:''}
       ${err&&html`<div class="neg" style=${{fontSize:12,marginTop:10}}>${err}</div>`}
       <div class="form-foot" style=${{alignItems:'center'}}>
