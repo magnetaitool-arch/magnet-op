@@ -2701,6 +2701,7 @@ function payslipWhatsApp(p, emp){
   if(pr.kpiBonus) L.push('KPI bonus: +'+money(pr.kpiBonus));
   if(pr.commission) L.push('Commission: +'+money(pr.commission));
   if(pr.overtime) L.push('Overtime: +'+money(pr.overtime));
+  if(Number(p.lateMinutes)>0) L.push('Late: '+Number(p.lateMinutes)+' min'+(pr.penalties?(' (-'+money(pr.penalties)+')'):''));
   if(pr.totalDeductions) L.push('Total deductions: -'+money(pr.totalDeductions));
   L.push('');
   L.push('*NET PAY: '+money(pr.net)+' '+cur+'*');
@@ -6426,7 +6427,7 @@ const FORM_SCHEMAS = {
     {k:'reason',label:'Reason',type:'textarea'},{k:'notes',label:'Notes',type:'textarea'}],
   employeePayments:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true,group:'Pay run'},{k:'month',label:'Month (YYYY-MM)',type:'month',req:true,group:'Pay run'},{k:'daysInMonth',label:'Working days in month',type:'number',group:'Pay run'},{k:'daysWorked',label:'Days worked',type:'number',group:'Pay run'},
     {k:'baseSalary',label:'Gross base salary (EGP)',type:'number',group:'Earnings'},{k:'bonus',label:'Bonus',type:'number',group:'Earnings'},{k:'bonusReason',label:'Bonus reason',group:'Earnings'},{k:'kpiAmount',label:'KPI adjustment (+ / −)',type:'number',group:'Earnings'},{k:'kpiNote',label:'KPI note',group:'Earnings'},{k:'commission',label:'Commission',type:'number',group:'Earnings'},{k:'overtime',label:'Overtime',type:'number',group:'Earnings'},
-    {k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties / late',type:'number',group:'Deductions'},{k:'penaltyReason',label:'Penalty reason',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
+    {k:'lateMinutes',label:'Late minutes (from attendance)',type:'number',group:'Deductions'},{k:'advance',label:'Advance / loan',type:'number',group:'Deductions'},{k:'penalties',label:'Penalties / late',type:'number',group:'Deductions'},{k:'penaltyReason',label:'Penalty reason',group:'Deductions'},{k:'deductions',label:'Other deductions',type:'number',group:'Deductions'},
     {k:'paymentMethod',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payout'},{k:'paymentStatus',label:'Status',type:'select',opts:ST.empPayment,group:'Payout'},{k:'applyStatutory',label:'Apply insurance & tax (official)',type:'select',opts:['Yes','No'],group:'Payout'},{k:'payslipMessage',label:'Payslip message',type:'textarea',group:'Payout'},{k:'receiptLink',label:'Receipt link',group:'Payout'},{k:'notes',label:'Notes',type:'textarea',group:'Payout'}],
   performanceReviews:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'reviewPeriod',label:'Period',req:true},{k:'reviewerId',label:'Reviewer',type:'ref',coll:'employees'},{k:'qualityScore',label:'Quality',type:'number'},{k:'speedScore',label:'Speed',type:'number'},{k:'communicationScore',label:'Communication',type:'number'},{k:'teamworkScore',label:'Teamwork',type:'number'},{k:'creativityScore',label:'Creativity',type:'number'},{k:'attendanceScore',label:'Attendance',type:'number'},{k:'strengths',label:'Strengths',type:'textarea'},{k:'improvements',label:'Improvements',type:'textarea'},{k:'goalsNextPeriod',label:'Goals next period',type:'textarea'},{k:'reviewDate',label:'Review date',type:'date'},{k:'nextReviewDate',label:'Next review',type:'date'}],
   freelancers:[{k:'name',label:'Name',req:true},{k:'specialty',label:'Specialty'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'rateType',label:'Rate type',type:'select',opts:['Per project','Per hour','Per deliverable','Monthly']},{k:'rate',label:'Rate',type:'number'},{k:'status',label:'Status',type:'select',opts:['Active','Available','Busy','Blacklisted']}],
@@ -7801,7 +7802,26 @@ function PayrollView({ ctx }){
   const paidDays = (e)=>{ try{ const pr=String(month).split('-').map(Number); const last=new Date(pr[0],pr[1],0).getDate();
     let start=1; if(e.startDate && String(e.startDate).slice(0,7)===month) start=Number(String(e.startDate).slice(8,10))||1;
     return Math.max(0, Math.min(30, Math.round((last-start+1)/last*30))); }catch(_){ return 30; } };
-  const openRun = (e,p)=> ctx.openModal('employeePayments', p||{employeeId:e.id,month,baseSalary:e.salary,daysInMonth:30,daysWorked:paidDays(e),applyStatutory:'No',paymentStatus:'Pending'});
+  // Lateness comes straight from the attendance engine — no manual counting. A daily grace window is
+  // forgiven, and only the minutes beyond it cost money, charged at the employee's own hourly rate
+  // (salary ÷ 30 days ÷ working hours). The owner can still edit or zero it in the form.
+  const GRACE_MIN = Number((ctx.appSettings&&ctx.appSettings.lateGraceMinutes)) || 15;
+  const lateInfo = (e)=>{
+    const recs=(db.attendance||[]).filter(a=>a.employeeId===e.id && (a.date||'').slice(0,7)===month);
+    let totalLate=0, lateDays=0;
+    recs.forEach(a=>{ const c=computeAttendance(a); const over=Math.max(0, c.lateMin-GRACE_MIN); if(c.lateMin>0) lateDays++; totalLate+=over; });
+    const dailyHours=Number(e.workingHours)||8;
+    const hourly=(Number(e.salary)||0)/30/Math.max(1,dailyHours);
+    return { totalLate, lateDays, deduction:Math.round(totalLate/60*hourly) };
+  };
+  const openRun = (e,p)=>{
+    if(p) return ctx.openModal('employeePayments', p);
+    const li=lateInfo(e);
+    ctx.openModal('employeePayments', { employeeId:e.id, month, baseSalary:e.salary, daysInMonth:30, daysWorked:paidDays(e),
+      lateMinutes:li.totalLate, penalties:li.deduction,
+      penaltyReason: li.totalLate?('Late '+li.totalLate+' min over '+li.lateDays+' day(s) — '+GRACE_MIN+' min/day grace'):'',
+      applyStatutory:'No', paymentStatus:'Pending' });
+  };
   return html`<div class="view">
     <${Head} eyebrow=${t('Finance & Payroll')} title=${ar?'المرتبات':'Payroll'} desc=${ar?'احسب مرتب كل موظف بأيام الشغل، البونص، الخصم والـKPI — واطبع القسيمة.':'Compute each salary from days worked, bonus, deductions and KPIs — and print the payslip.'}>
       <input type="month" class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}/>
@@ -7812,11 +7832,13 @@ function PayrollView({ ctx }){
       <${KPI} label=${ar?'إجمالي الصافي':'Total net'} value=${money(totalNet)} icon="wallet"/>
     </div>
     <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
-      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'الصافي':'Net'}</th><th></th></tr></thead>
+      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'تأخير':'Late'}</th><th class="right">${ar?'الصافي':'Net'}</th><th></th></tr></thead>
     <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
       <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
       <td class="num">${e.salary?money(e.salary):'—'}</td>
       <td class="num muted" title="paid days / 30">${p?((p.daysWorked!=null?p.daysWorked:'—')+'/'+(p.daysInMonth||30)):(paidDays(e)+'/30')}</td>
+      ${(()=>{ const li=lateInfo(e); const shown=p?(Number(p.lateMinutes)||0):li.totalLate;
+        return html`<td class="num" title=${'billable late minutes ('+GRACE_MIN+' min/day forgiven)'} style=${{color:shown?'var(--neg)':'var(--ink-3)'}}>${shown?shown+'m':'—'}</td>`; })()}
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
       <td class="right cell-actions">
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
