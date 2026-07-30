@@ -2675,6 +2675,42 @@ function computePayrun(p, cfg){
 // netAmount helper for employee payments — full pay-run net.
 const empPaymentNet = (p)=> computePayrun(p).net;
 // Printable payslip with the full Egypt payroll breakdown.
+// Opens WhatsApp with a ready-written salary summary for this employee (Egyptian numbers auto-
+// normalised to international). WhatsApp cannot attach a file from a link, so the PDF is sent
+// separately — this covers the message itself in one click.
+function payslipWhatsApp(p, emp){
+  const ar=getAppSettings().language==='ar';
+  const pr=computePayrun(p);
+  const raw=String((emp&&(emp.whatsapp||emp.phone))||'').replace(/[^\d]/g,'');
+  if(!raw){ alert(ar?'مفيش رقم واتساب للموظف ده — ضيفه في ملفه.':'No WhatsApp number on this employee — add one in their profile.'); return; }
+  let num=raw;
+  if(num.startsWith('00')) num=num.slice(2);
+  else if(num.startsWith('01') && num.length===11) num='20'+num;   // Egypt mobile
+  else if(num.startsWith('1') && num.length===10) num='20'+num;
+  const nm=(emp&&(emp.fullName||emp.name))||'';
+  const cur=(emp&&emp.currency)||'EGP';
+  const L=[];
+  L.push((ar?'مرتب شهر ':'Payslip — ')+(p.month||''));
+  L.push('MAGNET');
+  L.push('');
+  L.push((ar?'الاسم: ':'Name: ')+nm);
+  L.push((ar?'الأساسي: ':'Base: ')+money(pr.base)+' '+cur);
+  L.push((ar?'الأيام: ':'Days: ')+pr.daysWorked+'/'+pr.daysInMonth);
+  if(pr.proratedBase!==pr.base) L.push((ar?'المستحق عن الأيام: ':'Earned for days: ')+money(pr.proratedBase)+' '+cur);
+  if(pr.bonus) L.push((ar?'بونص: +':'Bonus: +')+money(pr.bonus)+(p.bonusReason?(' ('+p.bonusReason+')'):''));
+  if(pr.kpiBonus) L.push((ar?'حافز KPI: +':'KPI bonus: +')+money(pr.kpiBonus));
+  if(pr.commission) L.push((ar?'عمولة: +':'Commission: +')+money(pr.commission));
+  if(pr.overtime) L.push((ar?'إضافي: +':'Overtime: +')+money(pr.overtime));
+  if(pr.totalDeductions) L.push((ar?'إجمالي الخصومات: −':'Total deductions: −')+money(pr.totalDeductions));
+  L.push('');
+  L.push((ar?'الصافي: ':'NET: ')+money(pr.net)+' '+cur);
+  const method=p.paymentMethod||(emp&&emp.paymentMethod)||'';
+  if(method) L.push((ar?'طريقة الدفع: ':'Paid via: ')+method);
+  if(p.payslipMessage){ L.push(''); L.push(p.payslipMessage); }
+  L.push('');
+  L.push(ar?'شكرًا لمجهودك.':'Thank you for your work.');
+  window.open('https://wa.me/'+num+'?text='+encodeURIComponent(L.join('\n')), '_blank');
+}
 function generatePayslip(p, emp){
   const ar=getAppSettings().language==='ar';
   const pr=computePayrun(p);
@@ -7784,7 +7820,8 @@ function PayrollView({ ctx }){
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
       <td class="right cell-actions">
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
-        ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة':'Payslip'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة PDF':'Payslip PDF'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e)}>${ar?'واتساب':'WhatsApp'}</button>`:''}
       </td></tr>`; })}</tbody></table></div><//>
     ${emps.length===0?html`<${EmptyState} title=${ar?'مفيش موظفين':'No employees'} text=${ar?'ضيف موظفين الأول من شاشة Employees.':'Add employees first from the Employees screen.'} icon="people"/>`:''}
   </div>`;
@@ -7964,7 +8001,7 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
             canEditFlag=${ce}
             onEdit=${ce?(r=>{onClose();ctx.openModal('employeePayments',r);}):null}
             onDelete=${ce?(r=>ctx.delRec('employeePayments',r.id,(e.fullName||e.name||'')+' · '+(r.month||''))):null}
-            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button>`}
+            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button><button class="mini" onClick=${()=>payslipWhatsApp(r,e)}>${ctx.lang==='ar'?'واتساب':'WhatsApp'}</button>`}
             cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
 
         ${tab==='Attendance'&&html`<div>
