@@ -2792,7 +2792,7 @@ function payslipHTML(p, emp){
 
    // header
    +'<table width="100%" cellpadding="0" cellspacing="0" style="background:#0d0f0a"><tr>'
-   +'<td style="padding:20px 28px"><img src="https://magnet-op.vercel.app/magnet-logo.png" alt="Magnet" height="28" style="height:28px;display:block;border:0"/></td>'
+   +'<td style="padding:20px 28px"><img src="https://magnet-op.vercel.app/magnet-logo.png" alt="Magnet" height="34" style="height:34px;display:block;border:0"/></td>'
    +'<td style="padding:20px 28px;text-align:right;color:#a7ab9c;font-size:10px;letter-spacing:.18em;text-transform:uppercase">'
    +(ar?'قسيمة راتب':'Payslip')+'<div style="color:#c8f31e;font-size:14px;letter-spacing:.04em;margin-top:4px;font-weight:700">'+e(p.month||'')+'</div></td>'
    +'</tr></table>'
@@ -2805,7 +2805,7 @@ function payslipHTML(p, emp){
    // key facts strip
    +'<div style="margin:16px 28px;padding:14px 16px;background:#f7f9f3;border:1px solid #eaeee1;border-radius:12px">'
    +'<table width="100%" cellpadding="0" cellspacing="0"><tr>'
-   + fact(ar?'الفترة':'Pay period', (per.from&&per.to)?(fmtDate(per.from)+'  '+fmtDate(per.to)):(p.month||'-'))
+   + fact(ar?'الفترة':'Pay period', (per.from&&per.to)?(fmtDate(per.from)+' \u2192 '+fmtDate(per.to)):(p.month||'-'))
    + fact(ar?'أيام العمل':'Days paid', pr.daysWorked+' / '+pr.daysInMonth)
    + fact(ar?'طريقة الدفع':'Method', method)
    + fact(ar?'الحالة':'Status', (String(p.paymentStatus)==='Paid')?(ar?'مدفوع':'Paid'):(p.paymentStatus||'Pending'))
@@ -2815,7 +2815,7 @@ function payslipHTML(p, emp){
    +'<div style="margin:16px 28px;padding:22px 24px;border-radius:14px;background:#14170d">'
    +'<table width="100%" cellpadding="0" cellspacing="0"><tr>'
    +'<td><div style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#9aa08b">'+(ar?'صافي المستحق':'Net pay')+'</div>'
-   +'<div style="font-size:36px;font-weight:800;color:#c8f31e;margin-top:6px;line-height:1;letter-spacing:-.02em">'+e(money(pr.net))+' <span style="font-size:15px;color:#8e9480">'+e(cur)+'</span></div></td>'
+   +'<div style="font-size:36px;font-weight:800;color:#c8f31e;margin-top:6px;line-height:1;letter-spacing:-.02em">'+e(money(pr.net))+'</div></td>'
    +'<td style="text-align:right;color:#cfd3c4;font-size:12px;line-height:1.7">'+e(method)
    +(acct?('<br/><span style="color:#fff;font-weight:600">'+e(acct)+'</span>'):'')+(bank?('<br/>'+e(bank)):'')
    +(paidOn?('<br/><span style="color:#8e9480;font-size:11px">'+e(fmtDate(String(paidOn).slice(0,10)))+'</span>'):'')+'</td>'
