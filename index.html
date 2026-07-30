@@ -9678,13 +9678,18 @@ function UsersView({ ctx }){
     if(String(pw).length<6){ alert(ar?'كلمة السر قصيرة (٦ أحرف على الأقل).':'Password too short (min 6 chars).'); return; }
     const list=AUTH.loadUsers();
     const targets=list.filter(u=>u.role!=='Owner' && u.status!=='Inactive');
+    // Owner accounts are deliberately skipped so a bulk reset can never lock the owner out —
+    // they are named explicitly here (and in the result sheet) so it is never a silent surprise.
+    const skipped=list.filter(u=>u.role==='Owner' && u.status!=='Inactive');
     if(!targets.length){ alert(ar?'مفيش مستخدمين لإعادة التعيين.':'No users to reset.'); return; }
-    if(!confirm((ar?'هيتعيّن الباسورد ده لـ ':'This will set this password for ')+targets.length+(ar?' مستخدم (كل الفريق عدا الملاك). تمام؟':' users (everyone except Owners). Continue?'))) return;
+    const skipTxt = skipped.length ? ((ar?'\n\nمش هيتغيّر (حسابات المالك — تفضل بباسوردها الحالي):\n':'\n\nNOT changed (Owner accounts — they keep their current password):\n')+skipped.map(u=>'• '+(u.fullName||u.username)).join('\n')) : '';
+    if(!confirm((ar?'هيتعيّن الباسورد ده لـ ':'This will set this password for ')+targets.length+(ar?' مستخدم.':' users.')+skipTxt+(ar?'\n\nتمام؟':'\n\nContinue?'))) return;
     for(const u of targets){ u.passwordHash=await AUTH.hashPassword(pw); u.isDefaultPassword=true; }
     AUTH.saveUsers(list.map(x=>{ const m=targets.find(t=>t.id===x.id); return m||x; }));
     ctx.addActivity('users','bulk','team password reset',targets.length+' users by '+ctx.user.name);
     refresh();
-    setBulkResult({ pw, users:targets.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })) });
+    setBulkResult({ pw, users:targets.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })),
+      skipped:skipped.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })) });
   };
   const toggleStatus=(u)=>{ const list=AUTH.loadUsers();
     if(u.role==='Owner'&&u.status==='Active'&&AUTH.activeOwners(list).length<=1){ alert(ar?'لا يمكن إيقاف آخر مالك نشط.':'Cannot deactivate the last active Owner.'); return; }
@@ -9702,12 +9707,15 @@ function UsersView({ ctx }){
     ${anyDefault&&html`<div class="warn-note">${ar?'يجب تغيير كلمة المرور الافتراضية قبل الاستخدام الفعلي للفريق.':'Default password should be changed before real team usage.'}</div>`}
     <label class="ver-toggle"><input type="checkbox" checked=${requireVer} onChange=${e=>ctx.applyAppSettings({requireVerification:e.target.checked})}/> ${ar?'اشترط تأكيد البريد قبل تسجيل الدخول (عدا المالك)':'Require email verification before login (except Owner)'}</label>
     <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
-      <th>${ar?'الاسم':'Name'}</th><th>${ar?'المستخدم':'Username'}</th><th>${ar?'الدور':'Role'}</th><th>${ar?'الحالة':'Status'}</th><th>${ar?'آخر دخول':'Last login'}</th><th></th></tr></thead>
+      <th>${ar?'الاسم':'Name'}</th><th>${ar?'المستخدم':'Username'}</th><th>${ar?'الدور':'Role'}</th><th>${ar?'الحالة':'Status'}</th><th>${ar?'الباسورد':'Password'}</th><th>${ar?'آخر دخول':'Last login'}</th><th></th></tr></thead>
     <tbody>${users.map(u=>html`<tr key=${u.id}>
       <td data-label="Name"><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.email} ${u.role==='Owner'?'':html`<span class="vpill ${u.verified?'ok':''}">${u.verified?(ar?'موثّق ✓':'verified ✓'):(ar?'غير مؤكد':'unverified')}</span>`}</div></td>
       <td data-label="Username" class="muted">${u.username}</td>
       <td data-label="Role"><${Tag}>${t(u.role)!==u.role?t(u.role):u.role}<//></td>
       <td data-label="Status"><${Tag} type=${u.status==='Active'?'ok':'neg'}>${t(u.status)!==u.status?t(u.status):u.status}<//></td>
+      <td data-label="Password">${u.isDefaultPassword
+        ? html`<${Tag} type="warn">${ar?'مؤقت — لسه ما اتغيّرش':'Temporary — not changed yet'}<//>`
+        : html`<${Tag} type="ok">${ar?'خاص بالمستخدم':'Set by user'}<//>`}</td>
       <td data-label="Last login" class="muted" style=${{fontSize:12}}>${u.lastLogin?fmtDateTime(u.lastLogin):'—'}</td>
       <td class="right cell-actions">
         <button class="mini" onClick=${()=>setEdit(u)}>${ar?'تعديل':'Edit'}</button>
@@ -9730,7 +9738,8 @@ function UsersView({ ctx }){
         <div class="modal-b" style=${{maxHeight:'56vh',overflowY:'auto'}}>
           <div class="warn-note" style=${{marginBottom:10}}>${ar?'ابعت لكل واحد بريده + الباسورد ده، وقولهم يغيّروه من Profile بعد الدخول.':'Send each person their email + this password; ask them to change it from Profile after signing in.'}</div>
           <table class="tbl"><thead><tr><th>${ar?'الاسم':'Name'}</th><th>${ar?'البريد':'Email'}</th><th>${ar?'كلمة السر':'Password'}</th></tr></thead>
-            <tbody>${bulkResult.users.map(u=>html`<tr key=${u.email}><td><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.role}</div></td><td class="muted" style=${{fontSize:12}}>${u.email}</td><td class="mono">${bulkResult.pw}</td></tr>`)}</tbody></table>
+            <tbody>${bulkResult.users.map(u=>html`<tr key=${u.email}><td><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.role}</div></td><td class="muted" style=${{fontSize:12}}>${u.email}</td><td class="mono">${bulkResult.pw}</td></tr>`)}
+            ${(bulkResult.skipped||[]).map(u=>html`<tr key=${'sk-'+u.email} style=${{opacity:.65}}><td><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.role}</div></td><td class="muted" style=${{fontSize:12}}>${u.email}</td><td class="muted" style=${{fontSize:11.5}}>${ar?'زي ما هو (مالك)':'unchanged (Owner)'}</td></tr>`)}</tbody></table>
         </div>
         <div class="form-foot">
           <button class="btn btn-ghost" onClick=${()=>{ try{ navigator.clipboard.writeText(bulkResult.users.map(u=>u.fullName+' — '+u.email+' — '+bulkResult.pw).join('\n')); showProPopup('savedNotes', ar?'اتنسخ':'Copied'); }catch(e){} }}>${ar?'نسخ الكل':'Copy all'}</button>
