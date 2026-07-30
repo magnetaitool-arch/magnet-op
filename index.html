@@ -2709,7 +2709,7 @@ function payPeriod(p, emp){
 // Opens WhatsApp with a ready-written salary summary for this employee (Egyptian numbers auto-
 // normalised to international). WhatsApp cannot attach a file from a link, so the PDF is sent
 // separately — this covers the message itself in one click.
-function payslipWhatsApp(p, emp){
+function payslipWhatsApp(p, emp, onSent){
   const ar=getAppSettings().language==='ar';
   const pr=computePayrun(p);
   const raw=String((emp&&(emp.whatsapp||emp.phone))||'').replace(/[^\d]/g,'');
@@ -2744,6 +2744,7 @@ function payslipWhatsApp(p, emp){
   L.push('');
   L.push('Thank you for your work.');
   window.open('https://wa.me/'+num+'?text='+encodeURIComponent(L.join('\n')), '_blank');
+  try{ if(onSent) onSent(); }catch(_){}
 }
 function payslipHTML(p, emp){
   const ar=getAppSettings().language==='ar';
@@ -2790,7 +2791,7 @@ function generatePayslip(p, emp){
   try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){}
 }
 // Email the SAME payslip to the employee as a proper receipt (HTML body, keeps the full design).
-async function emailPayslip(p, emp){
+async function emailPayslip(p, emp, onSent){
   const ar=getAppSettings().language==='ar';
   const to=(emp&&(emp.email||emp.loginEmail))||'';
   if(!to){ alert(ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add one in their profile.'); return; }
@@ -2798,6 +2799,7 @@ async function emailPayslip(p, emp){
   try{
     await sendEmail({ to, subject:'Magnet — Payslip '+(p.month||''), html:payslipHTML(p, emp) });
     showProPopup('syncSuccess', (ar?'اتبعتت لـ ':'Sent to ')+to);
+    try{ if(onSent) onSent(); }catch(_){}
   }catch(err){
     alert((ar?'الإرسال فشل: ':'Send failed: ')+(err&&err.message||err)+'\n\n'+(ar?'اتأكد إن إشعارات الإيميل مفعّلة في الإعدادات.':'Check that email notifications are enabled in Settings.'));
   }
@@ -7918,6 +7920,9 @@ function PayrollView({ ctx }){
     const hourly=(Number(e.salary)||0)/30/Math.max(1,dailyHours);
     return { totalLate, lateDays, deduction:Math.round(totalLate/60*hourly) };
   };
+  // Sending the payslip (email/WhatsApp) means the money went out — flip the run to Paid once.
+  const markPaid = (p)=>{ if(p && p.id && String(p.paymentStatus)!=='Paid')
+    ctx.updateRecord('employeePayments', p.id, { paymentStatus:'Paid', paidAt:nowISO() }); };
   const openRun = (e,p)=>{
     if(p) return ctx.openModal('employeePayments', p);
     const li=lateInfo(e);
@@ -7957,8 +7962,8 @@ function PayrollView({ ctx }){
       <td class="right cell-actions">
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
         ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة PDF':'Payslip PDF'}</button>`:''}
-        ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e)}>${ar?'واتساب':'WhatsApp'}</button>`:''}
-        ${p?html`<button class="mini" onClick=${()=>emailPayslip(p,e)}>${ar?'إيميل':'Email'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e,()=>markPaid(p))}>${ar?'واتساب':'WhatsApp'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>emailPayslip(p,e,()=>markPaid(p))}>${ar?'إيميل':'Email'}</button>`:''}
       </td></tr>`; })}</tbody></table></div><//>
     ${emps.length===0?html`<${EmptyState} title=${ar?'مفيش موظفين':'No employees'} text=${ar?'ضيف موظفين الأول من شاشة Employees.':'Add employees first from the Employees screen.'} icon="people"/>`:''}
   </div>`;
