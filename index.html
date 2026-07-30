@@ -2418,13 +2418,18 @@ function filterRecordsByRole(coll, records, role, user, db){
   role = aliasRole(role);
   if(role==='Admin') return records;
   if(role==='Client'){
+    // DEFAULT-DENY: a client may only ever see rows tied to their own clientId. Anything not
+    // explicitly whitelisted below returns [] — so adding a new internal collection can never
+    // accidentally expose it in the portal.
     const cid = user.clientId;
     if(coll==='requests') return []; // clients never see internal approval requests
     if(coll==='clientAssets') return records.filter(r=>r.clientId===cid && r.visibility==='Client Visible');
     if(coll==='chatMessages') return records.filter(r=>r.clientId===cid && r.visibility==='Client Visible');
-    if(['projects','deliverables','invoices','files','revisions','payments','contracts','reports','clientAssets'].includes(coll))
+    if(coll==='clients') return records.filter(r=>r.id===cid);            // only their own company record
+    if(coll==='notifications') return records.filter(r=>r.userId===user.id);
+    if(['projects','deliverables','invoices','files','revisions','payments','contracts','reports','meetings','contentCalendar','comments'].includes(coll))
       return records.filter(r=>r.clientId===cid);
-    return records;
+    return [];
   }
   if(coll==='requests'){
     // employees see their own + ones assigned to them; managers handled in views
