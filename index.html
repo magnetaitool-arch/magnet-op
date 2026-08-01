@@ -4186,35 +4186,32 @@ async function verifyPassword(pw, hash){
 function loadUsers(){ try { return (JSON.parse(store.get(AUTH_KEYS.users)||'[]')||[]).filter(u=>u && !u._del); } catch(e){ return []; } }
 function saveUsers(list){ store.set(AUTH_KEYS.users, JSON.stringify(list)); try { cloudPushUsers(list); } catch(e){} }
 
-/* ---- shared team accounts: sync through the cloud `records` table (coll='_accounts')
-   so an account created on one device can sign in from any device. Uses the same
-   anon key + REST helpers as the data layer (_rest/_headers/getCfg/cfgComplete in
-   crm-cloud.js). SECURITY: password hashes (SHA-256) live in the shared table,
-   readable by anyone with the anon key — acceptable for an internal team tool,
-   matching the app's existing "team access" model. Lock down with Supabase Auth
-   later if you need stricter isolation. ---- */
+/* ---- shared team accounts are handled by the service-role accounts function.
+   The raw `_accounts` fallback is limited to local development so a production
+   browser never reads or writes password hashes through the anon REST key. ---- */
 async function cloudPushUsers(list){
   const cfg=getCfg(); if(!cfgComplete(cfg)) return;
   list = list || loadUsers(); if(!list.length) return;
-  try { const r=await acctApi(cfg,'save',{ token:getAcctToken(), users:list }); if(r && (r.ok || r.error==='unauthorized')) return; }
-  catch(e){ /* function unreachable -> legacy anon fallback */ }
+  try { const r=await acctApi(cfg,'save',{ token:getAcctToken(), users:list }); if(r && r.ok) return true; if(!isLegacyAuthFallbackAllowed()) return false; }
+  catch(e){ if(!isLegacyAuthFallbackAllowed()) return false; }
   try {
     const rows = list.map(u=>({ id:'acct-'+u.id, coll:'_accounts', data:u }));
-    await fetch(_rest(cfg,'records?on_conflict=id'),
+    const res=await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}), body: JSON.stringify(rows) });
-  } catch(e){}
+    return res.ok;
+  } catch(e){ return false; }
 }
 async function cloudDeleteUser(id){
   const cfg=getCfg(); if(!cfgComplete(cfg)||!id) return;
-  try { const r=await acctApi(cfg,'delete',{ token:getAcctToken(), id }); if(r && (r.ok || r.error==='unauthorized')) return; }
-  catch(e){}
-  try { await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent('acct-'+id)), { method:'DELETE', headers:_headers(cfg) }); } catch(e){}
+  try { const r=await acctApi(cfg,'delete',{ token:getAcctToken(), id }); if(r && r.ok) return true; if(!isLegacyAuthFallbackAllowed()) return false; }
+  catch(e){ if(!isLegacyAuthFallbackAllowed()) return false; }
+  try { const res=await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent('acct-'+id)), { method:'DELETE', headers:_headers(cfg) }); return res.ok; } catch(e){ return false; }
 }
 async function cloudPullUsers(){
   const cfg=getCfg(); if(!cfgComplete(cfg)) return null;
   // Preferred: sanitized roster from the Edge Function (no password hashes).
-  try { const r=await acctApi(cfg,'list',{ token:getAcctToken() }); if(r && r.ok && Array.isArray(r.users)) return r.users.filter(u=>u&&u.id); }
-  catch(e){ /* fall back to anon read (works only while _accounts is anon-readable) */ }
+  try { const r=await acctApi(cfg,'list',{ token:getAcctToken() }); if(r && r.ok && Array.isArray(r.users)) return r.users.filter(u=>u&&u.id); if(!isLegacyAuthFallbackAllowed()) return null; }
+  catch(e){ if(!isLegacyAuthFallbackAllowed()) return null; }
   try {
     const res=await fetch(_rest(cfg,'records?select=data&coll=eq._accounts'), { headers:_headers(cfg) });
     if(!res.ok) return null;
@@ -4235,7 +4232,9 @@ async function syncUsersFromCloud(){
 function getAuthSettings(){ try { return Object.assign({ defaultPasswordWarning:true }, JSON.parse(store.get(AUTH_KEYS.settings)||'{}')); } catch(e){ return { defaultPasswordWarning:true }; } }
 function setAuthSettings(p){ store.set(AUTH_KEYS.settings, JSON.stringify(Object.assign(getAuthSettings(),p))); }
 
-// Create the default Owner on first run (password admin123).
+// Startup account discovery is deliberately non-creating. A fresh installation
+// must collect a real owner identity and password in the setup screen below;
+// shipping a predictable built-in Owner account is unsafe.
 async function ensureDefaultOwner(){
   // Merge any shared cloud accounts with whatever is local (non-destructive: a
   // temporary cloud outage must never wipe local accounts). A new device joining
@@ -4250,13 +4249,46 @@ async function ensureDefaultOwner(){
     if(merged.length > (cloud?cloud.length:0)) cloudPushUsers(merged).catch(()=>{}); // sync local-only accounts up
     return merged;
   }
-  const owner = {
-    id:'usr-owner', fullName:'System Owner', username:'owner', email:'owner@tiaos.local', phone:'',
-    jobTitle:'Owner', role:'Owner', status:'Active', passwordHash: await hashPassword('admin123'),
-    assignedClients:[], assignedTasks:[], dataScope:'all', createdAt:nowISO(), lastLogin:'', isDefaultPassword:true,
+  return [];
+}
+
+async function bootstrapOwner(details){
+  const fullName=String((details&&details.fullName)||'').trim();
+  const username=String((details&&details.username)||'').trim();
+  const email=String((details&&details.email)||'').trim().toLowerCase();
+  const password=String((details&&details.password)||'');
+  const bootstrapSecret=String((details&&details.bootstrapSecret)||'');
+  if(!fullName || !username || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok:false, reason:'details' };
+  const pwErr=validatePassword(password,password); if(pwErr) return { ok:false, reason:'password', message:pwErr };
+  const accounts=await ensureDefaultOwner();
+  if(accounts.length) return { ok:false, reason:'exists' };
+  const owner={
+    id:uid('usr'), fullName, username, email, phone:'', jobTitle:'Owner', role:'Owner', status:'Active',
+    passwordHash:await hashPassword(password), assignedClients:[], assignedTasks:[], dataScope:'all',
+    createdAt:nowISO(), lastLogin:'', isDefaultPassword:false, verified:true,
   };
-  saveUsers([owner]); setAuthSettings({ defaultPasswordWarning:true });
-  return [owner];
+  const cfg=getCfg();
+  if(cfgComplete(cfg)){
+    try {
+      const r=await acctApi(cfg,'save',{ users:[owner], bootstrapSecret });
+      if(!r || !r.ok){
+        if(r&&(r.error==='accounts-exist'||r.error==='unauthorized')) return { ok:false, reason:'exists' };
+        if(r&&r.error==='setup-required') return { ok:false, reason:'setup-secret' };
+        return { ok:false, reason:'unavailable' };
+      }
+    } catch(e){
+      if(!isLegacyAuthFallbackAllowed()) return { ok:false, reason:'unavailable' };
+    }
+  }
+  store.set(AUTH_KEYS.users, JSON.stringify([owner]));
+  return { ok:true, user:owner };
+}
+
+function isLegacyAuthFallbackAllowed(){
+  try {
+    const host=String(location.hostname||'').toLowerCase();
+    return location.protocol==='file:' || host==='localhost' || host==='127.0.0.1' || host==='[::1]';
+  } catch(e){ return false; }
 }
 
 /* ---- session ---- */
@@ -4292,9 +4324,12 @@ async function authLogin(identifier, password){
         try { const list=loadUsers(); const i=list.findIndex(u=>u.id===r.user.id); if(i>=0) list[i]=Object.assign({},list[i],r.user); else list.push(r.user); store.set(AUTH_KEYS.users, JSON.stringify(list)); } catch(e){}
         return { ok:true, user:r.user, token:r.token };
       }
-    } catch(e){ /* function unreachable -> fall through to legacy local verification */ }
+    } catch(e){ /* local-only fallback below */ }
   }
-  // FALLBACK (Edge Function unreachable): legacy local/anon verification.
+  // A browser-side password-hash check is helpful for an offline local demo, but
+  // must never become the production authentication path if the server is down.
+  if(!isLegacyAuthFallbackAllowed()) return { ok:false, reason:'unavailable' };
+  // FALLBACK (local development only): legacy local/anon verification.
   await syncUsersFromCloud().catch(()=>{});
   const users = loadUsers();
   const id=(identifier||'').trim().toLowerCase();
@@ -4311,12 +4346,13 @@ async function authLogin(identifier, password){
 /* ---- user management helpers ---- */
 const activeOwners = (users)=> users.filter(u=>u.role==='Owner' && u.status==='Active');
 function validatePassword(pw, confirm){
-  if(!pw || pw.length<6) return 'Password must be at least 6 characters.';
+  if(!pw || pw.length<10) return 'Password must be at least 10 characters.';
+  if(!/[a-z]/.test(pw) || !/[A-Z]/.test(pw) || !/\d/.test(pw)) return 'Password must include upper-case, lower-case, and a number.';
   if(pw!==confirm) return 'Password and confirmation do not match.';
   return null;
 }
 
-window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, ensureDefaultOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, syncUsersFromCloud };
+window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, syncUsersFromCloud };
 
 
 /* ===== crm-seed.js ===== */
@@ -5526,9 +5562,15 @@ function App(){
   const [authUser, setAuthUser] = useState(()=>getSessionUser());
   const [authReady, setAuthReady] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  useEffect(()=>{ // ensure a default Owner exists, then decide gate
-    ensureDefaultOwner().then(()=>{ const u=getSessionUser(); setAuthUser(u); setShowLogin(!u); setAuthReady(true); });
+  useEffect(()=>{ // discover accounts, then choose sign-in vs first-owner setup
+    const settle=(accounts)=>{ const u=getSessionUser(); setAuthUser(u);
+      // Decide setup-vs-sign-in in BOTH paths. If discovery fails we still fall back to the
+      // locally known roster: with no session and no accounts a sign-in screen is a dead end,
+      // because there is no longer a built-in Owner to sign in as.
+      setNeedsSetup(!u && !(accounts||[]).length); setShowLogin(!u); setAuthReady(true); };
+    ensureDefaultOwner().then(settle).catch(()=>{ let local=[]; try{ local=loadUsers()||[]; }catch(e){} settle(local); });
   },[]);
   const [navOpen, setNavOpen] = useState(false); // mobile drawer
   const [appSettings, setAppSettingsState] = useState(getAppSettings);
@@ -5612,6 +5654,15 @@ function App(){
     try { AUTH.syncUsersFromCloud().catch(()=>{}); } catch(e){} // pull full team roster now that we have a token
     setSessionUser(res.user, remember); setAuthUser(res.user); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
     try { recordLogin(res.user); } catch(e){}
+    return null;
+  };
+  const doInitialSetup = async (details)=>{
+    const result=await bootstrapOwner(details);
+    if(!result.ok){
+      if(result.reason==='exists'){ setNeedsSetup(false); setShowLogin(true); return null; }
+      return result.reason==='password' ? result.message : result.reason;
+    }
+    setNeedsSetup(false); setShowLogin(true);
     return null;
   };
   const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
@@ -6264,6 +6315,7 @@ function App(){
   const _briefTok = getBriefTok();
   if(_briefTok) return html`<${PublicBrief} token=${_briefTok} cfg=${cfg.current}/>`;
   if(!authReady) return html`<div style=${{position:'fixed',inset:0,background:'var(--bg)'}}></div>`;
+  if(needsSetup && !authUser) return html`<${InitialSetupScreen} onSetup=${doInitialSetup} onSignIn=${()=>{setNeedsSetup(false);setShowLogin(true);}} lang=${lang} applyAppSettings=${applyAppSettings}/>`;
   if(showLogin || !authUser) return html`<${LoginScreen} onLogin=${doLogin} lang=${lang} applyAppSettings=${applyAppSettings}/>`;
 
   const goM = (r)=>{ go(r); setNavOpen(false); setMoreOpen(false); };
@@ -9528,6 +9580,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
   const submit=async()=>{ setErr(''); if(!id||!pw){ setErr(ar?'أدخل البريد وكلمة المرور.':'Enter your email/username and password.'); return; }
     setBusy(true); const reason=await onLogin(id,pw,remember); setBusy(false);
     if(reason==='inactive') setErr(ar?'الحساب غير نشط. يرجى التواصل مع مالك النظام.':'Your account is inactive. Please contact the system owner.');
+    else if(reason==='unavailable') setErr(ar?'خدمة تسجيل الدخول غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.':'The sign-in service is temporarily unavailable. Please try again shortly.');
     else if(reason) setErr(ar?'بيانات الدخول غير صحيحة.':'Invalid username/email or password.'); };
   const forgot=async()=>{
     const who=(id||window.prompt(ar?'اكتب بريدك الإلكتروني أو اسم المستخدم':'Enter your email or username')||'').trim();
@@ -9537,7 +9590,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
       const cfg=getCfg(); let handled=false;
       // PRIMARY: server-side reset (works even when _accounts is locked to anon).
       if(cfg&&cfg.url&&cfg.key){ try { const r=await acctApi(cfg,'forgot',{ identifier:who }); if(r&&r.ok) handled=true; } catch(e){} }
-      if(!handled){
+      if(!handled && isLegacyAuthFallbackAllowed()){
         // FALLBACK (function unreachable): legacy client-side reset.
         await AUTH.syncUsersFromCloud().catch(()=>{});
         const u=(AUTH.loadUsers()||[]).find(x=>(x.email||'').toLowerCase()===who.toLowerCase()||(x.username||'').toLowerCase()===who.toLowerCase());
@@ -9577,7 +9630,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
           <h2>${ar?'تسجيل الدخول':'Welcome back'}</h2>
           <p class="cs">${ar?'أهلاً بيك تاني — كمّل من حيث وقفت':'Sign in to pick up where you left off'}</p>
           <label class="fld" style=${{marginBottom:13}}><span>${ar?'البريد الإلكتروني أو اسم المستخدم':'Email or username'}</span>
-            <input value=${id} onChange=${e=>setId(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&submit()} placeholder="owner" autoComplete="username"/></label>
+            <input value=${id} onChange=${e=>setId(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&submit()} placeholder=${ar?'البريد أو اسم المستخدم':'Email or username'} autoComplete="username"/></label>
           <label class="fld" style=${{marginBottom:14}}><span>${ar?'كلمة المرور':'Password'}</span>
             <div style=${{position:'relative'}}>
               <input type=${show?'text':'password'} value=${pw} onChange=${e=>setPw(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&submit()} placeholder="••••••••" autoComplete="current-password" style=${{width:'100%'}}/>
@@ -9593,7 +9646,46 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
           <div class="cine-foot">${ar?'نظام ماجنت الداخلي — للفريق فقط':'Magnet internal system — team access only'}</div>
         </div>
       </div>
-    </div></div>`;
+  </div></div>`;
+}
+
+/* A first install cannot silently create a predictable administrator. This is
+   intentionally a small, separate flow so the normal sign-in screen stays fast. */
+function InitialSetupScreen({ onSetup, onSignIn, lang, applyAppSettings }){
+  const ar=lang==='ar';
+  const [form,setForm]=useState({fullName:'',username:'',email:'',password:'',confirm:'',bootstrapSecret:''});
+  const [show,setShow]=useState(false); const [busy,setBusy]=useState(false); const [err,setErr]=useState('');
+  const set=(key,value)=>setForm(prev=>Object.assign({},prev,{[key]:value}));
+  const submit=async()=>{
+    setErr('');
+    if(!form.fullName||!form.username||!form.email||!form.password||!form.confirm){ setErr(ar?'املأ كل الحقول أولاً.':'Complete every field first.'); return; }
+    if(form.password!==form.confirm){ setErr(ar?'كلمتا المرور غير متطابقتين.':'Passwords do not match.'); return; }
+    setBusy(true);
+    const result=await onSetup({fullName:form.fullName,username:form.username,email:form.email,password:form.password,bootstrapSecret:form.bootstrapSecret});
+    setBusy(false);
+    if(result){
+      const messages={details:ar?'تحقق من الاسم واسم المستخدم والبريد الإلكتروني.':'Check the name, username, and email address.',exists:ar?'تم إعداد حساب مالك بالفعل. سجّل الدخول بالحساب الموجود.':'An owner account already exists. Sign in with that account.', 'setup-secret':ar?'أدخل رمز إعداد المالك الصحيح من إعدادات الاستضافة.':'Enter the correct initial-owner setup secret from the hosting settings.',unavailable:ar?'خدمة الإعداد غير متاحة مؤقتًا.':'The setup service is temporarily unavailable.'};
+      setErr(messages[result]||result);
+    }
+  };
+  return html`<div class="cine" dir=${ar?'rtl':'ltr'}>
+    <video class="cine-vid" autoPlay muted loop playsInline preload="auto" poster="/magnet-logo.png"><source src="/magnet-login.mp4" type="video/mp4"/></video>
+    <div class="cine-scrim"></div><div class="cine-grain"></div>
+    <div class="cine-top"><div class="cbrand"><span class="lg">M</span><b>Magnet OS</b></div><button class="cine-lang" onClick=${()=>applyAppSettings({language:ar?'en':'ar'})}>${ar?'English':'العربية'}</button></div>
+    <div class="cine-layout"><div class="cine-poster"><div class="eyebrow">Secure first setup</div><h1>${ar?html`ابدأ <em>بأمان</em><br/>من أول يوم.`:html`Start <em>securely</em><br/>from day one.`}</h1><p>${ar?'أنشئ حساب المالك الأول بكلمة مرور قوية. لن يستخدم النظام أي بيانات دخول افتراضية.':'Create the first owner account with a strong password. The system never uses a default credential.'}</p></div>
+      <div class="cine-authcol"><div class="cine-card"><h2>${ar?'إعداد حساب المالك':'Set up the owner account'}</h2><p class="cs">${ar?'يظهر هذا مرة واحدة فقط عند تثبيت جديد.':'This appears only once on a brand-new installation.'}</p>
+        <label class="fld" style=${{marginBottom:10}}><span>${ar?'الاسم الكامل':'Full name'}</span><input value=${form.fullName} onChange=${e=>set('fullName',e.target.value)} autoComplete="name"/></label>
+        <label class="fld" style=${{marginBottom:10}}><span>${ar?'اسم المستخدم':'Username'}</span><input value=${form.username} onChange=${e=>set('username',e.target.value)} autoComplete="username"/></label>
+        <label class="fld" style=${{marginBottom:10}}><span>${ar?'البريد الإلكتروني':'Email'}</span><input type="email" value=${form.email} onChange=${e=>set('email',e.target.value)} autoComplete="email"/></label>
+        <label class="fld" style=${{marginBottom:10}}><span>${ar?'رمز إعداد المالك':'Owner setup secret'}</span><input type="password" value=${form.bootstrapSecret} onChange=${e=>set('bootstrapSecret',e.target.value)} autoComplete="off"/></label>
+        <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور':'Password'}</span><div style=${{position:'relative'}}><input type=${show?'text':'password'} value=${form.password} onChange=${e=>set('password',e.target.value)} autoComplete="new-password" style=${{width:'100%'}}/><button type="button" class="pw-toggle" onClick=${()=>setShow(s=>!s)}>${show?(ar?'إخفاء':'Hide'):(ar?'إظهار':'Show')}</button></div></label>
+        <label class="fld" style=${{marginBottom:14}}><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type=${show?'text':'password'} value=${form.confirm} onChange=${e=>set('confirm',e.target.value)} onKeyDown=${e=>e.key==='Enter'&&submit()} autoComplete="new-password"/></label>
+        <div class="muted" style=${{fontSize:11.5,lineHeight:1.6,marginBottom:12}}>${ar?'10 أحرف على الأقل، وتشمل حرفًا كبيرًا وصغيرًا ورقمًا.':'At least 10 characters, including upper-case, lower-case, and a number.'}</div>
+        ${err&&html`<div class="login-err">${err}</div>`}
+        <button class="btn btn-pri" style=${{width:'100%',justifyContent:'center'}} disabled=${busy} onClick=${submit}>${busy?(ar?'جارٍ الإعداد...':'Creating account…'):(ar?'إنشاء حساب المالك':'Create owner account')}</button>
+        <button type="button" class="link-btn" style=${{display:'block',margin:'13px auto 0'}} onClick=${onSignIn}>${ar?'لدي حساب بالفعل':'I already have an account'}</button>
+      </div></div></div>
+  </div>`;
 }
 
 /* ---------------- Profile modal (self-service) ---------------- */
@@ -9627,7 +9719,11 @@ function ProfileModal({ authUser, lang, onClose, onChanged }){
         if(r&&r.reason==='bad-current'){ setMsg(badMsg); return; }
       } catch(e){ /* unreachable -> legacy fallback */ }
     }
-    // FALLBACK (function unreachable): legacy local change.
+    if(!isLegacyAuthFallbackAllowed()){
+      setMsg(ar?'خدمة تغيير كلمة المرور غير متاحة مؤقتًا. لم يتم حفظ أي تغيير.':'The password service is temporarily unavailable. No change was saved.');
+      return;
+    }
+    // FALLBACK (local development only): legacy local change.
     if(!(await AUTH.verifyPassword(cur,u.passwordHash))){ setMsg(badMsg); return; }
     u.passwordHash=await AUTH.hashPassword(np); u.isDefaultPassword=false;
     AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
@@ -9950,9 +10046,10 @@ function UsersView({ ctx }){
     setReset(null); showProPopup('savedNotes', ar?'تمت إعادة التعيين':'Password reset'); };
   // Owner-only: set ONE shared temp password for every active non-owner user at once, then show the sheet.
   const resetAllPw=async()=>{
-    const pw=prompt(ar?'كلمة سر مؤقتة مشتركة لكل الفريق (٦ أحرف على الأقل):':'One shared temporary password for the whole team (min 6 chars):','Magnet@2026');
+    const pw=prompt(ar?'كلمة سر مؤقتة مشتركة للفريق (10 أحرف على الأقل، حرف كبير وصغير ورقم):':'One shared temporary password for the team (10+ characters, upper-case, lower-case, and a number):','');
     if(pw==null) return;
-    if(String(pw).length<6){ alert(ar?'كلمة السر قصيرة (٦ أحرف على الأقل).':'Password too short (min 6 chars).'); return; }
+    const pwErr=AUTH.validatePassword(String(pw),String(pw));
+    if(pwErr){ alert(pwErr); return; }
     const list=AUTH.loadUsers();
     const targets=list.filter(u=>u.role!=='Owner' && u.status!=='Inactive');
     // Owner accounts are deliberately skipped so a bulk reset can never lock the owner out —

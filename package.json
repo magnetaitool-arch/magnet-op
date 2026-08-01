@@ -11,7 +11,10 @@
     "restore:supabase:dry": "node tools/restore-supabase-records.js",
     "restore:supabase": "node tools/restore-supabase-records.js --apply",
     "check:config": "node tools/check-config.js",
-    "smoke": "node tools/smoke-test.js"
+    "smoke": "node tools/smoke-test.js",
+    "test:security": "node tools/security-test.js",
+    "test": "node tools/smoke-test.js && node tools/security-test.js",
+    "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {
     "node": ">=18"

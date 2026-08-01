@@ -4,7 +4,7 @@ The operating system for the Magnet agency: CRM, projects, finance, HR,
 collections, gamification, and public client/candidate forms — all in one place.
 
 - **Live:** https://magnet-op.vercel.app
-- **Default login:** `owner` / `admin123` *(change this immediately — see §12)*
+- **First login:** create the Owner account in the secure first-install screen; there is no default username or password.
 - **Languages:** English (Finance/HR screens) + Arabic (client brief page). Toggle with the **ع/EN** button in the top bar.
 - **Theme:** Light/Dark toggle (moon/sun) in the top bar.
 
@@ -113,7 +113,7 @@ Quick guide (✏️ edit · 👁️ view · 🚫 hidden). Owner/Admin = full edi
 ---
 
 ## 12. Admin & security
-- **Change the Owner password** now (Profile). The default `admin123` should not stay.
+- **Keep the Owner password private** and change it from Profile whenever needed.
 - **Accounts are protected server-side:** login and all account changes go through a Supabase **Edge Function** (`accounts`); password hashes never reach the browser, and the public key can no longer read or modify accounts.
 - **Users & Permissions** → create logins, set roles, per-module overrides. **Roles & Permissions** → see what each role can do.
 - **Backup Center** → export/download JSON snapshots regularly. Supabase also keeps the live data.

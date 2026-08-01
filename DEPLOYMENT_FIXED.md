@@ -23,9 +23,12 @@ was stale and has been corrected.
 | `SUPABASE_URL` | `api/intake.js` (defaults to jdyl… if unset) | No |
 | `SUPABASE_KEY` | `api/intake.js` — set to **service_role** for hardened writes | **Yes** |
 | `HR_EMAIL`, `SALES_EMAIL` | intake alert recipients | No |
+| `EMAIL_ALLOWED_ORIGINS` | optional comma-separated custom origins for `/api/send-email` | No |
+| `EMAIL_SHARED_SECRET` | trusted server-to-server access to `/api/send-email` | **Yes** |
 
 Edge Function `accounts` (Supabase → Edge Functions → accounts → Secrets):
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `FROM_EMAIL`.
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `FROM_EMAIL`,
+`EMAIL_SHARED_SECRET`, `INITIAL_OWNER_SETUP_SECRET`.
 
 Full list + local `.env` for the tools: see **`.env.example`**.
 
@@ -41,11 +44,18 @@ Full list + local `.env` for the tools: see **`.env.example`**.
    `supabase functions deploy accounts --no-verify-jwt --project-ref jdylrthffifbhyrrhuqd`
    and set its secrets.
 3. Apply migrations in order (`001`→`004`) — see `SUPABASE_SECURITY_GUIDE.md`.
+4. Before the first owner is created, generate a long `INITIAL_OWNER_SETUP_SECRET`,
+   set it on the **accounts Edge Function**, then enter it once in the in-app
+   “Set up the owner account” screen. This prevents the first public visitor from
+   claiming the Owner role.
 
 ## Email setup
 1. Create a Resend account, copy an API key → `RESEND_API_KEY`.
 2. Until you verify a domain, `FROM_EMAIL="Magnet OS <onboarding@resend.dev>"`.
 3. For production, verify your domain in Resend and set `FROM_EMAIL` to an address on it.
+4. Set the same long `EMAIL_SHARED_SECRET` on Vercel and the accounts Edge Function
+   if the Edge Function should use `/api/send-email` as its fallback. Browser email
+   calls are restricted to the exact Magnet deployment plus `EMAIL_ALLOWED_ORIGINS`.
 
 ## How to test
 

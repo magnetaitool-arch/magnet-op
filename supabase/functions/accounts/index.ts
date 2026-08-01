@@ -12,6 +12,8 @@ const AUTHB = URL.replace(/\/$/,'') + '/auth/v1';
 const RESEND = Deno.env.get('RESEND_API_KEY') || '';
 const FROM = Deno.env.get('FROM_EMAIL') || 'Magnet OS <onboarding@resend.dev>';
 const EMAIL_ENDPOINT = 'https://magnet-op.vercel.app/api/send-email';
+const EMAIL_SHARED_SECRET = Deno.env.get('EMAIL_SHARED_SECRET') || '';
+const INITIAL_OWNER_SETUP_SECRET = Deno.env.get('INITIAL_OWNER_SETUP_SECRET') || '';
 
 const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'authorization,apikey,content-type', 'Access-Control-Allow-Methods':'POST,OPTIONS', 'Content-Type':'application/json' };
 const json = (obj:unknown, status=200)=> new Response(JSON.stringify(obj), { status, headers: CORS });
@@ -66,7 +68,11 @@ async function sendMail(to:string, subject:string, text:string):Promise<boolean>
       const r=await fetch('https://api.resend.com/emails',{ method:'POST', headers:{ Authorization:'Bearer '+RESEND, 'Content-Type':'application/json' }, body:JSON.stringify({ from:FROM, to:[to], subject, text }) });
       return r.ok;
     }
-    const r=await fetch(EMAIL_ENDPOINT,{ method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ to, subject, text }) });
+    // The Vercel endpoint rejects origin-less server traffic unless it carries
+    // the shared secret. Configure the same EMAIL_SHARED_SECRET in both hosts.
+    const headers:Record<string,string>={ 'Content-Type':'application/json' };
+    if(EMAIL_SHARED_SECRET) headers['x-magnet-secret']=EMAIL_SHARED_SECRET;
+    const r=await fetch(EMAIL_ENDPOINT,{ method:'POST', headers, body:JSON.stringify({ to, subject, text }) });
     return r.ok;
   }catch{ return false; }
 }
@@ -127,7 +133,11 @@ Deno.serve(async (req)=>{
       const incoming = Array.isArray(body.users)? body.users : (body.user? [body.user] : []);
       if(!incoming.length) return json({error:'no users'},400);
       const bootstrap = accounts.length===0;
-      if(!bootstrap && !p) return json({error:'unauthorized'},401);
+      // A public browser can reach this function, so an empty accounts table must
+      // not grant the first anonymous visitor an Owner account. The deployment
+      // owner supplies this one-time secret through the initial setup screen.
+      if(bootstrap && (!INITIAL_OWNER_SETUP_SECRET || body.bootstrapSecret!==INITIAL_OWNER_SETUP_SECRET)) return json({error:'setup-required'},403);
+      if(!bootstrap && !p) return json({error:'accounts-exist'},401);
       const admin = bootstrap || isAdmin(p.role);
       const out:any[]=[];
       for(const nu of incoming){ if(!nu||!nu.id) continue;
@@ -148,7 +158,11 @@ Deno.serve(async (req)=>{
       const rec=findById(targetId); if(!rec) return json({ ok:false });
       if(targetId===p.uid && body.currentPassword!=null){ if(!(await verifyPw(body.currentPassword, rec.u.passwordHash||''))) return json({ ok:false, reason:'bad-current' }); }
       let newHash:string|null = null;
-      if(body.newPassword){ if(String(body.newPassword).length<6) return json({error:'weak password'},400); newHash = await makePbkdf2(String(body.newPassword)); }
+      if(body.newPassword){
+        const next=String(body.newPassword);
+        if(next.length<10 || !/[a-z]/.test(next) || !/[A-Z]/.test(next) || !/\d/.test(next)) return json({error:'weak password'},400);
+        newHash = await makePbkdf2(next);
+      }
       else if(typeof body.newHash==='string' && /^pbkdf2\$\d+\$/.test(body.newHash)){ newHash = body.newHash; }
       if(!newHash) return json({error:'no valid new password'},400);
       const u={...rec.u, passwordHash:newHash, isDefaultPassword:false};
@@ -158,7 +172,7 @@ Deno.serve(async (req)=>{
     if(action==='forgot'){
       await rlBump('forgot', body.identifier);
       const rec=findByLogin(body.identifier);
-      if(rec && rec.u.email){ const temp=hex(crypto.getRandomValues(new Uint8Array(5)).buffer); const sent=await sendMail(rec.u.email, 'Your temporary password — Magnet OS', 'Your temporary password is: '+temp+'\nPlease change it after signing in (Profile).'); if(sent){ const u={...rec.u, passwordHash:await makePbkdf2(temp), isDefaultPassword:true}; await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]); } }
+      if(rec && rec.u.email){ const temp='M'+hex(crypto.getRandomValues(new Uint8Array(6)).buffer)+'a1'; const sent=await sendMail(rec.u.email, 'Your temporary password — Magnet OS', 'Your temporary password is: '+temp+'\nPlease change it after signing in (Profile).'); if(sent){ const u={...rec.u, passwordHash:await makePbkdf2(temp), isDefaultPassword:true}; await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]); } }
       return json({ ok:true });
     }
     return json({error:'unknown action'},400);

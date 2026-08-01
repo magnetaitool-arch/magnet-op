@@ -34,7 +34,8 @@
    the email couldn't be sent**. `forgot` still always returns `{ok:true}` — it never
    reveals whether an account exists.
 2. **Server-side hashing enforced.** `changepw` now **ignores any client `newHash`**
-   and always computes PBKDF2 from `newPassword` (rejects passwords < 6 chars). The
+   and always computes PBKDF2 from `newPassword` (requires at least 10 characters,
+   upper-case, lower-case, and a number). The
    frontend was updated to send `newPassword`, never a hash.
 3. **Generic server errors.** The top-level `catch` now logs the real error to the
    function logs and returns `{error:'server error'}` (HTTP 500) — no internal leak.
@@ -43,31 +44,27 @@
    `sha256:`/`fallback:` hashes still verify and are transparently upgraded to
    PBKDF2 on next login.
 
-### Login path (unchanged, already sound)
+### Login path
 - PRIMARY: `acctApi('login')` → Edge Function verifies the hash **server-side** and
   returns a sanitized user (no hash) + HMAC session token (30-day exp).
-- FALLBACK (function unreachable): local/anon verification. Once migration `002` is
-  applied and the Edge Function is deployed, the anon read of `_accounts` returns
-  403, so this fallback can only use locally-cached accounts — secure by default.
+- FALLBACK (function unreachable): permitted only on `localhost`, `127.0.0.1`, or
+  `file:` local development. Production returns a safe “service unavailable” error;
+  it never falls back to browser-side password-hash verification.
 
-### Default credentials
-`ensureDefaultOwner()` seeds `owner / admin123` **only on a truly empty install**,
-flagged `isDefaultPassword:true` with a standing in-app warning. To force rotation:
-sign in as owner and change the password (now server-hashed). For production, create
-real accounts and delete/rotate the default; `admin123` is the seed default only and
-is **not** a hardcoded login bypass (verified — see `tools/smoke-test.js` scan).
-
-### Dev fallback flag
-`.env.example` documents `MAGNET_ALLOW_DEV_AUTH_FALLBACK` (default `false`). The
-secure default is: rely on the server Edge Function; the browser fallback path only
-engages when the function is unreachable and, post-`002`, cannot read remote hashes.
+### First Owner setup
+There is no default Owner credential. On an empty production installation, the
+accounts Edge Function requires `INITIAL_OWNER_SETUP_SECRET`; the deployer enters it
+once in the setup screen alongside the real Owner details. This prevents the first
+anonymous visitor from claiming the Owner role.
 
 ## Remaining required environment variables
 
 Server-side only (never in the browser):
 - Edge Function `accounts` secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-  and (for forgot-password email) `RESEND_API_KEY`, `FROM_EMAIL`.
-- Email function: `RESEND_API_KEY`, `FROM_EMAIL` (Vercel/Netlify env).
+  `INITIAL_OWNER_SETUP_SECRET`, and (for forgot-password email) `RESEND_API_KEY`,
+  `FROM_EMAIL`, `EMAIL_SHARED_SECRET`.
+- Email function: `RESEND_API_KEY`, `FROM_EMAIL`, and (for trusted server callers)
+  `EMAIL_SHARED_SECRET` (Vercel/Netlify env).
 
 ## Test checklist
 

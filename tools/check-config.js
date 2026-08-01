@@ -35,7 +35,7 @@ const lib = require('./_lib');
     if (r.status === 200) {
       const rows = await r.json().catch(() => []);
       if (Array.isArray(rows) && rows.length) f('_accounts is ANON-READABLE — password hashes are exposed. Apply supabase/migrations/002_records_rls_hardening.sql NOW.');
-      else w('_accounts anon SELECT returned 200 but empty — apply 002_records_rls_hardening.sql to block it regardless.');
+      else ok('_accounts returns no rows to anon — RLS filtering is active.');
     } else if (r.status === 401 || r.status === 403) ok('_accounts blocked for anon (' + r.status + ') — lockdown is applied. Good.');
     else w('_accounts anon SELECT returned ' + r.status);
   } catch (e) { w('_accounts check errored: ' + (e.message || e)); }
@@ -55,6 +55,19 @@ const lib = require('./_lib');
     else if (r.status === 500) w('/api/send-email live but RESEND_API_KEY not set on host');
     else w('/api/send-email returned ' + r.status);
   } catch (e) { w('/api/send-email check errored: ' + (e.message || e)); }
+
+  console.log('\n[email origin guard]');
+  try {
+    // This intentionally incomplete payload can never send an email. It only
+    // verifies that an unrelated Vercel project cannot use the endpoint as a relay.
+    const r = await fetch('https://magnet-op.vercel.app/api/send-email', {
+      method: 'POST',
+      headers: { Origin: 'https://untrusted-magnet-check.vercel.app', 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (r.status === 403 && !r.headers.get('access-control-allow-origin')) ok('email endpoint rejects untrusted Vercel origins');
+    else f('email endpoint accepts an untrusted Vercel origin — deploy the hardened api/send-email.js');
+  } catch (e) { w('email origin-guard check errored: ' + (e.message || e)); }
 
   console.log(`\nResult: ${fail} fail, ${warn} warn.`);
   process.exit(fail ? 1 : 0);

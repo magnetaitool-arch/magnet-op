@@ -15,26 +15,74 @@
 // "onboarding@resend.dev" sender (good for testing). For production, verify your
 // own domain in Resend and set FROM_EMAIL to an address on it.
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
+// Keep the legacy Netlify endpoint as strict as the Vercel endpoint. A wildcard
+// CORS policy here turns a configured Resend key into an open relay.
+function normalOrigin(value) {
+  try { return new URL(String(value || '')).origin; } catch (e) { return ''; }
+}
+
+function allowedOrigins() {
+  const extra = (process.env.EMAIL_ALLOWED_ORIGINS || '').split(',').map((s) => normalOrigin(s.trim())).filter(Boolean);
+  const netlifyOrigins = [process.env.URL, process.env.DEPLOY_PRIME_URL].map(normalOrigin).filter(Boolean);
+  return Array.from(new Set(['https://magnet-op.vercel.app'].concat(netlifyOrigins, extra)));
+}
+
+function allowedOrigin(origin) {
+  const normalized = normalOrigin(origin);
+  return !!normalized && allowedOrigins().includes(normalized);
+}
+
+function headers(origin) {
+  const out = {
+    'Access-Control-Allow-Headers': 'Content-Type, x-magnet-secret',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
+    Vary: 'Origin',
+  };
+  if (allowedOrigin(origin)) out['Access-Control-Allow-Origin'] = normalOrigin(origin);
+  return out;
+}
+
+function response(statusCode, origin, body) {
+  return { statusCode, headers: headers(origin), body: JSON.stringify(body) };
+}
+
+function validPayload(body) {
+  const recipients = (Array.isArray(body && body.to) ? body.to : [body && body.to])
+    .map((value) => String(value || '').trim()).filter(Boolean);
+  const subject = String((body && body.subject) || '').trim();
+  const html = body && body.html == null ? '' : String((body && body.html) || '');
+  const text = body && body.text == null ? '' : String((body && body.text) || '');
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!recipients.length || recipients.length > 10 || recipients.some((value) => !email.test(value))) return null;
+  if (!subject || subject.length > 200 || /[\r\n]/.test(subject)) return null;
+  if (!html && !text) return null;
+  if (html.length > 100000 || text.length > 100000) return null;
+  return { recipients, subject, html, text };
+}
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '{}' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method not allowed' }) };
+  const origin = event.headers && (event.headers.origin || event.headers.Origin);
+  if (event.httpMethod === 'OPTIONS') return allowedOrigin(origin)
+    ? response(200, origin, {})
+    : response(403, origin, { error: 'Forbidden origin' });
+  if (event.httpMethod !== 'POST') return response(405, origin, { error: 'Method not allowed' });
+
+  const secret = process.env.EMAIL_SHARED_SECRET;
+  const suppliedSecret = event.headers && (event.headers['x-magnet-secret'] || event.headers['X-Magnet-Secret']);
+  const hasSecret = !!(secret && suppliedSecret === secret);
+  if (!hasSecret && !allowedOrigin(origin)) return response(403, origin, { error: 'Forbidden origin' });
 
   const KEY = process.env.RESEND_API_KEY;
   const FROM = process.env.FROM_EMAIL || 'Magnet OS <onboarding@resend.dev>';
-  if (!KEY) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: 'RESEND_API_KEY is not set in Netlify environment variables.' }) };
+  if (!KEY) return response(500, origin, { error: 'RESEND_API_KEY is not set in Netlify environment variables.' });
 
   let b = {};
   try { b = JSON.parse(event.body || '{}'); }
-  catch (e) { return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Invalid JSON body' }) }; }
+  catch (e) { return response(400, origin, { error: 'Invalid JSON body' }); }
 
-  if (!b.to || !b.subject) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: '"to" and "subject" are required' }) };
+  const message = validPayload(b);
+  if (!message) return response(400, origin, { error: 'Invalid email payload' });
 
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -42,16 +90,16 @@ exports.handler = async (event) => {
       headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: FROM,
-        to: Array.isArray(b.to) ? b.to : [b.to],
-        subject: b.subject,
-        html: b.html || undefined,
-        text: b.text || (b.html ? undefined : ' '),
+        to: message.recipients,
+        subject: message.subject,
+        html: message.html || undefined,
+        text: message.text || (message.html ? undefined : ' '),
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { statusCode: res.status, headers: CORS, body: JSON.stringify({ error: (data && (data.message || data.name)) || ('Resend error ' + res.status), detail: data }) };
-    return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true, id: data && data.id }) };
+    if (!res.ok) return response(res.status, origin, { error: (data && (data.message || data.name)) || ('Email provider rejected the request (' + res.status + ')') });
+    return response(200, origin, { ok: true, id: data && data.id });
   } catch (e) {
-    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: String((e && e.message) || e) }) };
+    return response(500, origin, { error: 'Email service is unavailable.' });
   }
 };

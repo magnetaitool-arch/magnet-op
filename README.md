@@ -5,7 +5,7 @@ projects, tasks, public intake, training docs. Single-file React PWA (`index.htm
 React + `htm`, **no build step**) with a Supabase backend and Vercel serverless
 functions. Premium dark UI with a lime accent.
 
-- **Live:** https://magnet-op.vercel.app · default login `owner` / `admin123` (rotate immediately)
+- **Live:** https://magnet-op.vercel.app · first install creates its Owner through the secure setup screen (no default login)
 - **Deploy target:** Vercel · **Supabase project:** `jdylrthffifbhyrrhuqd`
 
 ## First-time setup
@@ -20,9 +20,16 @@ npm run check:config          # live: Supabase, RLS, accounts fn, email
 The app itself needs no install/build — it's static. `package.json` exists only for
 the backup/QA tooling.
 
+For a brand-new production database, set `INITIAL_OWNER_SETUP_SECRET` on the
+Supabase `accounts` Edge Function before opening the app. Enter that one-time
+secret in the initial Owner setup screen. This prevents a public visitor from
+claiming the first Owner account.
+
 ## Environment variables
 See **[.env.example](.env.example)**. Secrets (never in the browser):
 `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, and the intake `SUPABASE_KEY`.
+For email hardening, set `EMAIL_SHARED_SECRET` on trusted server-side callers and
+the email host; use `EMAIL_ALLOWED_ORIGINS` for any custom browser origins.
 
 ## Backup before deployment (always)
 ```bash

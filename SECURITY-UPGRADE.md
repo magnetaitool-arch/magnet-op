@@ -38,7 +38,8 @@ the one remaining architectural item.
    - `FROM_EMAIL` = `Magnet OS <onboarding@resend.dev>` (or your verified sender)
 2. **Rotate the Vercel token** you pasted in chat — it is now exposed. Create a
    new one and delete the old at vercel.com/account/tokens.
-3. **Change the Owner password** from `admin123` (Profile → change password). It
+3. **Set a strong Owner password** during the first-install setup (and change it
+   later from Profile when needed). It
    re-hashes to PBKDF2 automatically.
 
 ## 🔴 Remaining (architectural — needs your Supabase + testing)

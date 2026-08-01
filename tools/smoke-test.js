@@ -7,6 +7,7 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const lib = require('./_lib');
 const ROOT = lib.REPO_ROOT;
 
@@ -37,6 +38,12 @@ const acct = read('supabase/functions/accounts/index.ts');
   ? ok('accounts hashes server-side; any newHash is PBKDF2-format-validated (no arbitrary hash)')
   : bad('accounts accepts an unvalidated client body.newHash');
 /return json\(\{error:'server error'\},500\)/.test(acct) ? ok('generic 500 (no internal-error leak)') : bad('top-level catch may leak internal errors');
+/INITIAL_OWNER_SETUP_SECRET/.test(acct) && /setup-required/.test(acct)
+  ? ok('first Owner requires a server-side setup secret')
+  : bad('first Owner bootstrap is not protected by INITIAL_OWNER_SETUP_SECRET');
+/next\.length<10/.test(acct) && /\!\/\[A-Z\]\//.test(acct)
+  ? ok('server enforces strong new passwords')
+  : bad('server password policy is weaker than the UI policy');
 
 console.log('\n[4] frontend password-change hardening');
 const html = read('index.html');
@@ -45,18 +52,26 @@ const html = read('index.html');
   : (/newHash\s*=\s*await\s+AUTH\.hashPassword/.test(html) ? bad('PwResetForm still computes/sends newHash') : ok('no client-side newHash in change-password'));
 
 console.log('\n[5] dangerous-pattern scan');
-// admin123 legitimately appears as the ensureDefaultOwner seed + a comment. Only
-// a hardcoded LOGIN COMPARISON (e.g. password==='admin123') is a real bypass.
-const bypass = /(===?\s*['"]admin123['"])|(['"]admin123['"]\s*===?)|password\s*==?=?\s*['"]admin123['"]/.test(html);
-const seedOnly = /hashPassword\('admin123'\)/.test(html);
-bypass ? bad('admin123 used in a hardcoded login comparison (bypass risk)')
-       : ok(`admin123 present only as ${seedOnly ? 'ensureDefaultOwner seed' : 'text'} (no login bypass)`);
+/admin123/.test(html) ? bad('legacy default credential remains in index.html') : ok('no default credential remains in index.html');
+/bootstrapOwner/.test(html) && /InitialSetupScreen/.test(html) ? ok('fresh installs use explicit owner setup') : bad('fresh-install owner setup is missing');
+/isLegacyAuthFallbackAllowed/.test(html) ? ok('browser auth fallback is local-development only') : bad('browser auth fallback is not gated');
+/Password must be at least 10 characters\./.test(html) ? ok('frontend enforces strong passwords') : bad('frontend password policy is weaker than expected');
 /sb_secret_|service_role.{0,40}=\s*['"]eyJ/.test(html) ? bad('possible service_role/secret key in index.html') : ok('no service_role/secret key in index.html');
 /\/\.netlify\/functions\/intake/.test(html) ? bad('index.html calls netlify intake (Vercel default) — use /api/intake') : ok('no hardcoded netlify intake call in index.html');
 
-console.log('\n[6] required deliverables present');
+console.log('\n[6] inline app scripts parse');
+const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+let parsed = 0;
+for (const [, attrs, source] of scripts) {
+  if (/\bsrc\s*=/.test(attrs) || !source.trim()) continue;
+  try { new vm.Script(source, { filename: 'index.html inline script' }); parsed++; }
+  catch (e) { bad('inline script syntax — ' + e.message.split('\n')[0]); }
+}
+parsed ? ok(parsed + ' inline script blocks parse') : bad('no inline scripts were parsed');
+
+console.log('\n[7] required deliverables present');
 for (const f of ['AUDIT_REPORT.md', '.env.example', 'api/intake.js', 'supabase/migrations',
-  'tools/backup-supabase-records.js', 'tools/restore-supabase-records.js']) {
+  'tools/backup-supabase-records.js', 'tools/restore-supabase-records.js', 'tools/security-test.js']) {
   exists(f) ? ok(f) : bad('missing ' + f);
 }
 
