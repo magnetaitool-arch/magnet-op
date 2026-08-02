@@ -1973,6 +1973,8 @@ const FIELD_AR = {
   'Username / handle':'اسم المستخدم','Visibility':'الظهور','Visible to client':'ظاهر للعميل','Instagram':'إنستجرام','Facebook':'فيسبوك','TikTok':'تيك توك',
   'YouTube':'يوتيوب','LinkedIn':'لينكدإن','Snapchat':'سناب شات','X (Twitter)':'إكس (تويتر)','Other platforms / links (one per line)':'منصات / روابط أخرى (سطر لكل رابط)',
   'WhatsApp group':'جروب الواتساب','Approval':'الموافقة','Approval Status':'حالة الموافقة','Report':'التقرير','Report title':'عنوان التقرير','Review date':'تاريخ المراجعة',
+  'Report for':'التقرير خاص بـ','Generation mode':'طريقة الإنشاء','Report language':'لغة التقرير','Include salary and payments':'تضمين الراتب والمدفوعات',
+  'Manager summary':'ملخص المدير','Strengths':'نقاط القوة','Areas to improve':'نقاط التحسين','Next-period goals':'أهداف الفترة القادمة','Employee report':'تقرير موظف',
   'Next review':'المراجعة الجاية','Rating (0-5)':'التقييم (0-5)','Overall score':'التقييم العام','Quality score':'درجة الجودة','Satisfaction (0-100)':'الرضا (0-100)',
   'KPI notes':'ملاحظات الأداء','Strengths':'نقاط القوة','Improvements':'نقاط التحسين','Quality':'الجودة','Speed':'السرعة','Communication':'التواصل','Teamwork':'الشغل الجماعي',
   'Creativity':'الإبداع','Issue':'المشكلة','Action':'الإجراء','Actions':'إجراءات','Activity':'النشاط','Entity':'العنصر','By':'بواسطة','Ver':'الإصدار','#':'#',
@@ -2177,7 +2179,7 @@ const EDIT = {
   'Video Editor': ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   Accountant: ['invoices','payments','expenses','fixedCosts','partners','collections','comments','requests','chat'],
   Client: ['comments','chat'],
-  HR: ['candidates','attendance','leaves','requests','comments','chat','availability'],
+  HR: ['candidates','attendance','leaves','requests','comments','chat','availability','reports'],
   'Social Media': ['tasks','deliverables','files','comments','leaves','requests','chat','availability','calendar','campaigns','briefs'],
   'Marketing Director': ['plans','leads','campaigns','briefs','projects','tasks','deliverables','salesActivities','proposals','calendar','clientAssets','comments','requests','chat'],
   'Art Director': ['tasks','deliverables','files','comments','requests','chat','availability','clientAssets','calendar','leaves'],
@@ -2266,6 +2268,7 @@ const PERMISSIONS = {
   'Content Creator': { Dashboard:['View'], Tasks:['View','Edit'], Assets:['View'], Workflow:['View'] },
   'Media Buyer': { Dashboard:['View'], Clients:['View'], Tasks:['View','Edit'], Assets:['View','Create'], Reports:['View','Create'] },
   Finance: { Dashboard:['View'], Clients:['View'], Invoices:['View','Create','Edit','Approve','Export'], Reports:['View','Export'], 'Data Export / Import':['Export'] },
+  HR: { Dashboard:['View'], Employees:['View','Create','Edit'], Requests:['View','Approve'], Approvals:['View','Approve'], Reports:['View','Create','Edit','Approve','Export'] },
   Sales: { Dashboard:['View'], Clients:['View','Create'], Proposals:['View','Create','Edit'], Workflow:['View','Edit'], Reports:['View'] },
   Viewer: Object.fromEntries(PERM_MODULES.map(m=>[m,['View']])),
 };
@@ -2360,7 +2363,7 @@ const FOCUSED_DEFAULT = ['dashboard','accounts','plans','leads','campaigns','bri
   'teams','candidates','employees','availability','freelancers','departments','workload','attendance','leaves',
   'requests','approvalCenter',
   'invoices','payments','collections','expenses','fixedCosts','partners','profitability',
-  'files','comments','notifications','leaderboard','arcade','users','rolesPermissions','backupCenter','settings'];
+  'files','comments','notifications','reports','leaderboard','arcade','users','rolesPermissions','backupCenter','settings'];
 function moduleEnabled(key, appSettings){
   const en = appSettings && appSettings.enabledModules;
   if(!Array.isArray(en)) return true;            // null/missing → show all
@@ -2417,6 +2420,9 @@ function filterRecordsByRole(coll, records, role, user, db){
   if(!user) return records;
   role = aliasRole(role);
   if(role==='Admin') return records;
+  // Employee reports contain HR/performance data. Keep them out of the generic
+  // Reports module for Sales/Marketing/Finance and expose them only to HR/Admin.
+  if(coll==='reports' && role!=='HR') return records.filter(r=>r.reportKind!=='Employee');
   if(role==='Client'){
     // DEFAULT-DENY: a client may only ever see rows tied to their own clientId. Anything not
     // explicitly whitelisted below returns [] — so adding a new internal collection can never
@@ -2876,6 +2882,109 @@ async function emailPayslip(p, emp, onSent){
     alert((ar?'الإرسال فشل: ':'Send failed: ')+(err&&err.message||err)+'\n\n'+(ar?'اتأكد إن إشعارات الإيميل مفعّلة في الإعدادات.':'Check that email notifications are enabled in Settings.'));
   }
 }
+
+/* ============================ EMPLOYEE REPORTS ============================ */
+// Employee reports share the existing `reports` collection with client reports.
+// Automatic reports use a deterministic id, so opening the app on two devices can
+// never create duplicates for the same employee/month.
+function previousMonthISO(ref){
+  const p=String(ref||thisMonth()).split('-').map(Number);
+  const d=new Date(p[0]||new Date().getFullYear(),(p[1]||1)-2,1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function employeeReportAutoId(employeeId,period){
+  return ('erp-auto-'+String(period||'')+'-'+String(employeeId||'')).replace(/[^a-zA-Z0-9_-]/g,'-');
+}
+function employeeReportLanguage(report){
+  const l=report&&report.language;
+  return (l==='ar'||l==='Arabic'||l==='العربية')?'ar':'en';
+}
+function employeeReportMetrics(db,emp,report){
+  const period=/^\d{4}-\d{2}$/.test(String(report&&report.period||''))?report.period:thisMonth();
+  const parts=period.split('-').map(Number), lastDay=new Date(parts[0],parts[1],0).getDate();
+  const from=period+'-01', to=period+'-'+String(lastDay).padStart(2,'0');
+  const inPeriod=v=>String(v||'').slice(0,7)===period;
+  const completedStatuses=['Done','Delivered','Approved','Completed','Closed'];
+  const closedStatuses=[...completedStatuses,'Cancelled'];
+  const assigned=(db.tasks||[]).filter(t=>t.assignedTo===emp.id||t.assignedTo===emp.name||t.assignedTo===emp.fullName);
+  const tasks=assigned.filter(t=>[t.completedAt,t.dueDate,t.updatedAt,t.createdAt].some(inPeriod));
+  const completed=tasks.filter(t=>completedStatuses.includes(t.status)).length;
+  const overdue=tasks.filter(t=>t.dueDate&&t.dueDate<=to&&!closedStatuses.includes(t.status)).length;
+  const open=tasks.filter(t=>!closedStatuses.includes(t.status)).length;
+  const attendance=(db.attendance||[]).filter(a=>a.employeeId===emp.id&&inPeriod(a.date));
+  const presentDates=new Set(),lateDates=new Set(),absentDates=new Set(),weekendDates=new Set(); let lateMinutes=0,hours=0;
+  attendance.forEach(a=>{ const c=computeAttendance(a),day=a.date||a.id; if(c.status==='Present'||c.status==='Weekend Work')presentDates.add(day); if(c.lateMin>0){lateDates.add(day);lateMinutes+=c.lateMin;} if(c.status==='Absent')absentDates.add(day); if(c.isWeekend&&a.checkIn)weekendDates.add(day); hours+=Number(c.hours)||0; });
+  const present=presentDates.size, lateDays=lateDates.size, absent=absentDates.size, weekend=weekendDates.size;
+  const overlapDays=(s,e)=>{ if(!s)return 0; const a=new Date(Math.max(Date.parse(s+'T00:00:00Z'),Date.parse(from+'T00:00:00Z'))), b=new Date(Math.min(Date.parse((e||s)+'T00:00:00Z'),Date.parse(to+'T00:00:00Z'))); return isNaN(a)||isNaN(b)||b<a?0:Math.floor((b-a)/86400000)+1; };
+  const leaves=(db.leaves||[]).filter(l=>l.employeeId===emp.id&&l.status==='Approved'&&overlapDays(l.startDate,l.endDate)>0);
+  const leaveDays=leaves.reduce((s,l)=>s+overlapDays(l.startDate,l.endDate),0);
+  const reviews=(db.performanceReviews||[]).filter(r=>r.employeeId===emp.id).slice().sort((a,b)=>String(b.reviewDate||b.createdAt||'').localeCompare(String(a.reviewDate||a.createdAt||'')));
+  const periodReview=reviews.find(r=>inPeriod(r.reviewDate)||String(r.reviewPeriod||'').includes(period))||reviews[0]||null;
+  const payment=(db.employeePayments||[]).find(p=>p.employeeId===emp.id&&p.month===period)||null;
+  const scheduled=monthWorkDays(period);
+  const attendanceRate=scheduled?Math.min(100,Math.round((present/Math.max(1,scheduled))*100)):0;
+  const score=periodReview?(periodReview.overallScore||Math.round(((+periodReview.qualityScore||0)+(+periodReview.speedScore||0)+(+periodReview.communicationScore||0)+(+periodReview.teamworkScore||0)+(+periodReview.creativityScore||0)+(+periodReview.attendanceScore||0))/6)):(Number(emp.performanceScore)||0);
+  return {period,from,to,tasks,completed,overdue,open,attendance,present,lateDays,lateMinutes,hours:Math.round(hours*10)/10,absent,weekend,leaveDays,reviews,review:periodReview,payment,scheduled,attendanceRate,score};
+}
+function employeeReportHTML(report,emp,db){
+  const lang=employeeReportLanguage(report), ar=lang==='ar', m=employeeReportMetrics(db,emp,report);
+  const esc=v=>String(v==null?'':v).replace(/[&<>\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]));
+  const nm=emp.fullName||emp.name||'-', dept=nameById(db.departments,emp.departmentId), manager=nameById(db.employees,emp.managerId);
+  const label=(en,arv)=>ar?arv:en;
+  const card=(title,value,sub,color)=>'<div class="metric"><span>'+esc(title)+'</span><b style="color:'+(color||'#11170d')+'">'+esc(value)+'</b>'+(sub?'<small>'+esc(sub)+'</small>':'')+'</div>';
+  const narrative=(title,text)=>text?('<section><h2>'+esc(title)+'</h2><div class="note">'+esc(text).replace(/\n/g,'<br>')+'</div></section>'):'';
+  const review=m.review||{};
+  const includeSalary=!!report.includeSalary;
+  const pay=m.payment, payNet=pay?(pay.netAmount||empPaymentNet(pay)):0;
+  const modeRaw=report.generationMode||'Manual', statusRaw=report.status||'Draft';
+  const modeText=ar?({Automatic:'تلقائي',Manual:'يدوي'}[modeRaw]||modeRaw):modeRaw;
+  const statusText=ar?({Draft:'مسودة','In Review':'قيد المراجعة',Approved:'معتمد',Sent:'تم الإرسال'}[statusRaw]||statusRaw):statusRaw;
+  const created=report.createdAt?fmtDate(String(report.createdAt).slice(0,10)):fmtDate(todayISO());
+  const title=report.title||(label('Employee report','تقرير موظف')+' — '+nm);
+  const salarySection=includeSalary?('<section><h2>'+label('Compensation','الراتب والمستحقات')+'</h2><div class="metrics">'
+    +card(label('Base salary','الراتب الأساسي'),formatCurrency(emp.salary||0,emp.currency||getAppSettings().currency,lang),label('Current profile value','القيمة الحالية في الملف'))
+    +card(label('Net pay','صافي المستحق'),pay?formatCurrency(payNet,emp.currency||getAppSettings().currency,lang):'—',pay?String(pay.paymentStatus||'Pending'):label('No pay run for period','لا توجد مسيرة راتب للفترة'))
+    +card(label('Bonus / KPI','البونص / KPI'),pay?formatCurrency((Number(pay.bonus)||0)+(Number(pay.kpiAmount)||0),emp.currency||getAppSettings().currency,lang):'—')
+    +'</div></section>'):'';
+  return '<!doctype html><html lang="'+lang+'" dir="'+(ar?'rtl':'ltr')+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    +'<title>'+esc(title)+'</title><style>'
+    +'@page{size:A4;margin:13mm}*{box-sizing:border-box}body{margin:0;background:#eef1ea;color:#11170d;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}main{max-width:820px;margin:24px auto;background:#fff;border:1px solid #dfe4d8;border-radius:18px;overflow:hidden;box-shadow:0 16px 50px rgba(19,26,13,.10)}header{background:#11170d;color:#fff;padding:28px 34px;display:flex;justify-content:space-between;gap:20px;align-items:flex-start}header .brand{font-weight:900;letter-spacing:.18em;color:#c8f31e}header h1{font-size:25px;margin:8px 0 4px}header p{margin:0;color:#b8bea9;font-size:12px}.badge{padding:7px 11px;border:1px solid #465237;border-radius:999px;color:#c8f31e;font-size:11px;font-weight:800;white-space:nowrap}.body{padding:26px 34px 34px}.identity{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;padding:17px 18px;background:#f7f9f3;border:1px solid #e6eadf;border-radius:13px}.fact span,.metric span{display:block;color:#77806c;font-size:9px;text-transform:uppercase;letter-spacing:.12em}.fact b{display:block;margin-top:5px;font-size:13px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{padding:15px;border:1px solid #e5e9df;border-radius:12px;background:#fbfcf9}.metric b{display:block;font-size:22px;margin-top:7px}.metric small{display:block;color:#8a9181;font-size:10px;margin-top:4px}section{margin-top:24px}h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:#66705b;margin:0 0 10px}.note{padding:15px 17px;border-inline-start:4px solid #c8f31e;background:#f7f9f3;border-radius:10px;font-size:13px;line-height:1.75}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:start;color:#78816f;font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:9px;border-bottom:1px solid #dfe4d8}td{padding:10px 9px;border-bottom:1px solid #eef1ea}footer{margin-top:28px;padding-top:14px;border-top:1px solid #e4e8de;color:#8a9181;font-size:9.5px;line-height:1.6}.noprint{position:sticky;top:0;z-index:4;display:flex;justify-content:center;padding:10px;background:rgba(17,23,13,.96)}.noprint button{border:0;border-radius:10px;background:#c8f31e;color:#11170d;font-weight:850;padding:11px 20px;cursor:pointer}@media(max-width:650px){main{margin:0;border-radius:0}.body{padding:20px}.identity,.metrics{grid-template-columns:1fr 1fr}header{padding:22px 20px}}@media print{body{background:#fff}.noprint{display:none}main{margin:0;max-width:none;border:0;box-shadow:none;border-radius:0}.body{padding:22px 0 0}header{print-color-adjust:exact;-webkit-print-color-adjust:exact}.metric,.identity,.note{break-inside:avoid}}</style></head><body>'
+    +'<div class="noprint"><button onclick="window.print()">'+label('Print / Save PDF','طباعة / حفظ PDF')+'</button></div><main>'
+    +'<header><div><div class="brand">MAGNET OS</div><h1>'+esc(title)+'</h1><p>'+label('Period','الفترة')+': '+esc(m.period)+' &nbsp;·&nbsp; '+label('Generated','تاريخ الإنشاء')+': '+esc(created)+'</p></div><div class="badge">'+esc(modeText)+' · '+esc(statusText)+'</div></header>'
+    +'<div class="body"><div class="identity">'
+    +'<div class="fact"><span>'+label('Employee','الموظف')+'</span><b>'+esc(nm)+'</b></div><div class="fact"><span>'+label('Job title','المسمى الوظيفي')+'</span><b>'+esc(emp.jobTitle||emp.role||'—')+'</b></div><div class="fact"><span>'+label('Employee code','كود الموظف')+'</span><b>'+esc(emp.employeeCode||'—')+'</b></div>'
+    +'<div class="fact"><span>'+label('Department','القسم')+'</span><b>'+esc(dept)+'</b></div><div class="fact"><span>'+label('Manager','المدير')+'</span><b>'+esc(manager)+'</b></div><div class="fact"><span>'+label('Work mode','نظام العمل')+'</span><b>'+esc(emp.workMode||'—')+'</b></div></div>'
+    +'<section><h2>'+label('Performance snapshot','ملخص الأداء')+'</h2><div class="metrics">'
+    +card(label('Overall score','التقييم العام'),m.score+'/100','',m.score>=80?'#3e7a16':(m.score>=60?'#b7791f':'#c2410c'))
+    +card(label('Tasks completed','المهام المكتملة'),m.completed,label('of','من')+' '+m.tasks.length)
+    +card(label('Open / overdue','مفتوحة / متأخرة'),m.open+' / '+m.overdue)
+    +card(label('Attendance rate','نسبة الحضور'),m.attendanceRate+'%',m.present+' / '+m.scheduled)
+    +'</div></section>'
+    +'<section><h2>'+label('Attendance & leave','الحضور والإجازات')+'</h2><div class="metrics">'
+    +card(label('Present days','أيام الحضور'),m.present)+card(label('Worked hours','ساعات العمل'),m.hours+'h')+card(label('Late','التأخير'),m.lateMinutes+' min',m.lateDays+' '+label('day(s)','يوم'))+card(label('Approved leave','إجازات معتمدة'),m.leaveDays+' '+label('day(s)','يوم'))
+    +'</div></section>'
+    +salarySection
+    +narrative(label('Manager summary','ملخص المدير'),report.managerSummary)
+    +narrative(label('Strengths','نقاط القوة'),report.strengths||review.strengths)
+    +narrative(label('Areas to improve','نقاط التحسين'),report.improvements||review.improvements)
+    +narrative(label('Next-period goals','أهداف الفترة القادمة'),report.nextGoals||review.goalsNextPeriod)
+    +narrative(label('Additional notes','ملاحظات إضافية'),report.notes)
+    +'<footer>'+label('Automatically calculated from the records currently stored in Magnet OS. Review the draft before sending it to the employee.','تم حساب المؤشرات تلقائيًا من السجلات الموجودة حاليًا في Magnet OS. راجع المسودة قبل إرسالها للموظف.')+'<br>'+label('Prepared by','إعداد')+': '+esc(report.createdByName||'Magnet OS')+'</footer></div></main></body></html>';
+}
+function printEmployeeReport(report,emp,db,includeSalaryAllowed){
+  const safe=Object.assign({},report,{includeSalary:!!report.includeSalary&&!!includeSalaryAllowed});
+  try{ const w=window.open('','_blank'); if(w){ w.document.write(employeeReportHTML(safe,emp,db)); w.document.close(); } }catch(_){ }
+}
+async function emailEmployeeReport(report,emp,db,includeSalaryAllowed,onSent){
+  const ar=getLang()==='ar', to=(emp&&(emp.email||emp.loginEmail))||'';
+  if(!to){ alert(ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add it to the profile.'); return; }
+  const safe=Object.assign({},report,{includeSalary:!!report.includeSalary&&!!includeSalaryAllowed});
+  try{
+    const mailHTML=employeeReportHTML(safe,emp,db).replace(/<div class="noprint">[\s\S]*?<\/div>/,'');
+    await sendEmail({to,subject:(ar?'تقرير الموظف — ':'Employee report — ')+(report.period||''),html:mailHTML});
+    showProPopup('syncSuccess',(ar?'اتبعتت لـ ':'Sent to ')+to); if(onSent)onSent();
+  }catch(err){ alert((ar?'الإرسال فشل: ':'Send failed: ')+(err&&err.message||err)); }
+}
 // workload classification
 function workloadTag(pct){ if(pct>100) return {label:'Overloaded',type:'neg'}; if(pct>=81) return {label:'Full',type:'warn'}; if(pct>=51) return {label:'Healthy',type:'ok'}; return {label:'Light',type:''}; }
 
@@ -2981,6 +3090,11 @@ function normalizeChatMessage(m){ m=m||{}; return Object.assign({}, m, {
   senderId:m.senderId||'', senderName:m.senderName||'', senderRole:m.senderRole||'', message:m.message||'', attachments:m.attachments||'',
   visibility:m.visibility||'Internal Only', readBy:m.readBy||[],
 }); }
+function normalizeReport(r){ r=r||{}; return Object.assign({},r,{
+  reportKind:r.reportKind||(r.employeeId?'Employee':'Client'), generationMode:r.generationMode||'Manual',
+  type:r.type||'Monthly', status:r.status||'Draft', language:r.language||(getLang()==='ar'?'Arabic':'English'),
+  includeSalary:r.includeSalary===true,
+}); }
 // availability defaults layered onto employees (called from normalizeEmployee path via normalizeAdvancedData)
 function normalizeEmployeeAvailability(e){ e=e||{}; return Object.assign({}, e, {
   availabilityStatus:e.availabilityStatus||'Available', activeNow:e.activeNow!=null?e.activeNow:false,
@@ -2990,10 +3104,11 @@ function normalizeEmployeeAvailability(e){ e=e||{}; return Object.assign({}, e, 
 }); }
 function normalizeAdvancedData(state){
   state=state||{};
-  ['approvalRequests','clientAssets','chatMessages'].forEach(c=>{ if(!Array.isArray(state[c])) state[c]=[]; });
+  ['approvalRequests','clientAssets','chatMessages','reports'].forEach(c=>{ if(!Array.isArray(state[c])) state[c]=[]; });
   state.approvalRequests=state.approvalRequests.map(normalizeRequest);
   state.clientAssets=state.clientAssets.map(normalizeClientAsset);
   state.chatMessages=state.chatMessages.map(normalizeChatMessage);
+  state.reports=state.reports.map(normalizeReport);
   if(Array.isArray(state.employees)) state.employees=state.employees.map(normalizeEmployeeAvailability);
   return state;
 }
@@ -4762,6 +4877,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const allowed = (schema||[]).filter(f=>{
     if(f.admin && !(role==='Admin')) return false;
     if(f.finance && !(role==='Admin'||role==='Accountant')) return false;
+    if(f.salary && !canSeeSalary(role)) return false;
     if(typeof f.showIf==='function' && !f.showIf(rec)) return false;
     return true;
   });
@@ -5891,6 +6007,38 @@ function App(){
     addActivity(coll, rec.id, 'created', rec.name||rec.title||rec.invoiceNumber||'');
     return rec;
   };
+  // Monthly employee-report automation: on the first eligible HR/Admin session
+  // in a new month, create one reviewable DRAFT for every active employee for
+  // the previous month. Nothing is emailed automatically; a human must approve
+  // and send it. Cloud is checked first to protect an already edited draft.
+  useEffect(()=>{
+    if(!authReady||!authUser||appSettings.employeeReportsAuto===false) return;
+    if(!(isAdminRole(role)||aliasRole(role)==='HR') || !userCanEditSection(authUser,'reports',role)) return;
+    let cancelled=false;
+    const timer=setTimeout(()=>{ (async()=>{
+      const period=previousMonthISO(), active=(db.employees||[]).filter(e=>['Active','Probation','Remote','On Leave'].includes(e.status));
+      if(!active.length) return;
+      let known=(db.reports||[]).slice();
+      const blockedIds=new Set(Array.isArray(appSettings.employeeReportAutoSkipped)?appSettings.employeeReportAutoSkipped:[]);
+      if(cloudOn){ try{ const remote=await cloudLoadColl(cfg.current,'reports'); if(Array.isArray(remote)){ remote.forEach(r=>r&&r.id&&blockedIds.add(r.id)); known=mergeColl(known,remote); } }catch(_){ } }
+      if(cancelled)return;
+      known.forEach(r=>r&&r.id&&blockedIds.add(r.id));
+      const reportLanguage=appSettings.employeeReportLanguage||(lang==='ar'?'Arabic':'English');
+      const fresh=active.filter(e=>!blockedIds.has(employeeReportAutoId(e.id,period))).map(e=>({
+        id:employeeReportAutoId(e.id,period), reportKind:'Employee', employeeId:e.id,
+        title:(reportLanguage==='Arabic'?'تقرير الموظف':'Employee report')+' — '+(e.fullName||e.name||e.employeeCode||'')+' — '+period,
+        period, type:'Monthly', language:reportLanguage, includeSalary:false,
+        generationMode:'Automatic', status:'Draft', managerSummary:'', strengths:'', improvements:'', nextGoals:'', notes:'',
+        createdAt:nowISO(), updatedAt:nowISO(), createdBy:user.id, createdByName:user.name
+      }));
+      if(!fresh.length)return;
+      setDb(d=>({...d,reports:[...(d.reports||[]),...fresh.filter(r=>!(d.reports||[]).some(x=>x.id===r.id))]}));
+      fresh.forEach(r=>cloudUpsert(cfg.current,'reports',r));
+      triggerWebhook('monthlyReportWebhook',{kind:'Employee',period,reports:fresh});
+      showProPopup('syncSuccess',lang==='ar'?('تم إنشاء '+fresh.length+' تقرير موظف تلقائيًا كمسودات'):('Created '+fresh.length+' employee report draft(s) automatically'));
+    })(); },1800);
+    return ()=>{cancelled=true;clearTimeout(timer);};
+  },[authReady,authUser&&authUser.id,role,appSettings.employeeReportsAuto,appSettings.employeeReportLanguage,appSettings.employeeReportAutoSkipped,db.employees,db.reports.length,cloudOn]); // eslint-disable-line
   // Collections too high-frequency / system to audit — logging them would flood the trail.
   const NO_AUDIT = new Set(['notifications','activityLogs','chatMessages','comments','gameScores','gameStats','_ratelimit','attendance','availability']);
   // Cross-manager accountability: notify (in-app + email) the OTHER managers when a manager deletes anything
@@ -6295,6 +6443,7 @@ function App(){
   // permission gate: returns true if allowed, else shows a professional message.
   const requirePerm = (module, action)=>{ if(can(role,module,action)) return true; showProPopup('permissionDenied'); return false; };
   const ctx = { db, role, user, brand, cloudOn, cfg:cfg.current, lang, currency, appSettings, applyAppSettings, can, requirePerm,
+    canEditSection:(section)=>userCanEditSection(authUser,section,role),
     canDelete:(section)=> isAdminRole(role) || (!PROTECTED_DELETE.includes(section) && userCanEditSection(authUser, section, role)),
     delRec:(coll,id,name)=>{ if(confirm((lang==='ar'?'حذف ':'Delete ')+(name||(lang==='ar'?'هذا السجل':'this record'))+(lang==='ar'?'؟ لا يمكن التراجع.':'? This cannot be undone.'))) deleteRecord(coll,id); },
     createRecord, updateRecord, deleteRecord, getRecords, addComment, addActivity, addNotification, awardPoints, upsertRecord,
@@ -6636,7 +6785,22 @@ const FORM_SCHEMAS = {
   teams:[{k:'name',label:'Team Name',req:true},{k:'department',label:'Department',type:'select',opts:['Management','Sales','Account Management','Project Management','Creative','Design','Content','Media Buying','Finance','Operations','Development']},{k:'type',label:'Team Type',type:'select',opts:TEAM_TYPES},{k:'teamLeadId',label:'Team Lead',type:'ref',coll:'employees'},{k:'members',label:'Team Members',type:'multiref',coll:'employees'},{k:'assignedClients',label:'Assigned Clients',type:'multiref',coll:'clients'},{k:'description',label:'Description',type:'textarea'},{k:'color',label:'Color',type:'select',opts:TEAM_COLORS},{k:'status',label:'Status',type:'select',opts:['Active','Inactive']},{k:'notes',label:'Notes',type:'textarea'}],
   contentCalendar:[{k:'title',label:'Title',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'contentType',label:'Content Type',type:'select',opts:CONTENT_TYPES},{k:'platform',label:'Platform',type:'select',opts:CONTENT_PLATFORMS},{k:'campaignName',label:'Campaign'},{k:'scheduledDate',label:'Scheduled Date',type:'date',req:true},{k:'scheduledTime',label:'Scheduled Time'},{k:'deadline',label:'Deadline',type:'date'},{k:'assignedTo',label:'Assigned To',type:'ref',coll:'employees'},{k:'priority',label:'Priority',type:'select',opts:['Low','Normal','High','Urgent']},{k:'status',label:'Status',type:'select',opts:CONTENT_STATUSES},{k:'approvalStatus',label:'Approval Status',type:'select',opts:['','Pending','Approved','Needs Edits','Rejected']},{k:'caption',label:'Caption',type:'textarea'},{k:'notes',label:'Notes',type:'textarea'},{k:'assetUrl',label:'Asset URL'}],
   renewals:[{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'type',label:'Type',type:'select',opts:['Renewal','Upsell','Cross-sell']},{k:'status',label:'Stage',type:'select',opts:['Identified','Contacted','Proposal Sent','Negotiation','Won','Lost']},{k:'currentValue',label:'Current value',type:'number'},{k:'targetValue',label:'Target value',type:'number'},{k:'renewalDate',label:'Renewal date',type:'date'},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'}],
-  reports:[{k:'title',label:'Report title',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'period',label:'Period (YYYY-MM)'},{k:'type',label:'Type',type:'select',opts:['Monthly','Campaign','Quarterly']},{k:'status',label:'Status',type:'select',opts:['Draft','In Review','Sent']}],
+  reports:[
+    {k:'reportKind',label:'Report for',type:'select',opts:['Client','Employee'],req:true,group:'Report'},
+    {k:'title',label:'Report title',req:true,group:'Report'},
+    {k:'clientId',label:'Client',type:'ref',coll:'clients',group:'Report',showIf:r=>(r.reportKind||'Client')==='Client',reqIf:r=>(r.reportKind||'Client')==='Client'},
+    {k:'employeeId',label:'Employee',type:'ref',coll:'employees',group:'Report',showIf:r=>r.reportKind==='Employee',reqIf:r=>r.reportKind==='Employee'},
+    {k:'period',label:'Period (YYYY-MM)',type:'month',req:true,group:'Report'},
+    {k:'type',label:'Type',type:'select',opts:['Monthly','Campaign','Quarterly','Performance'],group:'Report'},
+    {k:'language',label:'Report language',type:'select',opts:['Arabic','English'],showIf:r=>r.reportKind==='Employee',group:'Report'},
+    {k:'includeSalary',label:'Include salary and payments',type:'checkbox',salary:true,showIf:r=>r.reportKind==='Employee',group:'Report'},
+    {k:'status',label:'Status',type:'select',opts:['Draft','In Review','Approved','Sent'],group:'Report'},
+    {k:'managerSummary',label:'Manager summary',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
+    {k:'strengths',label:'Strengths',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
+    {k:'improvements',label:'Areas to improve',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
+    {k:'nextGoals',label:'Next-period goals',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
+    {k:'notes',label:'Notes',type:'textarea',group:'Narrative'},
+  ],
   approvalRequests:(function(){
     // Conditional fields keep the everyday flows tiny: a leave/permission request
     // shows only its own dates and hides the business Links group entirely.
@@ -8190,7 +8354,10 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
         <div class="flex center" style=${{gap:14}}><${Avatar} name=${e.fullName} size=${46}/>
           <div><h3 style=${{fontSize:18}}>${e.fullName} <span class="muted" style=${{fontWeight:500,fontSize:13}}>· ${e.employeeCode}</span></h3>
             <div class="muted" style=${{fontSize:12.5,marginTop:2}}>${e.jobTitle} · ${nameById(db.departments,e.departmentId)}</div></div></div>
-        <div class="flex center gap8">${ce&&html`<button class="btn btn-ghost" style=${{padding:'7px 12px'}} onClick=${()=>{onClose();ctx.openModal('employees',e);}}>Edit</button>`}
+        <div class="flex center gap8">${ctx.canEditSection('reports')&&html`<button class="btn btn-pri" style=${{padding:'7px 12px'}} onClick=${()=>{onClose();ctx.openModal('reports',{
+            reportKind:'Employee',employeeId:e.id,title:(ctx.lang==='ar'?'تقرير الموظف':'Employee report')+' — '+(e.fullName||e.name||'')+' — '+thisMonth(),period:thisMonth(),type:'Monthly',language:ctx.lang==='ar'?'Arabic':'English',includeSalary:false,generationMode:'Manual',status:'Draft',createdByName:ctx.user.name
+          },FORM_SCHEMAS.reports,ctx.lang==='ar'?'إنشاء تقرير موظف':'Create employee report');}}>${ctx.lang==='ar'?'تقرير جديد':'New report'}</button>`}
+          ${ce&&html`<button class="btn btn-ghost" style=${{padding:'7px 12px'}} onClick=${()=>{onClose();ctx.openModal('employees',e);}}>Edit</button>`}
           <button class="icon-btn" onClick=${onClose}><span style=${{fontSize:18}}>×</span></button></div>
       </div>
       <div class="emp-tabs">${TABS.map(t=>html`<button key=${t} class="emp-tab ${tab===t?'on':''}" onClick=${()=>setTab(t)}>${t}</button>`)}</div>
@@ -8391,12 +8558,43 @@ function LeavesView({ ctx, ce }){
 }
 
 function ReportsView({ ctx, visible, ce }){
-  const { db } = ctx;
+  const { db } = ctx; const ar=ctx.lang==='ar';
+  const [kind,setKind]=useState('All');
+  const all=visible('reports').slice().sort((a,b)=>String(b.createdAt||b.period||'').localeCompare(String(a.createdAt||a.period||'')));
+  const rows=kind==='All'?all:all.filter(r=>(r.reportKind||'Client')===kind);
+  const newClient=()=>ctx.openModal('reports',{reportKind:'Client',title:(ar?'تقرير عميل — ':'Client report — ')+thisMonth(),period:thisMonth(),type:'Monthly',generationMode:'Manual',status:'Draft'},FORM_SCHEMAS.reports,ar?'تقرير عميل جديد':'New client report');
+  const newEmployee=()=>ctx.openModal('reports',{reportKind:'Employee',title:(ar?'تقرير موظف — ':'Employee report — ')+thisMonth(),period:thisMonth(),type:'Monthly',language:ar?'Arabic':'English',includeSalary:false,generationMode:'Manual',status:'Draft',createdByName:ctx.user.name},FORM_SCHEMAS.reports,ar?'تقرير موظف جديد':'New employee report');
+  const deleteReport=(r)=>{
+    if(!confirm((ar?'حذف ':'Delete ')+(r.title||(ar?'التقرير':'report'))+(ar?'؟ لا يمكن التراجع.':'? This cannot be undone.')))return;
+    if(r.generationMode==='Automatic'){
+      const skipped=[...(Array.isArray(ctx.appSettings.employeeReportAutoSkipped)?ctx.appSettings.employeeReportAutoSkipped:[]),r.id];
+      ctx.applyAppSettings({employeeReportAutoSkipped:[...new Set(skipped)].slice(-500)});
+    }
+    ctx.deleteRecord('reports',r.id);
+  };
+  const extra=(r)=>{ if(r.reportKind!=='Employee')return null; const emp=byId(db.employees,r.employeeId); if(!emp)return html`<span class="muted">${ar?'الموظف غير موجود':'Employee missing'}</span>`; const salaryAllowed=canSeeSalary(ctx.role);
+    return html`<span class="flex gap8" style=${{justifyContent:'flex-end',flexWrap:'wrap'}}>
+      <button class="mini pri" onClick=${()=>printEmployeeReport(r,emp,db,salaryAllowed)}>${ar?'معاينة / PDF':'Preview / PDF'}</button>
+      ${r.status!=='Approved'&&ce?html`<button class="mini" onClick=${()=>ctx.updateRecord('reports',r.id,{status:'Approved',approvedAt:nowISO()})}>${ar?'اعتماد':'Approve'}</button>`:''}
+      <button class="mini" onClick=${()=>emailEmployeeReport(r,emp,db,salaryAllowed,()=>ctx.updateRecord('reports',r.id,{status:'Sent',sentAt:nowISO()}))}>${ar?'إيميل':'Email'}</button>
+    </span>`; };
   return html`<div class="view">
-    <${Head} eyebrow="Operations" title="Reports" desc="Monthly client reports.">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>{const r=ctx.createRecord('reports',{title:'New Report',period:thisMonth(),type:'Monthly',status:'Draft'});ctx.triggerWebhook&&0;triggerWebhook('monthlyReportWebhook',{report:r});}}>${React.createElement(Icon.plus)} New report</button>`}<//>
-    <${DataTable} db=${db} rows=${visible('reports')} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('reports',r)):null}
-      cols=${[{k:'title',label:'Report'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'period',label:'Period'},{k:'type',label:'Type'},{k:'status',label:'Status',tag:true}]}/></div>`;
+    <${Head} eyebrow="Operations" title=${ar?'التقارير':'Reports'} desc=${ar?'تقارير العملاء والموظفين — يدويًا أو مسودات شهرية تلقائية.':'Client and employee reports — manual or automatic monthly drafts.'}>
+      ${ce&&html`<button class="btn btn-ghost" onClick=${newClient}>${React.createElement(Icon.plus)} ${ar?'تقرير عميل':'Client report'}</button><button class="btn btn-pri" onClick=${newEmployee}>${React.createElement(Icon.plus)} ${ar?'تقرير موظف':'Employee report'}</button>`}<//>
+
+    ${(isAdminRole(ctx.role)||aliasRole(ctx.role)==='HR')&&html`<${Panel} className="mb18">
+      <div class="flex between center" style=${{gap:16,flexWrap:'wrap'}}>
+        <div><b>${ar?'التقارير الشهرية التلقائية':'Automatic monthly employee reports'}</b><div class="muted" style=${{fontSize:11.5,marginTop:4}}>${ar?'في أول دخول كل شهر، ينشئ السيستم مسودة للشهر السابق لكل موظف نشط. لا يتم إرسال أي شيء قبل المراجعة.':'On the first eligible login each month, the system creates a previous-month draft for every active employee. Nothing is sent before review.'}</div></div>
+        <div class="flex center gap8">
+          <select class="sel" disabled=${!ce} value=${ctx.appSettings.employeeReportLanguage||(ar?'Arabic':'English')} onChange=${e=>ctx.applyAppSettings({employeeReportLanguage:e.target.value})}><option>Arabic</option><option>English</option></select>
+          <label class="ver-toggle" style=${{margin:0}}><input type="checkbox" disabled=${!ce} checked=${ctx.appSettings.employeeReportsAuto!==false} onChange=${e=>ctx.applyAppSettings({employeeReportsAuto:e.target.checked})}/> ${ar?'تفعيل':'Enabled'}</label>
+        </div>
+      </div><//>`}
+
+    <div class="seg" style=${{marginBottom:14}}>${['All','Employee','Client'].map(k=>html`<button key=${k} class=${kind===k?'on':''} onClick=${()=>setKind(k)}>${ar?({All:'الكل',Employee:'الموظفون',Client:'العملاء'}[k]):k} · ${k==='All'?all.length:all.filter(r=>(r.reportKind||'Client')===k).length}</button>`)}</div>
+    <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('reports',r)):null}
+      onDelete=${ce?deleteReport:null} extraActions=${extra}
+      cols=${[{k:'title',label:'Report'},{k:'reportKind',label:'For',render:r=>(r.reportKind||'Client')==='Employee'?(nameById(db.employees,r.employeeId)||'—'):(nameById(db.clients,r.clientId)||'—')},{k:'period',label:'Period'},{k:'generationMode',label:'Mode',render:r=>r.generationMode||'Manual'},{k:'type',label:'Type'},{k:'status',label:'Status',tag:true}]}/></div>`;
 }
 
 function DocView({ coll, title, ctx, visible, ce, gen, cols }){
