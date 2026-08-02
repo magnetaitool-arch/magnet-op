@@ -9119,6 +9119,17 @@ function TasksView({ ctx, visible, ce }){
   const cc = ce && canCreateTasks(role); // only managers / account managers create tasks
   const [view,setView]=useState('All Tasks'); const [layout,setLayout]=useState('board'); const [sel,setSel]=useState(null);
   const all=visible('tasks');
+  // Even when an employee has view-only module access, they must be able to
+  // complete work assigned to them. This is intentionally status-only: full
+  // editing, reassignment and deletion still require the normal task permission.
+  const canChangeOwnStatus=(task)=>ce||assignedToMe(task&&task.assignedTo,user,db);
+  const markOwnTaskDone=(task)=>{
+    if(!task||task.status==='Done'||!canChangeOwnStatus(task))return;
+    ctx.updateRecord('tasks',task.id,{status:'Done',completedAt:nowISO(),completedBy:user&&user.id||''});
+    ctx.addActivity('tasks',task.id,'status → Done',task.title||task.name||'');
+    if(assignedToMe(task.assignedTo,user,db))ctx.awardPoints(POINTS.taskDone,'Task done');
+    showProPopup('taskCompleted',task.title||task.name||'');
+  };
   const wk=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
   const VIEWS={
     'My Tasks':t=>assignedToMe(t.assignedTo,user,db),
@@ -9152,8 +9163,9 @@ function TasksView({ ctx, visible, ce }){
               ${t.priority==='Urgent'||t.priority==='High'?html`<span class="mono" style=${{fontSize:9.5,color:t.priority==='Urgent'?'var(--neg)':'var(--warn)'}}>${t.priority}</span>`:''}</div>
             <div class="muted" style=${{fontSize:11,marginTop:5}}>${nameById(db.projects,t.projectId)}</div>
             <div class="flex between center" style=${{marginTop:8}}><span class="muted" style=${{fontSize:11}}>${nameById(db.employees,t.assignedTo)}</span>
-              ${d.overdue?html`<span class="mono" style=${{fontSize:10,color:'var(--neg)'}}>${d.delayDays}d late</span>`:t.dueDate?html`<span class="muted" style=${{fontSize:10}}>${fmtDate(t.dueDate)}</span>`:''}</div></div>`;}}/>`
-      : html`<${DataTable} db=${db} rows=${rows} extraActions=${t=>html`<button class="mini" onClick=${()=>setSel(t)}>${ctx.lang==='ar'?'فتح':'Open'}</button>`}
+              ${d.overdue?html`<span class="mono" style=${{fontSize:10,color:'var(--neg)'}}>${d.delayDays}d late</span>`:t.dueDate?html`<span class="muted" style=${{fontSize:10}}>${fmtDate(t.dueDate)}</span>`:''}</div>
+            ${t.status!=='Done'&&canChangeOwnStatus(t)&&html`<button class="mini pri" style=${{marginTop:10,width:'100%'}} onClick=${e=>{e.stopPropagation();markOwnTaskDone(t);}}>✓ ${ctx.lang==='ar'?'تم':'Done'}</button>`}</div>`;}}/>`
+      : html`<${DataTable} db=${db} rows=${rows} extraActions=${t=>html`<span class="flex gap8" style=${{justifyContent:'flex-end'}}><button class="mini" onClick=${()=>setSel(t)}>${ctx.lang==='ar'?'فتح':'Open'}</button>${t.status!=='Done'&&canChangeOwnStatus(t)&&html`<button class="mini pri" onClick=${()=>markOwnTaskDone(t)}>✓ ${ctx.lang==='ar'?'تم':'Done'}</button>`}</span>`}
           canEditFlag=${ce} onDelete=${canCreateTasks(role)?(r=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة؟':'Delete this task?'))) ctx.deleteRecord('tasks',r.id); }):null}
           cols=${[{k:'title',label:'Task',render:r=>r.title||r.name},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'projectId',label:'Project',ref:true,coll:'projects'},{k:'assignedTo',label:'Assignee',ref:true,coll:'employees'},{k:'status',label:'Status',tag:true},{k:'priority',label:'Priority'},{k:'dueDate',label:'Due',render:r=>{const d=calculateTaskDelay(r);return html`<span style=${{color:d.overdue?'var(--neg)':'var(--ink-2)'}}>${fmtDate(r.dueDate)}</span>`;}}]}/>`}
     ${sel&&html`<${TaskDetail} ctx=${ctx} task=${sel} ce=${ce} onClose=${()=>setSel(null)}/>`}
@@ -9161,14 +9173,19 @@ function TasksView({ ctx, visible, ce }){
 }
 
 function TaskDetail({ ctx, task, ce, onClose }){
-  const { db, role } = ctx;
+  const { db, role, user } = ctx;
   const t = normalizeTask(byId(db.tasks,task.id)||task);
   // Assignees can change status; only managers (task creators) may edit-all or delete a task.
   const canManage = canCreateTasks(role) || (ctx.user && t.createdBy && t.createdBy===ctx.user.id);
+  const canChangeStatus = ce || assignedToMe(t.assignedTo,user,db);
   const [newCheck,setNewCheck]=useState('');
   const delay=calculateTaskDelay(t);
   const upd=(p)=>ctx.updateRecord('tasks',t.id,p);
-  const setStatus=(s)=>{ const wasDone=t.status==='Done'; upd({status:s}); ctx.addActivity('tasks',t.id,'status → '+s,t.title); if(s==='Done'&&!wasDone) ctx.awardPoints(POINTS.taskDone,'Task done'); };
+  const setStatus=(s)=>{ if(!canChangeStatus)return; const wasDone=t.status==='Done', patch={status:s};
+    if(s==='Done'){patch.completedAt=nowISO();patch.completedBy=user&&user.id||'';} else if(wasDone){patch.completedAt='';patch.completedBy='';}
+    upd(patch); ctx.addActivity('tasks',t.id,'status → '+s,t.title);
+    if(s==='Done'&&!wasDone){ if(assignedToMe(t.assignedTo,user,db))ctx.awardPoints(POINTS.taskDone,'Task done'); showProPopup('taskCompleted',t.title||t.name||''); }
+  };
   const toggleCheck=(i)=>{ const cl=(t.checklist||[]).map((x,idx)=>idx===i?Object.assign({},x,{done:!x.done}):x); upd({checklist:cl}); };
   const addCheck=()=>{ if(!newCheck)return; upd({checklist:[...(t.checklist||[]),{text:newCheck,done:false}]}); setNewCheck(''); };
   const subtasks=(db.tasks||[]).filter(x=>x.parentTaskId===t.id);
@@ -9180,12 +9197,12 @@ function TaskDetail({ ctx, task, ce, onClose }){
       <div class="modal-b" style=${{maxHeight:'64vh',overflowY:'auto'}}>
         <div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:16}}>
           ${_stat('Status',t.status)}${_stat('Priority',t.priority)}${_stat('Assignee',nameById(db.employees,t.assignedTo))}${_stat('Due',fmtDate(t.dueDate),delay.overdue?'var(--neg)':null)}${t.taskType?_stat('Type',t.taskType):''}</div>
-        ${ce&&html`<div class="flex gap8" style=${{flexWrap:'wrap',marginBottom:16}}>
-          <button class="mini" onClick=${()=>setStatus('In Progress')}>Start</button>
-          <button class="mini" onClick=${()=>setStatus('Internal Review')}>→ Internal Review</button>
-          <button class="mini" onClick=${()=>setStatus('Client Review')}>→ Client Review</button>
-          <button class="mini pri" onClick=${()=>setStatus('Done')}>Mark Done</button>
-          <button class="mini" onClick=${()=>setStatus('Blocked')}>Block</button>
+        ${canChangeStatus&&html`<div class="flex gap8" style=${{flexWrap:'wrap',marginBottom:16}}>
+          <button class="mini" onClick=${()=>setStatus('In Progress')}>${ctx.lang==='ar'?'ابدأ':'Start'}</button>
+          <button class="mini" onClick=${()=>setStatus('Internal Review')}>→ ${ctx.lang==='ar'?'مراجعة داخلية':'Internal Review'}</button>
+          <button class="mini" onClick=${()=>setStatus('Client Review')}>→ ${ctx.lang==='ar'?'مراجعة العميل':'Client Review'}</button>
+          <button class="mini pri" onClick=${()=>setStatus('Done')}>✓ ${ctx.lang==='ar'?'تم':'Mark Done'}</button>
+          <button class="mini" onClick=${()=>setStatus('Blocked')}>${ctx.lang==='ar'?'متعطلة':'Block'}</button>
           ${canManage&&html`<button class="btn btn-ghost" style=${{padding:'5px 10px'}} onClick=${()=>{onClose();ctx.openModal('tasks',t);}}>Edit all fields</button>
           <button class="btn btn-ghost danger" style=${{padding:'5px 10px'}} onClick=${()=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة نهائيًا؟':'Delete this task permanently?'))){ ctx.deleteRecord('tasks',t.id); onClose(); } }}>${ctx.lang==='ar'?'حذف':'Delete'}</button>`}</div>`}
         ${t.brief?html`<div class="panel" style=${{padding:12,marginBottom:14}}><div class="eyebrow">Brief</div><div style=${{marginTop:6,fontSize:13,lineHeight:1.6,whiteSpace:'pre-wrap'}}>${t.brief}</div></div>`:''}
