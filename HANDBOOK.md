@@ -93,6 +93,14 @@ Quick guide (✏️ edit · 👁️ view · 🚫 hidden). Owner/Admin = full edi
 4. On approval: a **Leave** is logged in the HR calendar; a **Lateness** marks today's attendance as *Late*.
 - Who can approve time-off: **Admin, Manager, HR, Marketing Director, Art Director**, or the specific approver chosen on the request.
 
+### Employee reports (manual + automatic)
+
+- **Manual:** Employees → open an employee → **New report** → choose month/language, add the manager narrative, save, then use **Reports → Preview / PDF**.
+- **Automatic:** on the first eligible Admin/HR login each month, Magnet OS creates one **Draft** for the previous month for every active employee. It calculates attendance, lateness, leave, tasks and performance from stored records.
+- Automatic drafts are never emailed automatically. Review, approve, then send from Reports.
+- Reports can be edited or deleted after confirmation. A deleted automatic report is suppressed for that employee/month and will not be regenerated.
+- Salary/payments are optional and remain protected by the salary permission.
+
 ## 9. Playbook: Tasks & delivery
 - **Tasks** (Trello board) → drag across stages; assign to a team member.
 - **Deliverables** → submit for **Client Review**; client Approves or Requests revision from their portal.
