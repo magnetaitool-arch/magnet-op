@@ -49,7 +49,14 @@ const lib = require('./_lib');
 
   console.log('\n[email endpoint]');
   try {
-    const r = await fetch('https://magnet-op.vercel.app/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    // Browser traffic must carry an explicitly allowed Origin. An origin-less
+    // request now correctly returns 403 unless it also carries the shared
+    // server secret, so use the production origin for this payload check.
+    const r = await fetch('https://magnet-op.vercel.app/api/send-email', {
+      method: 'POST',
+      headers: { Origin: 'https://magnet-op.vercel.app', 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
     // 400 (missing to/subject) means the function is live; 500 means key missing.
     if (r.status === 400) ok('/api/send-email live (validates input)');
     else if (r.status === 500) w('/api/send-email live but RESEND_API_KEY not set on host');
