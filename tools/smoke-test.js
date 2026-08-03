@@ -58,6 +58,21 @@ console.log('\n[5] dangerous-pattern scan');
 /Password must be at least 10 characters\./.test(html) ? ok('frontend enforces strong passwords') : bad('frontend password policy is weaker than expected');
 /sb_secret_|service_role.{0,40}=\s*['"]eyJ/.test(html) ? bad('possible service_role/secret key in index.html') : ok('no service_role/secret key in index.html');
 /\/\.netlify\/functions\/intake/.test(html) ? bad('index.html calls netlify intake (Vercel default) — use /api/intake') : ok('no hardcoded netlify intake call in index.html');
+/sendTaskAssignmentEmail\(created,false\)/.test(html) && /assignmentEmailStatus:result\.status/.test(html)
+  ? ok('task assignments trigger tracked email delivery')
+  : bad('task assignment email tracking is missing');
+/payslipEmailStatus/.test(html) && /Confirm the salary was actually paid/.test(html)
+  ? ok('payslip delivery is separated from explicit payment confirmation')
+  : bad('payslip email may still be conflated with salary payment');
+/attendance already exists for this employee and date/i.test(html)
+  ? ok('duplicate employee/date attendance is blocked')
+  : bad('duplicate attendance guard is missing');
+/lateGraceMinutes/.test(html) && /workStartTime/.test(html) && /weekendDays/.test(html)
+  ? ok('attendance schedule and grace are configurable')
+  : bad('attendance rules are not configurable');
+/emailDeliveryStatus/.test(html) && /employeeReportsAuto/.test(html)
+  ? ok('employee reports support automation and tracked delivery')
+  : bad('employee report automation/delivery tracking is missing');
 
 console.log('\n[6] inline app scripts parse');
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];

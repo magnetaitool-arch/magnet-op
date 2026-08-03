@@ -1818,7 +1818,7 @@ const CURRENCIES = {
   EUR:{ code:'EUR', symbol:'€',  en:'EUR', ar:'يورو', after:false },
   KWD:{ code:'KWD', symbol:'د.ك', en:'KWD', ar:'د.ك',  after:true },
 };
-function getAppSettings(){ try { return Object.assign({ currency:'EGP', language:'en', theme:'dark' }, JSON.parse(store.get(APP_SETTINGS_KEY)||'{}')); } catch(e){ return { currency:'EGP', language:'en', theme:'dark' }; } }
+function getAppSettings(){ try { return Object.assign({ currency:'EGP', language:'en', theme:'dark', emailNotifications:true }, JSON.parse(store.get(APP_SETTINGS_KEY)||'{}')); } catch(e){ return { currency:'EGP', language:'en', theme:'dark', emailNotifications:true }; } }
 function setAppSettings(patch){ const next=Object.assign(getAppSettings(),patch); store.set(APP_SETTINGS_KEY, JSON.stringify(next)); return next; }
 function currencySymbol(code){ return (CURRENCIES[code]||CURRENCIES.USD).symbol; }
 // Central currency formatter. English -> "EGP 15,000"; Arabic -> "15,000 ج.م".
@@ -2114,6 +2114,10 @@ function findLogicalDuplicate(coll, rec, db){
   if(coll==='leads'){
     const nm=norm(rec.name||rec.company), ph=norm(rec.phone);
     return active.find(l=> (nm&&(norm(l.name)===nm||norm(l.company)===nm)) || (ph&&norm(l.phone)===ph) ) || null;
+  }
+  if(coll==='attendance'){
+    const emp=norm(rec.employeeId), day=norm(rec.date); if(!emp||!day) return null;
+    return active.find(a=>norm(a.employeeId)===emp&&norm(a.date)===day)||null;
   }
   return null;
 }
@@ -2521,32 +2525,49 @@ const COMM_CHANNELS = ['WhatsApp','Email','Phone','Slack','In-person'];
 /* ============================ HR OPTION LISTS ============================ */
 const EMPLOYMENT_TYPES = ['Full-time','Part-time','Freelancer','Intern','Contractor','Commission-based'];
 const WORK_MODES = ['Office','Remote','Hybrid','Field / Shooting'];
-// ---- Attendance rules engine — official hours 10:00–18:00, week Sun–Thu, Fri+Sat OFF ----
-const ATT_START_MIN = 10*60;                 // 10:00 AM official start
-const ATT_END_MIN   = 18*60;                 // 6:00 PM official end
+// ---- Attendance rules engine -------------------------------------------------
+// Defaults remain 10:00–18:00 / Fri+Sat, but the owner can now change every
+// value from Attendance or Settings. Keeping the rules in appSettings means the
+// calendar, late calculations, payroll and employee reports all use one source.
+const ATT_START_MIN = 10*60;
+const ATT_END_MIN   = 18*60;
 const ATT_DAYNAMES  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const ATT_DAYSHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const _hm2min = (t)=>{ if(!t) return null; const p=String(t).split(':'); return (+p[0]||0)*60+(+p[1]||0); };
-// Working week is Sun–Thu (Fri/Sat off), so a payroll "month" is its WORKING days — normally 22 —
-// and the daily rate is salary ÷ those working days. Weekends are never counted or charged.
-const isWorkDay = (y,m,d)=>{ const w=new Date(y,m-1,d).getDay(); return w!==5 && w!==6; };
-const workDaysBetween = (y,m,d1,d2)=>{ let n=0; for(let d=d1;d<=d2;d++) if(isWorkDay(y,m,d)) n++; return n; };
-const monthWorkDays = (ym)=>{ try{ const p=String(ym).split('-').map(Number); if(!p[0]) return 22;
-  return workDaysBetween(p[0],p[1],1,new Date(p[0],p[1],0).getDate()); }catch(_){ return 22; } };
+const attendanceRules = (settings)=>{
+  const s=settings||getAppSettings()||{};
+  const start=_hm2min(s.workStartTime||'10:00');
+  const end=_hm2min(s.workEndTime||'18:00');
+  const aliases={sun:0,sunday:0,mon:1,monday:1,tue:2,tues:2,tuesday:2,wed:3,wednesday:3,thu:4,thur:4,thurs:4,thursday:4,fri:5,friday:5,sat:6,saturday:6};
+  const raw=Array.isArray(s.weekendDays)?s.weekendDays:String(s.weekendDays||'Fri,Sat').split(',');
+  const weekend=new Set(raw.map(x=>aliases[String(x).trim().toLowerCase()]).filter(x=>x!==undefined));
+  if(!weekend.size){ weekend.add(5); weekend.add(6); }
+  const grace=s.lateGraceMinutes==null?15:Math.max(0,Number(s.lateGraceMinutes)||0);
+  return { start:start==null?ATT_START_MIN:start, end:end==null?ATT_END_MIN:end, grace, weekend };
+};
+// Working days are derived from the selected weekend rules, so calendar,
+// payroll and reports cannot silently disagree with one another.
+const isWorkDay = (y,m,d,settings)=>!attendanceRules(settings).weekend.has(new Date(y,m-1,d).getDay());
+const workDaysBetween = (y,m,d1,d2,settings)=>{ let n=0; for(let d=d1;d<=d2;d++) if(isWorkDay(y,m,d,settings)) n++; return n; };
+const monthWorkDays = (ym,settings)=>{ try{ const p=String(ym).split('-').map(Number); if(!p[0]) return 22;
+  return workDaysBetween(p[0],p[1],1,new Date(p[0],p[1],0).getDate(),settings); }catch(_){ return 22; } };
 // Derives dayName / weekend / late-minutes / working-hours / status from a raw attendance record.
 // A manual, non-work status (Absent/Leave/Sick Leave/Half Day/Remote) is respected; auto ones are refined.
-function computeAttendance(rec){
+function computeAttendance(rec,settings){
   rec = rec||{};
+  const rules=attendanceRules(settings);
   let dow=null; try{ if(rec.date) dow=new Date(rec.date+'T00:00:00').getDay(); }catch(e){}
-  const isWeekend = dow===5 || dow===6;                          // Friday + Saturday
+  const isWeekend = dow!=null && rules.weekend.has(dow);
   const dayName = (dow!=null) ? ATT_DAYNAMES[dow] : '';
   const ci=_hm2min(rec.checkIn), co=_hm2min(rec.checkOut);
   let hours=0; if(ci!=null && co!=null){ let m=co-ci; if(m<0)m+=1440; hours=Math.round(m/60*100)/100; }
-  const lateMin = (!isWeekend && ci!=null && ci>ATT_START_MIN) ? (ci-ATT_START_MIN) : 0;
+  const lateMin = (!isWeekend && ci!=null && ci>rules.start) ? (ci-rules.start) : 0;
+  const lateAfterGrace=Math.max(0,lateMin-rules.grace);
   const derived = isWeekend ? (ci!=null?'Weekend Work':'Weekend')
-                            : (ci==null?'Absent':(lateMin>0?'Late':'Present'));
+                            : (ci==null?'Absent':(lateAfterGrace>0?'Late':'Present'));
   const manualKept = rec.status && !['Present','Late','Weekend','Weekend Work',''].includes(rec.status);
   const status = manualKept ? rec.status : derived;              // keep Absent/Leave/Sick/Half Day/Remote as set
-  return { dayName, isWeekend, lateMin, hours, status };
+  return { dayName, isWeekend, lateMin, lateAfterGrace, hours, status, rules };
 }
 const HR_DEPARTMENTS = ['Management','Sales','Account Management','Project Management','Creative','Graphic Design','Video Editing','Media Buying','Web / Development','Finance','HR','Operations'];
 const LEAVE_TYPES = ['Annual','Sick','Emergency','Unpaid','Work From Home','Shooting Day','Other'];
@@ -2869,17 +2890,24 @@ function generatePayslip(p, emp){
   try{ const w=window.open('','_blank'); if(w){ w.document.write(doc); w.document.close(); setTimeout(()=>{try{w.print();}catch(_){}} ,500); } }catch(_){}
 }
 // Email the SAME payslip to the employee as a proper receipt (HTML body, keeps the full design).
-async function emailPayslip(p, emp, onSent){
+async function emailPayslip(p, emp, onResult){
   const ar=getAppSettings().language==='ar';
   const to=(emp&&(emp.email||emp.loginEmail))||'';
-  if(!to){ alert(ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add one in their profile.'); return; }
+  if(!to){
+    const err=new Error(ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add one in their profile.');
+    alert(err.message); try{if(onResult)onResult({ok:false,error:err.message});}catch(_){} return;
+  }
   const nm=(emp&&(emp.fullName||emp.name))||'';
   try{
-    await sendEmail({ to, subject:'Magnet — Payslip '+(p.month||''), html:payslipHTML(p, emp) });
-    showProPopup('syncSuccess', (ar?'اتبعتت لـ ':'Sent to ')+to);
-    try{ if(onSent) onSent(); }catch(_){}
+    const sent=await sendEmail({ to, subject:'Magnet — Payslip '+(p.month||''), html:payslipHTML(p, emp),
+      idempotencyKey:'payslip/'+String(p.id||emp.id||'employee')+'/'+String(p.month||'period')+(p.payslipEmailId?('/retry-'+Date.now()):'') });
+    showProPopup('syncSuccess', (ar?'اتقبلت للإرسال إلى ':'Accepted for delivery to ')+to);
+    try{ if(onResult) onResult({ok:true,id:sent&&sent.id,to,status:'Accepted',at:nowISO()}); }catch(_){}
+    return sent;
   }catch(err){
-    alert((ar?'الإرسال فشل: ':'Send failed: ')+(err&&err.message||err)+'\n\n'+(ar?'اتأكد إن إشعارات الإيميل مفعّلة في الإعدادات.':'Check that email notifications are enabled in Settings.'));
+    const message=String((err&&err.message)||err||'Email failed');
+    try{ if(onResult) onResult({ok:false,to,status:'Failed',error:message,at:nowISO()}); }catch(_){}
+    alert((ar?'الإرسال فشل: ':'Send failed: ')+message+'\n\n'+(ar?'راجع إعداد مزود البريد والدومين من Settings.':'Check the email provider and verified sending domain in Settings.'));
   }
 }
 
@@ -2975,15 +3003,17 @@ function printEmployeeReport(report,emp,db,includeSalaryAllowed){
   const safe=Object.assign({},report,{includeSalary:!!report.includeSalary&&!!includeSalaryAllowed});
   try{ const w=window.open('','_blank'); if(w){ w.document.write(employeeReportHTML(safe,emp,db)); w.document.close(); } }catch(_){ }
 }
-async function emailEmployeeReport(report,emp,db,includeSalaryAllowed,onSent){
+async function emailEmployeeReport(report,emp,db,includeSalaryAllowed,onResult){
   const ar=getLang()==='ar', to=(emp&&(emp.email||emp.loginEmail))||'';
-  if(!to){ alert(ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add it to the profile.'); return; }
+  if(!to){ const message=ar?'مفيش إيميل للموظف ده — ضيفه في ملفه.':'No email on this employee — add it to the profile.'; alert(message); if(onResult)onResult({ok:false,status:'Missing email',error:message,at:nowISO()}); return; }
   const safe=Object.assign({},report,{includeSalary:!!report.includeSalary&&!!includeSalaryAllowed});
   try{
     const mailHTML=employeeReportHTML(safe,emp,db).replace(/<div class="noprint">[\s\S]*?<\/div>/,'');
-    await sendEmail({to,subject:(ar?'تقرير الموظف — ':'Employee report — ')+(report.period||''),html:mailHTML});
-    showProPopup('syncSuccess',(ar?'اتبعتت لـ ':'Sent to ')+to); if(onSent)onSent();
-  }catch(err){ alert((ar?'الإرسال فشل: ':'Send failed: ')+(err&&err.message||err)); }
+    const sent=await sendEmail({to,subject:(ar?'تقرير الموظف — ':'Employee report — ')+(report.period||''),html:mailHTML,
+      idempotencyKey:'employee-report/'+String(report.id||emp.id)+'/'+String(report.period||'period')+(report.emailProviderId?('/retry-'+Date.now()):'')});
+    const result={ok:true,status:'Accepted',id:sent&&sent.id,to,at:nowISO()};
+    showProPopup('syncSuccess',(ar?'اتقبل للإرسال إلى ':'Accepted for delivery to ')+to); if(onResult)onResult(result); return sent;
+  }catch(err){ const message=String((err&&err.message)||err); if(onResult)onResult({ok:false,status:'Failed',to,error:message,at:nowISO()}); alert((ar?'الإرسال فشل: ':'Send failed: ')+message); }
 }
 // workload classification
 function workloadTag(pct){ if(pct>100) return {label:'Overloaded',type:'neg'}; if(pct>=81) return {label:'Full',type:'warn'}; if(pct>=51) return {label:'Healthy',type:'ok'}; return {label:'Light',type:''}; }
@@ -3255,7 +3285,7 @@ function generateProposalText(p, db){
 Magnet · ${p.serviceType||'خدمات'}
 
 مُعد لـ: ${who}
-التاريخ: ${fmtDate(p.createdAt||todayISO())}
+التاريخ: ${fmtDate(p.issueDate||p.createdAt||todayISO())}
 
 1. نظرة عامة
 ${p.title||'خطة عمل مخصصة لتنمية علامتك التجارية.'}
@@ -3281,7 +3311,7 @@ ${formatCurrency(p.price,cur,'ar')} ${p.status==='Accepted'?'(مقبول)':''}
 Magnet · ${p.serviceType||'Services'}
 
 Prepared for: ${who}
-Date: ${fmtDate(p.createdAt||todayISO())}
+Date: ${fmtDate(p.issueDate||p.createdAt||todayISO())}
 
 1. OVERVIEW
 ${p.title||'A tailored engagement to grow your brand.'}
@@ -3313,6 +3343,7 @@ function generateQuotationText(q, db){
     return `عرض سعر ${q.quotationNumber||''}
 Magnet
 العميل: ${nameById(db.clients,q.clientId)}
+التاريخ: ${fmtDate(q.issueDate||q.createdAt||todayISO())}
 صالح حتى: ${fmtDate(q.validUntil)}
 
 ${lines}
@@ -3327,6 +3358,7 @@ ${q.notes||''}`;
   return `QUOTATION ${q.quotationNumber||''}
 Magnet
 Client: ${nameById(db.clients,q.clientId)}
+Date: ${fmtDate(q.issueDate||q.createdAt||todayISO())}
 Valid until: ${fmtDate(q.validUntil)}
 
 ${lines}
@@ -3477,7 +3509,7 @@ function generateProposalHTML(p, db){ _docCur=p.currency||null;
   const c=db.clients.find(x=>x.id===p.clientId)||{};
   const sec=(t,v)=>v?`<h3 class="sec">${t}</h3><div class="sec"><div>${esc(v)}</div></div>`:'';
   return _docShell('Proposal '+(p.proposalNumber||''), `<div class="page">
-    ${_docHead('PROPOSAL', p.proposalNumber, fmtDate(p.createdAt||todayISO()))}
+    ${_docHead('PROPOSAL', p.proposalNumber, fmtDate(p.issueDate||p.createdAt||todayISO()))}
     <h1 class="doc">${esc(p.title||PL('Proposal'))}</h1><div class="sub">${PL('Prepared for')} ${esc(c.brandName||c.name||PL('Client'))} · ${PL('by')} ${esc(p.preparedBy||COMPANY.name)} · ${esc(p.brand||'')}</div>
     ${sec(PL('Executive Summary'),p.executiveSummary)}${sec(PL('Client Situation'),p.clientSituation)}${sec(PL('Goals'),p.goals)}
     ${sec(PL('Recommended Strategy'),p.strategy)}${sec(PL('Scope of Work'),p.scopeOfWork||p.scope)}${sec(PL('Deliverables'),p.deliverables)}
@@ -3491,7 +3523,7 @@ function generateQuotationHTML(q, db){ _docCur=q.currency||null;
   const subtotal=items.length?items.reduce((s,i)=>s+((i.quantity||i.qty||1)*(i.unitPrice||0)),0):(Number(q.subtotal)||0);
   const discount=Number(q.discount)||0; const tax=Number(q.tax)||0; const total=subtotal-discount+tax;
   return _docShell('Quotation '+(q.quotationNumber||''), `<div class="page">
-    ${_docHead('QUOTATION', q.quotationNumber, fmtDate(q.createdAt||todayISO()))}
+    ${_docHead('QUOTATION', q.quotationNumber, fmtDate(q.issueDate||q.createdAt||todayISO()))}
     <div class="row2"><div class="blk"><b>${PL('For')}</b><div>${esc(c.brandName||c.name||PL('Client'))}</div></div>
       <div class="blk" style="text-align:right"><b>${PL('Valid until')}</b><div>${fmtDate(q.validUntil)}</div></div></div>
     ${_itemsTable(items)}
@@ -4052,7 +4084,7 @@ function collSame(a, b){
    Vercel function /api/send-email (the netlify path only works on Netlify and is
    kept as a fallback). The function holds the secret API key server-side; the
    browser only posts the message. Returns {ok,id} or throws a readable error. -- */
-async function sendEmail(payload){ // { to, subject, html?, text? }
+async function sendEmail(payload){ // { to, subject, html?, text?, idempotencyKey? }
   const body = JSON.stringify(payload||{});
   const endpoints = ['/api/send-email', '/.netlify/functions/send-email'];
   let lastErr = 'Email failed';
@@ -4069,7 +4101,59 @@ async function sendEmail(payload){ // { to, subject, html?, text? }
   }
   throw new Error(lastErr);
 }
+async function emailAPIGet(query){
+  const suffix=query?('?'+query):'';
+  const endpoints = ['/api/send-email'+suffix, '/.netlify/functions/send-email'+suffix];
+  let lastErr='Email status failed';
+  for(const ep of endpoints){
+    let res; try{ res=await fetch(ep,{method:'GET'}); }
+    catch(e){ lastErr=String((e&&e.message)||e); continue; }
+    if(res.status===404){ lastErr='Email endpoint not found ('+ep+')'; continue; }
+    let data={}; try{data=await res.json();}catch(e){}
+    if(!res.ok) throw new Error((data&&data.error)||('Email status failed ('+res.status+')'));
+    return data;
+  }
+  throw new Error(lastErr);
+}
+function emailEventStatus(value){
+  const v=String(value||'').toLowerCase();
+  if(v==='delivered') return 'Delivered';
+  if(v==='bounced') return 'Bounced';
+  if(v==='complained') return 'Complained';
+  if(v==='delivery_delayed') return 'Delayed';
+  if(v==='failed'||v==='cancelled') return 'Failed';
+  if(v==='opened') return 'Opened';
+  if(v==='clicked') return 'Clicked';
+  return 'Accepted';
+}
+async function getEmailStatus(id){
+  if(!id) throw new Error('Missing email provider id');
+  const data=await emailAPIGet('id='+encodeURIComponent(id));
+  return Object.assign({},data,{status:emailEventStatus(data.last_event)});
+}
+async function getEmailHealth(){ return emailAPIGet(''); }
+function taskAssignmentEmailHTML(task, emp, db){
+  const project=byId((db&&db.projects)||[],task&&task.projectId)||{};
+  const client=byId((db&&db.clients)||[],task&&task.clientId)||{};
+  const employeeName=(emp&&(emp.fullName||emp.name))||'Team member';
+  const title=(task&&(task.title||task.name))||'New task';
+  const due=task&&task.dueDate?fmtDate(task.dueDate):'Not set';
+  const appLink=(typeof location!=='undefined'&&location.origin&&location.origin!=='null')?location.origin:'';
+  return '<!doctype html><html><body style="margin:0;background:#f4f5ef;font-family:Arial,sans-serif;color:#171a12">'
+    +'<div style="max-width:620px;margin:30px auto;background:#fff;border:1px solid #e6e9df;border-radius:16px;overflow:hidden">'
+    +'<div style="padding:22px 26px;background:#12150e;color:#fff"><div style="font-size:11px;letter-spacing:.18em;color:#c8f31e">MAGNET OS</div><h1 style="font-size:23px;margin:8px 0 0">New task assigned</h1></div>'
+    +'<div style="padding:26px"><p style="margin-top:0">Hi <b>'+esc(employeeName)+'</b>,</p><p>A new task was assigned to you:</p>'
+    +'<div style="padding:18px;border-radius:12px;background:#f7f8f3;border-left:4px solid #c8f31e"><h2 style="font-size:19px;margin:0 0 12px">'+esc(title)+'</h2>'
+    +(project.name||project.projectName?'<div><b>Project:</b> '+esc(project.name||project.projectName)+'</div>':'')
+    +(client.name||client.brandName?'<div style="margin-top:7px"><b>Client:</b> '+esc(client.brandName||client.name)+'</div>':'')
+    +'<div style="margin-top:7px"><b>Due:</b> '+esc(due)+'</div>'
+    +(task&&task.priority?'<div style="margin-top:7px"><b>Priority:</b> '+esc(task.priority)+'</div>':'')+'</div>'
+    +(task&&task.brief?'<div style="margin-top:18px;white-space:pre-wrap"><b>Brief</b><br>'+esc(task.brief)+'</div>':'')
+    +(appLink?'<p style="margin:24px 0 0"><a href="'+esc(appLink)+'" style="display:inline-block;padding:11px 18px;border-radius:9px;background:#c8f31e;color:#10130d;text-decoration:none;font-weight:700">Open Magnet OS</a></p>':'')
+    +'</div><div style="padding:14px 26px;border-top:1px solid #eceee7;color:#858a79;font-size:11px">This message was sent automatically when the task was assigned.</div></div></body></html>';
+}
 window.sendEmail = sendEmail;
+window.getEmailStatus = getEmailStatus;
 /* Safe merge: combine local + cloud per record id, keeping the newest by
    updatedAt (falls back to createdAt). Prevents a teammate's edit, or an
    offline local change, from being silently overwritten on sync. Deletions
@@ -4896,6 +4980,9 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   const missingIn=(gnames)=> allowed.filter(f=>gnames.includes(f.group||'Other') && isMissing(f));
   const allMissing=()=> allowed.filter(isMissing);
   const reqLbl=(m)=> (ar?'محتاج تملأ: ':'Required: ')+m.map(f=>ar?(FIELD_AR[f.label]||I18N[f.label]||f.label):f.label).join('، ');
+  const auditMeta=initial&&initial.id&&html`<div class="muted" style=${{fontSize:11,marginTop:10,lineHeight:1.6}}>
+    ${(ar?'تاريخ الإنشاء: ':'Created: ')+fmtDateTime(initial.createdAt)} · ${(ar?'آخر تعديل: ':'Last updated: ')+fmtDateTime(initial.updatedAt||initial.createdAt)}
+  </div>`;
   // double-click guard: a fast second tap on Save must not create a duplicate record
   const savingRef = useRef(false);
   const guardSave = (r)=>{ if(savingRef.current) return; savingRef.current=true; setTimeout(()=>{ savingRef.current=false; },1500); onSave(r); };
@@ -4916,6 +5003,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
       <div class="step-prog"><i style=${{width:pct+'%'}}></i></div>
       <div style=${{maxHeight:(hasPayCalc?'46vh':'52vh'),overflowY:'auto',paddingRight:4,marginTop:14}}>${cur.groups.map(renderGroup)}</div>
       ${hasPayCalc?html`<${PayCalcPanel} rec=${rec} ar=${ar}/>`:''}
+      ${auditMeta}
       ${err&&html`<div class="neg" style=${{fontSize:12,marginTop:10}}>${err}</div>`}
       <div class="form-foot" style=${{alignItems:'center'}}>
         <button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button>
@@ -4934,6 +5022,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
     : html`<div class="form-grid">${allowed.map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div>`;
   return html`<div>
     <div style=${{maxHeight:'60vh',overflowY:'auto',paddingRight:4}}>${body}</div>
+    ${auditMeta}
     ${err&&html`<div class="neg" style=${{fontSize:12,marginTop:12}}>${err}</div>`}
     <div class="form-foot">
       <button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button>
@@ -4957,12 +5046,14 @@ const IS_TOUCH = (typeof window!=='undefined' && window.matchMedia) ? window.mat
 const cardTitle = (c)=> c.title||c.name||c.company||c.fullName||c.subject||'Untitled';
 const fmtDay = (d)=>{ try { return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}); } catch(e){ return d; } };
 function CardMeta({ c }){
-  const due=c.due, cl=c.checklist||[];
+  const due=c.due||c.dueDate||c.deadline||c.renewalDate||c.availableFrom, cl=c.checklist||[];
+  const created=!due&&c.createdAt?c.createdAt:'';
   const done=cl.filter(i=>i.done).length;
   const overdue = due && (new Date(due) < new Date(new Date().toDateString()));
-  if(!due && !cl.length && !(c.desc&&String(c.desc).trim())) return '';
+  if(!due && !created && !cl.length && !(c.desc&&String(c.desc).trim())) return '';
   return html`<div class="kmeta">
     ${due?html`<span class="kpill kdue ${overdue?'over':''}" style=${{display:'inline-flex',alignItems:'center',gap:4}}>${React.createElement(Icon.calendar)} ${fmtDay(due)}</span>`:''}
+    ${created?html`<span class="kpill" title=${(getLang()==='ar'?'تاريخ الإنشاء: ':'Created: ')+fmtDateTime(created)} style=${{display:'inline-flex',alignItems:'center',gap:4}}>${React.createElement(Icon.calendar)} ${fmtDay(created)}</span>`:''}
     ${cl.length?html`<span class="kpill kchk ${(done===cl.length&&done>0)?'all':''}" style=${{display:'inline-flex',alignItems:'center',gap:4}}>${React.createElement(Icon.check)} ${done}/${cl.length}</span>`:''}
     ${(c.desc&&String(c.desc).trim())?html`<span class="kpill" title="Has description">≡</span>`:''}
   </div>`;
@@ -5018,7 +5109,7 @@ function CardDrawer({ card, field, columns, canEdit, onClose, onUpdate }){
       <div class="cd-sec"><label>Labels</label>
         <div class="cd-labels">${BOARD_LABELS.map(L=>{const on=(card.labels||[]).includes(L.id);return html`<button key=${L.id} class="cd-lab ${on?'on':''}" style=${{background:on?L.color:'transparent',borderColor:L.color,color:on?'#0a0a0a':L.color}} onClick=${()=>toggleLabel(L.id)} disabled=${!canEdit}>${L.name}</button>`;})}</div></div>
       <div class="cd-sec"><label>Due date</label>
-        <input type="date" class="inp" disabled=${!canEdit} value=${card.due||''} onChange=${e=>set({due:e.target.value})}/></div>
+        <input type="date" class="inp" disabled=${!canEdit} value=${card.due||card.dueDate||card.deadline||''} onChange=${e=>set({[(card.dueDate!==undefined?'dueDate':(card.deadline!==undefined?'deadline':'due'))]:e.target.value})}/></div>
       <div class="cd-sec"><label>Description</label>
         <textarea class="inp" rows=${3} disabled=${!canEdit} value=${card.desc||''} onChange=${e=>set({desc:e.target.value})} placeholder="Add more detail…"></textarea></div>
       <div class="cd-sec"><label>Checklist ${cl.length?html`<span class="muted">· ${done}/${cl.length}</span>`:''}</label>
@@ -5160,6 +5251,14 @@ function DataTable({ rows, cols, db, onEdit, onDelete, canEditFlag, extraActions
   const [q,setQ]=useState(''); const [sort,setSort]=useState({k:null,dir:1}); const [page,setPage]=useState(0);
   rows=rows||[];
   const ar=getAppSettings().language==='ar';
+  cols=cols||[];
+  // Every persisted record already carries createdAt/updatedAt. Surface that
+  // metadata consistently instead of leaving users to guess when a row changed.
+  // A screen can still provide its own timestamp column without duplication.
+  const hasAuditCol=cols.some(c=>['createdAt','updatedAt'].includes(c.k));
+  const hasAuditData=rows.some(r=>r&&(r.updatedAt||r.createdAt));
+  if(hasAuditData&&!hasAuditCol) cols=[...cols,{k:'updatedAt',label:ar?'آخر تحديث':'Updated',date:true,
+    render:r=>html`<span title=${(ar?'أُنشئ: ':'Created: ')+fmtDateTime(r.createdAt)}>${fmtDateTime(r.updatedAt||r.createdAt)}</span>`}];
   const sortVal=(r,c)=>{ if(!c) return ''; if(c.money||c.num) return +r[c.k]||0; if(c.date) return r[c.k]||''; if(c.ref) return (nameById(db[c.coll],r[c.k],c.f)||'').toString(); return (r[c.k]==null?'':r[c.k]).toString().toLowerCase(); };
   const rowText=(r)=> cols.map(c=> c.ref?nameById(db[c.coll],r[c.k],c.f):(c.render?'':r[c.k])).join(' ').toLowerCase()+' '+Object.values(r).filter(v=>typeof v==='string').join(' ').toLowerCase();
   const ql=q.trim().toLowerCase();
@@ -5960,7 +6059,7 @@ function App(){
     setDb(d=>({...d, notifications:[rec, ...(d.notifications||[])].slice(0,300)}));
     cloudUpsert(cfg.current,'notifications',rec);
     // Optional email to a specific recipient (off unless enabled in Settings → Email).
-    if(!isRole && appSettings.emailNotifications){
+    if(!isRole && appSettings.emailNotifications && !(entityType==='tasks'&&title==='New task assigned')){
       try {
         const u=(AUTH.loadUsers()||[]).find(x=>x.id===userIdOrRole) || (db.employees||[]).find(e=>e.id===userIdOrRole) || {};
         const to=u.email||u.loginEmail;
@@ -6057,19 +6156,76 @@ function App(){
     }catch(e){}
   };
   const updateRecord = (coll, id, updates) => {
+    const patch=Object.assign({},updates||{});
     let out=null, _prev=null;
-    setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ _prev=x; out={...x,...updates,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
+    setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ _prev=x;
+      // Always stamp business milestones, no matter whether the change came
+      // from a form, board drag, quick action or automation.
+      if(coll==='tasks'&&patch.status==='Done'&&x.status!=='Done'&&!patch.completedAt){ patch.completedAt=nowISO(); patch.completedBy=user.id; }
+      if(coll==='projects'&&['Completed','Delivered'].includes(patch.status)&&!['Completed','Delivered'].includes(x.status)&&!patch.completedAt) patch.completedAt=nowISO();
+      if(coll==='deliverables'&&patch.status==='Approved'&&x.status!=='Approved'&&!patch.approvedAt) patch.approvedAt=nowISO();
+      if(coll==='deliverables'&&patch.status==='Delivered'&&x.status!=='Delivered'&&!patch.deliveredAt) patch.deliveredAt=nowISO();
+      if(coll==='invoices'&&patch.status==='Paid'&&x.status!=='Paid'&&!patch.paidAt) patch.paidAt=nowISO();
+      out={...x,...patch,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
     if(out){
       cloudUpsert(cfg.current, coll, out); // push THIS record immediately (no shared-closure race)
       // Deploy 5: audit trail for edits & status changes (create & delete are already logged).
       if(!NO_AUDIT.has(coll)){
         const _lbl=out.name||out.title||out.invoiceNumber||out.projectName||out.fullName||'';
-        if(updates && Object.prototype.hasOwnProperty.call(updates,'status') && _prev && _prev.status!==out.status)
+        if(patch && Object.prototype.hasOwnProperty.call(patch,'status') && _prev && _prev.status!==out.status)
           addActivity(coll, id, 'status → '+(out.status||''), _lbl);
         else addActivity(coll, id, 'updated', _lbl);
       }
     }
     return out;
+  };
+  const sendTaskAssignmentEmail = async (task, force) => {
+    const current=(task&&task.id&&byId(db.tasks,task.id))||task||{};
+    const emp=(db.employees||[]).find(e=>e.id===current.assignedTo||e.name===current.assignedTo||e.fullName===current.assignedTo);
+    if(!current.id||!current.assignedTo) return {ok:false,status:'Unassigned'};
+    if(!force && !appSettings.emailNotifications){
+      updateRecord('tasks',current.id,{assignmentEmailStatus:'Disabled',assignmentEmailError:'Email notifications are disabled'});
+      return {ok:false,status:'Disabled'};
+    }
+    const to=emp&&(emp.email||emp.loginEmail);
+    if(!to){
+      const msg=lang==='ar'?'الموظف مفيش إيميل مسجل في ملفه.':'The employee has no email in their profile.';
+      updateRecord('tasks',current.id,{assignmentEmailStatus:'Missing email',assignmentEmailTo:'',assignmentEmailError:msg,assignmentEmailAt:nowISO()});
+      if(force) alert(msg);
+      return {ok:false,status:'Missing email',error:msg};
+    }
+    updateRecord('tasks',current.id,{assignmentEmailStatus:'Sending',assignmentEmailTo:to,assignmentEmailError:''});
+    try{
+      const key=(('task-assigned/'+current.id+'/'+String(current.assignedTo))+(force?('/retry-'+Date.now()):'')).replace(/[^A-Za-z0-9_./:-]/g,'-').slice(0,256);
+      const sent=await sendEmail({to,subject:'[Magnet OS] New task: '+(current.title||current.name||''),html:taskAssignmentEmailHTML(current,emp,db),idempotencyKey:key});
+      const result={ok:true,id:sent&&sent.id,to,status:'Accepted',at:nowISO()};
+      updateRecord('tasks',current.id,{assignmentEmailStatus:result.status,assignmentEmailId:result.id||'',assignmentEmailTo:to,assignmentEmailAt:result.at,assignmentEmailError:''});
+      if(force) showProPopup('syncSuccess',(lang==='ar'?'الإيميل اتقبل للإرسال إلى ':'Email accepted for delivery to ')+to);
+      return result;
+    }catch(err){
+      const message=String((err&&err.message)||err||'Email failed');
+      updateRecord('tasks',current.id,{assignmentEmailStatus:'Failed',assignmentEmailTo:to,assignmentEmailAt:nowISO(),assignmentEmailError:message});
+      addNotification('Project Manager','Task email failed',(current.title||current.name||'Task')+' · '+to+' · '+message,'tasks',current.id);
+      if(force) alert((lang==='ar'?'فشل إرسال إيميل التاسك: ':'Task email failed: ')+message);
+      return {ok:false,status:'Failed',error:message};
+    }
+  };
+  const checkTaskAssignmentEmail = async (task, showResult) => {
+    const current=(task&&task.id&&byId(db.tasks,task.id))||task||{};
+    if(!current.assignmentEmailId){
+      const msg=lang==='ar'?'مفيش رقم تتبّع للإيميل — اعمل إعادة إرسال.':'No provider tracking id — retry the email.';
+      if(showResult!==false) alert(msg); return {ok:false,error:msg};
+    }
+    try{
+      const result=await getEmailStatus(current.assignmentEmailId);
+      updateRecord('tasks',current.id,{assignmentEmailStatus:result.status,assignmentEmailCheckedAt:nowISO(),assignmentEmailError:''});
+      if(showResult!==false) showProPopup('syncSuccess',(lang==='ar'?'حالة الإيميل: ':'Email status: ')+result.status);
+      return result;
+    }catch(err){
+      const message=String((err&&err.message)||err||'Status check failed');
+      updateRecord('tasks',current.id,{assignmentEmailError:message,assignmentEmailCheckedAt:nowISO()});
+      if(showResult!==false) alert(message); return {ok:false,error:message};
+    }
   };
   const deleteRecord = (coll, id) => {
     // Defense in depth: protected finance collections (invoices/payments) may only be
@@ -6447,6 +6603,7 @@ function App(){
     canDelete:(section)=> isAdminRole(role) || (!PROTECTED_DELETE.includes(section) && userCanEditSection(authUser, section, role)),
     delRec:(coll,id,name)=>{ if(confirm((lang==='ar'?'حذف ':'Delete ')+(name||(lang==='ar'?'هذا السجل':'this record'))+(lang==='ar'?'؟ لا يمكن التراجع.':'? This cannot be undone.'))) deleteRecord(coll,id); },
     createRecord, updateRecord, deleteRecord, getRecords, addComment, addActivity, addNotification, awardPoints, upsertRecord,
+    sendTaskAssignmentEmail, checkTaskAssignmentEmail,
     convertLead, convertCandidate, createDefaultTasksForProject, sendToClientReview, approveDeliverable, requestRevision, addDeliverableVersion,
     submitRequest, approveRequest, rejectRequest, requestChanges, sendChat, setAvailability, driveAction, docPrint, docCopy, docEmail,
     runAgent, agentToTask, agentToProposal, agentToNotes, runAutomation, toggleAutomation, startWorkflow, advanceWorkflow, syncTeam,
@@ -6624,7 +6781,7 @@ function App(){
 
     ${modal&&html`<${Modal} title=${modal.title||((getLang()==='ar'?'إضافة / تعديل ':'New / Edit ')+(t(modal.coll)!==modal.coll?t(modal.coll):modal.coll))} wide=${true} onClose=${()=>setModal(null)}>
       <${RecordForm} schema=${modal.schema||[]} initial=${modal.initial} db=${db} role=${role}
-        onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; const _prevPay = modal.coll==='payments'?byId(db.payments,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='payments'){ const _fresh=(db.payments||[]).map(p=>p.id===rec.id?rec:p); syncInvoiceStatus(rec.invoiceId,_fresh); if(_prevPay&&_prevPay.invoiceId&&_prevPay.invoiceId!==rec.invoiceId) syncInvoiceStatus(_prevPay.invoiceId,_fresh); } if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } if(modal.coll==='salaryChanges') applySalaryChange(rec); if(modal.coll==='employeePayments'){ const pr=computePayrun(rec); updateRecord('employeePayments',rec.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const _dup=findLogicalDuplicate(modal.coll,rec,db); if(_dup){ const _dl=_dup.invoiceNumber||_dup.brandName||_dup.name||_dup.projectName||_dup.company||_dup.title||'record'; if(modal.coll==='invoices'){ alert(getLang()==='ar'?('رقم الفاتورة موجود بالفعل: '+_dl):('Invoice number already exists: '+_dl)); return; } if(!confirm(getLang()==='ar'?('في حاجة شبهها موجودة بالفعل: '+_dl+'\nأعملها برضه؟'):('A similar record already exists: '+_dl+'\nCreate anyway?'))) return; } const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='salaryChanges') applySalaryChange(created); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks===true&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } if(rec.createInvoice&&Number(rec.projectBudget)>0&&rec.clientId){ const _inv=createRecord('invoices',{invoiceNumber:nextInvoiceNumber(db), clientId:rec.clientId, projectId:created.id, amount:Number(rec.projectBudget)||0, tax:0, status:'Invoice Draft', issueDate:todayISO(), dueDate:rec.deadline||''}); addActivity('invoices',_inv.id,'auto-created from project budget',created.projectName||created.name||''); showProPopup('invoiceCreated', _inv.invoiceNumber); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); syncInvoiceStatus(created.invoiceId, [...(db.payments||[]), created]); } if(modal.coll==='employeePayments'){ const pr=computePayrun(created); updateRecord('employeePayments',created.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
+        onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; const _prevPay = modal.coll==='payments'?byId(db.payments,rec.id):null; const _prevTask=modal.coll==='tasks'?byId(db.tasks,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='tasks'&&rec.assignedTo&&(!_prevTask||_prevTask.assignedTo!==rec.assignedTo)){ addActivity('tasks',rec.id,'reassigned',nameById(db.employees,rec.assignedTo)); addNotification(rec.assignedTo,'New task assigned',rec.title||rec.name,'tasks',rec.id); triggerWebhook('taskAssignedWebhook',{task:rec}); sendTaskAssignmentEmail(rec,false); } if(modal.coll==='payments'){ const _fresh=(db.payments||[]).map(p=>p.id===rec.id?rec:p); syncInvoiceStatus(rec.invoiceId,_fresh); if(_prevPay&&_prevPay.invoiceId&&_prevPay.invoiceId!==rec.invoiceId) syncInvoiceStatus(_prevPay.invoiceId,_fresh); } if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } if(modal.coll==='salaryChanges') applySalaryChange(rec); if(modal.coll==='employeePayments'){ const pr=computePayrun(rec); updateRecord('employeePayments',rec.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const _dup=findLogicalDuplicate(modal.coll,rec,db); if(_dup){ const _dl=_dup.invoiceNumber||_dup.brandName||_dup.name||_dup.projectName||_dup.company||_dup.title||'record'; if(modal.coll==='invoices'){ alert(getLang()==='ar'?('رقم الفاتورة موجود بالفعل: '+_dl):('Invoice number already exists: '+_dl)); return; } if(modal.coll==='attendance'){ alert(getLang()==='ar'?'الحضور للموظف في التاريخ ده مسجل بالفعل — افتح السجل وعدّله بدل ما تعمل واحد جديد.':'Attendance already exists for this employee and date — edit the existing record instead.'); return; } if(!confirm(getLang()==='ar'?('في حاجة شبهها موجودة بالفعل: '+_dl+'\nأعملها برضه؟'):('A similar record already exists: '+_dl+'\nCreate anyway?'))) return; } const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='salaryChanges') applySalaryChange(created); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks===true&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } if(rec.createInvoice&&Number(rec.projectBudget)>0&&rec.clientId){ const _inv=createRecord('invoices',{invoiceNumber:nextInvoiceNumber(db), clientId:rec.clientId, projectId:created.id, amount:Number(rec.projectBudget)||0, tax:0, status:'Invoice Draft', issueDate:todayISO(), dueDate:rec.deadline||''}); addActivity('invoices',_inv.id,'auto-created from project budget',created.projectName||created.name||''); showProPopup('invoiceCreated', _inv.invoiceNumber); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); sendTaskAssignmentEmail(created,false); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); syncInvoiceStatus(created.invoiceId, [...(db.payments||[]), created]); } if(modal.coll==='employeePayments'){ const pr=computePayrun(created); updateRecord('employeePayments',created.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
         onClose=${()=>setModal(null)}/>
     <//>`}
     ${profileOpen&&html`<${ProfileModal} authUser=${authUser} lang=${lang} onClose=${()=>setProfileOpen(false)}
@@ -6686,9 +6843,9 @@ const FORM_SCHEMAS = {
     {k:'notes',label:'Notes',type:'textarea',group:'Notes'},
   ],
   contacts:[{k:'name',label:'Full name',req:true},{k:'role',label:'Role'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'preferredChannel',label:'Channel',type:'select',opts:['Email','WhatsApp','Call']}],
-  salesActivities:[{k:'title',label:'Activity',req:true},{k:'type',label:'Type',type:'select',opts:['Call','Email','WhatsApp','Meeting','Note','Follow-up']},{k:'leadId',label:'Lead',type:'ref',coll:'leads'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'},{k:'outcome',label:'Outcome',type:'textarea'},{k:'status',label:'Status',type:'select',opts:['Open','Done']}],
-  proposals:[{k:'proposalNumber',label:'Proposal #'},{k:'title',label:'Title',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'leadId',label:'Lead',type:'ref',coll:'leads'},{k:'serviceType',label:'Service',type:'select',opts:PROJECT_TYPES},{k:'packageId',label:'Package',type:'ref',coll:'packages'},{k:'price',label:'Price',type:'number'},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'status',label:'Status',type:'select',opts:ST.proposal},{k:'scope',label:'Scope',type:'textarea'},{k:'deliverables',label:'Deliverables',type:'textarea'},{k:'timeline',label:'Timeline'}],
-  quotations:[{k:'quotationNumber',label:'Quotation #'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'subtotal',label:'Subtotal',type:'number'},{k:'discount',label:'Discount',type:'number'},{k:'tax',label:'Tax',type:'number'},{k:'total',label:'Total',type:'number'},{k:'validUntil',label:'Valid until',type:'date'},{k:'status',label:'Status',type:'select',opts:ST.quotation},{k:'notes',label:'Notes',type:'textarea'}],
+  salesActivities:[{k:'title',label:'Activity',req:true},{k:'type',label:'Type',type:'select',opts:['Call','Email','WhatsApp','Meeting','Note','Follow-up']},{k:'activityDate',label:'Activity date',type:'date',req:true},{k:'activityTime',label:'Time',type:'time'},{k:'leadId',label:'Lead',type:'ref',coll:'leads'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'},{k:'outcome',label:'Outcome',type:'textarea'},{k:'status',label:'Status',type:'select',opts:['Open','Done']}],
+  proposals:[{k:'proposalNumber',label:'Proposal #'},{k:'title',label:'Title',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'leadId',label:'Lead',type:'ref',coll:'leads'},{k:'issueDate',label:'Issue date',type:'date',req:true},{k:'validUntil',label:'Valid until',type:'date'},{k:'serviceType',label:'Service',type:'select',opts:PROJECT_TYPES},{k:'packageId',label:'Package',type:'ref',coll:'packages'},{k:'price',label:'Price',type:'number'},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'status',label:'Status',type:'select',opts:ST.proposal},{k:'scope',label:'Scope',type:'textarea'},{k:'deliverables',label:'Deliverables',type:'textarea'},{k:'timeline',label:'Timeline'}],
+  quotations:[{k:'quotationNumber',label:'Quotation #'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'issueDate',label:'Issue date',type:'date',req:true},{k:'subtotal',label:'Subtotal',type:'number'},{k:'discount',label:'Discount',type:'number'},{k:'tax',label:'Tax',type:'number'},{k:'total',label:'Total',type:'number'},{k:'validUntil',label:'Valid until',type:'date'},{k:'status',label:'Status',type:'select',opts:ST.quotation},{k:'notes',label:'Notes',type:'textarea'}],
   contracts:[{k:'contractNumber',label:'Contract #'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'contractType',label:'Type',type:'select',opts:['Retainer','Project','Campaign','NDA']},{k:'value',label:'Value',type:'number'},{k:'startDate',label:'Start',type:'date'},{k:'endDate',label:'End',type:'date'},{k:'paymentTerms',label:'Payment terms'},{k:'revisionPolicy',label:'Revision policy'},{k:'status',label:'Status',type:'select',opts:ST.contract},{k:'scope',label:'Scope',type:'textarea'}],
   collections:[{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Collection'},{k:'contractId',label:'Contract',type:'ref',coll:'contracts',group:'Collection'},{k:'title',label:'Description',group:'Collection'},{k:'amount',label:'Amount',type:'number',req:true,group:'Collection'},{k:'dueDate',label:'Collection date',type:'date',req:true,group:'Collection'},{k:'status',label:'Status',type:'select',opts:['Pending','Collected','Cancelled'],group:'Collection'},{k:'method',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payment'},{k:'collectedDate',label:'Collected on',type:'date',group:'Payment'},{k:'notes',label:'Notes',type:'textarea',group:'Notes'}],
   projects:[
@@ -6724,7 +6881,7 @@ const FORM_SCHEMAS = {
     {k:'internalNotes',label:'Internal notes',type:'textarea',group:'Notes'},
   ],
   revisions:[{k:'deliverableId',label:'Deliverable',type:'ref',coll:'deliverables'},{k:'note',label:'Note',type:'textarea',req:true},{k:'assignedTo',label:'Assignee',type:'ref',coll:'employees'},{k:'priority',label:'Priority',type:'select',opts:PRIORITIES},{k:'status',label:'Status',type:'select',opts:ST.revision},{k:'dueDate',label:'Due',type:'date'}],
-  invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'items',label:'Items / services',type:'items',full:true},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date'},{k:'dueDate',label:'Due',type:'date'},{k:'amount',label:'Amount (pre-tax) — used only if no items above',type:'number',reqIf:r=>!(Array.isArray(r.items)&&r.items.some(i=>i&&(Number(i.unitPrice)>0||i.itemName)))},{k:'discount',label:'Discount',type:'number'},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'},{k:'notes',label:'Notes (shown on the invoice)',type:'textarea'}],
+  invoices:[{k:'invoiceNumber',label:'Invoice #',req:true},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'items',label:'Items / services',type:'items',full:true},{k:'status',label:'Status',type:'select',opts:ST.invoice},{k:'issueDate',label:'Issue',type:'date',req:true},{k:'dueDate',label:'Due',type:'date',req:true},{k:'amount',label:'Amount (pre-tax) — used only if no items above',type:'number',reqIf:r=>!(Array.isArray(r.items)&&r.items.some(i=>i&&(Number(i.unitPrice)>0||i.itemName)))},{k:'discount',label:'Discount',type:'number'},{k:'currency',label:'Currency',type:'select',opts:Object.keys(CURRENCIES)},{k:'tax',label:'Tax %',type:'number'},{k:'notes',label:'Notes (shown on the invoice)',type:'textarea'}],
   payments:[{k:'invoiceId',label:'Invoice',type:'ref',coll:'invoices'},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'method',label:'Method',type:'select',opts:['Bank','Card','Cash','Cheque','Online']}],
   // Partner drawings/deposits ledger. NOT an expense: draws are profit
   // distributions, so they never touch net profit — they only move the
@@ -6739,9 +6896,9 @@ const FORM_SCHEMAS = {
     {k:'method',label:'Method',type:'select',opts:['Bank','Card','Cash','Cheque','Online']},
     {k:'note',label:'Note',type:'textarea'},
   ],
-  expenses:[{k:'title',label:'Title',req:true},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date'},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'vendor',label:'Vendor'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'status',label:'Status',type:'select',opts:ST.expense},{k:'notes',label:'Notes',type:'textarea'}],
+  expenses:[{k:'title',label:'Title',req:true},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'vendor',label:'Vendor'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'status',label:'Status',type:'select',opts:ST.expense},{k:'notes',label:'Notes',type:'textarea'}],
   plans:[{k:'title',label:'Plan / goal',req:true},{k:'timeframe',label:'Timeframe',type:'select',opts:PLAN_TIMEFRAMES},{k:'quarter',label:'Quarter (if quarterly)',type:'select',opts:PLAN_QUARTERS},{k:'period',label:'Period (e.g. Jun 2026 / Q3 2026)'},{k:'owner',label:'Owner',type:'select',opts:[...PARTNERS_DEFAULT.map(p=>p.name),'Both partners','Team']},{k:'status',label:'Status',type:'select',opts:PLAN_STATUS},{k:'progress',label:'Progress %',type:'number'},{k:'dueDate',label:'Due date',type:'date'},{k:'notes',label:'Notes',type:'textarea'}],
-  fixedCosts:[{k:'name',label:'Name',req:true},{k:'kind',label:'Type',type:'select',opts:FIXED_KINDS},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'cycle',label:'Cycle',type:'select',opts:FIXED_CYCLES},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'startDate',label:'Start date',type:'date'},{k:'status',label:'Status',type:'select',opts:['Active','Paused']},{k:'notes',label:'Notes',type:'textarea'}],
+  fixedCosts:[{k:'name',label:'Name',req:true},{k:'kind',label:'Type',type:'select',opts:FIXED_KINDS},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'cycle',label:'Cycle',type:'select',opts:FIXED_CYCLES},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'startDate',label:'Start date',type:'date',req:true},{k:'status',label:'Status',type:'select',opts:['Active','Paused']},{k:'notes',label:'Notes',type:'textarea'}],
   employees:[
     {k:'fullName',label:'Full name',req:true,group:'Basic'},{k:'displayName',label:'Display name',group:'Basic'},{k:'employeeCode',label:'Employee code',group:'Basic'},
     {k:'jobTitle',label:'Job title',req:true,group:'Basic'},{k:'departmentId',label:'Department',type:'ref',coll:'departments',group:'Basic'},
@@ -6767,7 +6924,7 @@ const FORM_SCHEMAS = {
     {k:'nationalIdLink',label:'National ID link',group:'Documents'},{k:'portfolioLink',label:'Portfolio link',group:'Documents'},{k:'driveFolder',label:'Drive folder',group:'Documents'},
     {k:'notes',label:'HR notes',type:'textarea',group:'Notes'},
   ],
-  attendance:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'checkIn',label:'Check in'},{k:'checkOut',label:'Check out'},{k:'workMode',label:'Work mode',type:'select',opts:WORK_MODES},{k:'status',label:'Status',type:'select',opts:ST.attendance},{k:'notes',label:'Notes',type:'textarea'}],
+  attendance:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'checkIn',label:'Check in',type:'time'},{k:'checkOut',label:'Check out',type:'time'},{k:'workMode',label:'Work mode',type:'select',opts:WORK_MODES},{k:'status',label:'Status',type:'select',opts:ST.attendance},{k:'notes',label:'Notes',type:'textarea'}],
   leaves:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'leaveType',label:'Leave type',type:'select',opts:LEAVE_TYPES,req:true},{k:'startDate',label:'Start',type:'date',req:true},{k:'endDate',label:'End',type:'date'},{k:'days',label:'Days',type:'number'},{k:'reason',label:'Reason',type:'textarea'},{k:'status',label:'Status',type:'select',opts:ST.leave}],
   salaryChanges:[{k:'employeeId',label:'Employee',type:'ref',coll:'employees',req:true},{k:'effectiveDate',label:'Effective from',type:'date',req:true},
     {k:'changeType',label:'Type',type:'select',opts:['Raise','Promotion','Adjustment','Cut'],req:true},
@@ -6826,7 +6983,7 @@ const FORM_SCHEMAS = {
     {k:'platform',label:'Platform',group:'Access'},{k:'username',label:'Username / handle',group:'Access'},{k:'owner',label:'Owner',group:'Access'},
     {k:'description',label:'Description',type:'textarea',group:'Notes'},{k:'notes',label:'Access notes (no raw passwords)',type:'textarea',group:'Notes'},
   ],
-  meetings:[{k:'title',label:'Meeting',req:true,group:'Meeting'},{k:'type',label:'Type',type:'select',opts:['Discovery','Kickoff','Review','Monthly','Renewal','Internal'],group:'Meeting'},{k:'clientId',label:'Client',type:'ref',coll:'clients',group:'Meeting'},{k:'projectId',label:'Project',type:'ref',coll:'projects',group:'Meeting'},{k:'date',label:'Date',type:'date',req:true,group:'Meeting'},{k:'attendees',label:'Attendees',group:'Meeting'},{k:'status',label:'Status',type:'select',opts:['Scheduled','Done','Cancelled'],group:'Meeting'},{k:'notes',label:'Meeting notes',type:'textarea',group:'Notes'},{k:'actionItems',label:'Action items (one per line)',type:'textarea',group:'Notes'},{k:'meetingLink',label:'Meeting link',group:'Notes'}],
+  meetings:[{k:'title',label:'Meeting',req:true,group:'Meeting'},{k:'type',label:'Type',type:'select',opts:['Discovery','Kickoff','Review','Monthly','Renewal','Internal'],group:'Meeting'},{k:'clientId',label:'Client',type:'ref',coll:'clients',group:'Meeting'},{k:'projectId',label:'Project',type:'ref',coll:'projects',group:'Meeting'},{k:'date',label:'Date',type:'date',req:true,group:'Meeting'},{k:'time',label:'Time',type:'time',group:'Meeting'},{k:'attendees',label:'Attendees',group:'Meeting'},{k:'status',label:'Status',type:'select',opts:['Scheduled','Done','Cancelled'],group:'Meeting'},{k:'notes',label:'Meeting notes',type:'textarea',group:'Notes'},{k:'actionItems',label:'Action items (one per line)',type:'textarea',group:'Notes'},{k:'meetingLink',label:'Meeting link',group:'Notes'}],
 };
 window.FORM_SCHEMAS = FORM_SCHEMAS;
 
@@ -6909,12 +7066,12 @@ function renderRoute(route, ctx, x){
     case 'contacts': return simpleList('contacts','Contacts','Sales', ctx, x, ce('contacts'),
       [{k:'name',label:'Name'},{k:'role',label:'Role'},{k:'email',label:'Email'},{k:'phone',label:'Phone'},{k:'clientId',label:'Client',ref:true,coll:'clients'}]);
     case 'salesActivities': return simpleList('salesActivities','Sales Activities','Sales', ctx, x, ce('salesActivities'),
-      [{k:'title',label:'Activity'},{k:'type',label:'Type'},{k:'leadId',label:'Lead',ref:true,coll:'leads'},{k:'ownerId',label:'Owner',ref:true,coll:'employees'},{k:'status',label:'Status',tag:true}]);
+      [{k:'title',label:'Activity'},{k:'type',label:'Type'},{k:'activityDate',label:'Date',date:true},{k:'activityTime',label:'Time'},{k:'leadId',label:'Lead',ref:true,coll:'leads'},{k:'ownerId',label:'Owner',ref:true,coll:'employees'},{k:'status',label:'Status',tag:true}],{status:'Open',activityDate:todayISO()});
 
     case 'proposals': return html`<${DocView} coll="proposals" title="Proposals" ctx=${ctx} visible=${x.visible} ce=${ce('proposals')}
-      gen=${generateProposalText} cols=${[{k:'proposalNumber',label:'#'},{k:'title',label:'Title'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'serviceType',label:'Service'},{k:'price',label:'Price',num:true,money:true},{k:'status',label:'Status',tag:true}]}/>`;
+      gen=${generateProposalText} cols=${[{k:'proposalNumber',label:'#'},{k:'title',label:'Title'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'issueDate',label:'Issued',date:true},{k:'validUntil',label:'Valid until',date:true},{k:'serviceType',label:'Service'},{k:'price',label:'Price',num:true,money:true},{k:'status',label:'Status',tag:true}]}/>`;
     case 'quotations': return html`<${DocView} coll="quotations" title="Quotations" ctx=${ctx} visible=${x.visible} ce=${ce('quotations')}
-      gen=${generateQuotationText} cols=${[{k:'quotationNumber',label:'#'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'total',label:'Total',num:true,money:true},{k:'validUntil',label:'Valid until',date:true},{k:'status',label:'Status',tag:true}]}/>`;
+      gen=${generateQuotationText} cols=${[{k:'quotationNumber',label:'#'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'issueDate',label:'Issued',date:true},{k:'total',label:'Total',num:true,money:true},{k:'validUntil',label:'Valid until',date:true},{k:'status',label:'Status',tag:true}]}/>`;
     case 'contracts': return html`<${DocView} coll="contracts" title="Contracts" ctx=${ctx} visible=${x.visible} ce=${ce('contracts')}
       gen=${generateContractText} cols=${[{k:'contractNumber',label:'#'},{k:'clientId',label:'Client',ref:true,coll:'clients'},{k:'contractType',label:'Type'},{k:'value',label:'Value',num:true,money:true},{k:'status',label:'Status',tag:true}]}/>`;
 
@@ -7701,7 +7858,7 @@ function InvoicesView({ ctx, visible, ce }){
   const { db } = ctx; const rows=visible('invoices');
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Invoices">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),tax:5,invoiceNumber:nextInvoiceNumber(ctx.db)})}>${React.createElement(Icon.plus)} ${t('New invoice')}</button>`}<//>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('invoices',{status:'Invoice Draft',issueDate:todayISO(),dueDate:new Date(Date.now()+7*86400000).toISOString().slice(0,10),tax:5,invoiceNumber:nextInvoiceNumber(ctx.db)})}>${React.createElement(Icon.plus)} ${t('New invoice')}</button>`}<//>
     <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('invoices',r)):null}
       onDelete=${ctx.canDelete('invoices')?(r=>ctx.delRec('invoices',r.id,r.invoiceNumber||'invoice')):null}
       extraActions=${ce?(r=>{ const b=ctx.invTotal(r)-ctx.invPaid(r); return (b>0&&!/cancel/i.test(r.status||''))?html`<button class="mini pri" onClick=${()=>ctx.openModal('payments',{invoiceId:r.id, clientId:r.clientId||'', amount:Math.round(b*100)/100, date:todayISO(), method:'Bank'}, null, (getLang()==='ar'?'تسجيل دفعة — ':'Record payment — ')+(r.invoiceNumber||''))}>${getLang()==='ar'?'سجل دفعة':'Record payment'}</button>`:''; }):null}
@@ -8190,18 +8347,25 @@ function PayrollView({ ctx }){
   // Lateness comes straight from the attendance engine — no manual counting. A daily grace window is
   // forgiven, and only the minutes beyond it cost money, charged at the employee's own hourly rate
   // (salary ÷ 30 days ÷ working hours). The owner can still edit or zero it in the form.
-  const GRACE_MIN = Number((ctx.appSettings&&ctx.appSettings.lateGraceMinutes)) || 15;
+  const GRACE_MIN = (ctx.appSettings&&ctx.appSettings.lateGraceMinutes)!=null
+    ? Math.max(0,Number(ctx.appSettings.lateGraceMinutes)||0) : 15;
   const lateInfo = (e)=>{
     const recs=(db.attendance||[]).filter(a=>a.employeeId===e.id && (a.date||'').slice(0,7)===month);
     let totalLate=0, lateDays=0;
-    recs.forEach(a=>{ const c=computeAttendance(a); const over=Math.max(0, c.lateMin-GRACE_MIN); if(c.lateMin>0) lateDays++; totalLate+=over; });
+    recs.forEach(a=>{ const c=computeAttendance(a,ctx.appSettings); if(c.lateAfterGrace>0) lateDays++; totalLate+=c.lateAfterGrace; });
     const dailyHours=Number(e.workingHours)||8;
     const hourly=(Number(e.salary)||0)/30/Math.max(1,dailyHours);
     return { totalLate, lateDays, deduction:Math.round(totalLate/60*hourly) };
   };
-  // Sending the payslip (email/WhatsApp) means the money went out — flip the run to Paid once.
-  const markPaid = (p)=>{ if(p && p.id && String(p.paymentStatus)!=='Paid')
-    ctx.updateRecord('employeePayments', p.id, { paymentStatus:'Paid', paidAt:nowISO() }); };
+  // Delivery and payment are separate facts: an accepted email never proves that
+  // payroll money moved. Only the explicit Mark paid action changes paymentStatus.
+  const markPaid = (p)=>{ if(p&&p.id&&String(p.paymentStatus)!=='Paid'&&confirm(ar?'تأكيد إن المرتب اتدفع فعلًا؟':'Confirm the salary was actually paid?'))
+    ctx.updateRecord('employeePayments',p.id,{paymentStatus:'Paid',paidAt:nowISO(),paidBy:ctx.user&&ctx.user.id}); };
+  const savePayslipResult=(p,result)=>{ if(!p||!p.id||!result)return;
+    ctx.updateRecord('employeePayments',p.id,{payslipEmailStatus:result.status||(result.ok?'Accepted':'Failed'),payslipEmailId:result.id||p.payslipEmailId||'',payslipEmailTo:result.to||'',payslipEmailAt:result.at||nowISO(),payslipEmailError:result.error||''}); };
+  const emailRun=(p,e)=>emailPayslip(p,e,result=>savePayslipResult(p,result));
+  const checkPayslip=async(p)=>{ try{ const result=await getEmailStatus(p.payslipEmailId); savePayslipResult(p,Object.assign({},result,{at:p.payslipEmailAt||nowISO(),to:p.payslipEmailTo||''})); showProPopup('syncSuccess',(ar?'حالة التسليم: ':'Delivery status: ')+result.status); }
+    catch(err){ const message=String((err&&err.message)||err); ctx.updateRecord('employeePayments',p.id,{payslipEmailError:message,payslipEmailCheckedAt:nowISO()}); alert(message); } };
   const openRun = (e,p)=>{
     if(p) return ctx.openModal('employeePayments', p);
     const li=lateInfo(e);
@@ -8229,7 +8393,7 @@ function PayrollView({ ctx }){
       <${KPI} label=${ar?'لسه':'Remaining'} value=${emps.length-runs.length} icon="alert"/>
     </div>
     <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
-      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'تأخير':'Late'}</th><th class="right">${ar?'الصافي':'Net'}</th><th>${ar?'الحالة':'Status'}</th><th></th></tr></thead>
+      <th>${ar?'الموظف':'Employee'}</th><th>${ar?'الدور':'Role'}</th><th class="right">${ar?'الأساسي':'Base'}</th><th class="right">${ar?'أيام':'Days'}</th><th class="right">${ar?'تأخير':'Late'}</th><th class="right">${ar?'الصافي':'Net'}</th><th>${ar?'الدفع':'Payment'}</th><th>${ar?'الإيميل':'Email'}</th><th></th></tr></thead>
     <tbody>${emps.map(e=>{ const p=runFor(e.id); return html`<tr key=${e.id}>
       <td><b>${e.fullName||e.name}</b></td><td class="muted">${e.jobTitle||e.role}</td>
       <td class="num">${e.salary?money(e.salary):'—'}</td>
@@ -8238,11 +8402,15 @@ function PayrollView({ ctx }){
         return html`<td class="num" title=${'billable late minutes ('+GRACE_MIN+' min/day forgiven)'} style=${{color:shown?'var(--neg)':'var(--ink-3)'}}>${shown?shown+'m':'—'}</td>`; })()}
       <td class="num" style=${{color:p?'var(--lime)':'var(--ink-3)'}}>${p?money(empPaymentNet(p)):'—'}</td>
       <td>${!p?html`<${Tag}>${ar?'لسه':'Not run'}<//>`:(String(p.paymentStatus)==='Paid'?html`<${Tag} type="ok">${ar?'اتدفع':'Paid'}<//>`:html`<${Tag} type="warn">${p.paymentStatus||(ar?'معلّق':'Pending')}<//>`)}</td>
+      <td>${!p?'—':html`<${Tag} type=${['Delivered','Opened','Clicked'].includes(p.payslipEmailStatus)?'ok':(['Failed','Bounced','Complained','Missing email'].includes(p.payslipEmailStatus)?'neg':'warn')}>${p.payslipEmailStatus||(ar?'لم يُرسل':'Not sent')}<//>`}</td>
       <td class="right cell-actions" style=${{whiteSpace:'normal'}}>
         <button class="mini pri" onClick=${()=>openRun(e,p)}>${p?(ar?'تعديل':'Edit'):(ar?'احسب':'Run')}</button>
         ${p?html`<button class="mini" onClick=${()=>generatePayslip(p,e)}>${ar?'قسيمة PDF':'Payslip PDF'}</button>`:''}
-        ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e,()=>markPaid(p))}>${ar?'واتساب':'WhatsApp'}</button>`:''}
-        ${p?html`<button class="mini" onClick=${()=>emailPayslip(p,e,()=>markPaid(p))}>${ar?'إيميل':'Email'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>payslipWhatsApp(p,e)}>${ar?'واتساب':'WhatsApp'}</button>`:''}
+        ${p?html`<button class="mini" onClick=${()=>emailRun(p,e)}>${ar?'إرسال إيميل':'Send email'}</button>`:''}
+        ${p&&p.payslipEmailId?html`<button class="mini" onClick=${()=>checkPayslip(p)}>${ar?'فحص التسليم':'Check delivery'}</button>`:''}
+        ${p&&String(p.paymentStatus)!=='Paid'?html`<button class="mini pri" onClick=${()=>markPaid(p)}>${ar?'تأكيد الدفع':'Mark paid'}</button>`:''}
+        ${p&&ctx.canDelete('employeePayments')?html`<button class="mini danger" onClick=${()=>ctx.delRec('employeePayments',p.id,(e.fullName||e.name||'')+' · '+month)}>${ar?'مسح':'Delete'}</button>`:''}
       </td></tr>`; })}</tbody></table></div><//>
     ${emps.length===0?html`<${EmptyState} title=${ar?'مفيش موظفين':'No employees'} text=${ar?'ضيف موظفين الأول من شاشة Employees.':'Add employees first from the Employees screen.'} icon="people"/>`:''}
   </div>`;
@@ -8303,6 +8471,11 @@ function EmployeesView({ ctx, visible, ce }){
   if(dept) rows=rows.filter(e=>e.departmentId===dept);
   if(etype) rows=rows.filter(e=>e.employmentType===etype);
   if(q){ const s=q.toLowerCase(); rows=rows.filter(e=>[e.fullName,e.name,e.jobTitle,e.role,e.email,e.phone,nameById(db.departments,e.departmentId)].join(' ').toLowerCase().includes(s)); }
+  const openEmployeeReport=(e)=>ctx.openModal('reports',{
+    reportKind:'Employee',employeeId:e.id,title:(ctx.lang==='ar'?'تقرير الموظف':'Employee report')+' — '+(e.fullName||e.name||'')+' — '+thisMonth(),
+    period:thisMonth(),type:'Monthly',language:ctx.lang==='ar'?'Arabic':'English',includeSalary:false,generationMode:'Manual',status:'Draft',createdByName:ctx.user.name
+  },FORM_SCHEMAS.reports,ctx.lang==='ar'?'إنشاء تقرير موظف':'Create employee report');
+  const logEmployeeAttendance=(e)=>ctx.openModal('attendance',{employeeId:e.id,date:todayISO(),status:'Present',workMode:e.workMode||'Office',source:'manual',createdBy:(ctx.user&&ctx.user.id)||'',createdByName:(ctx.user&&ctx.user.name)||'Manual'},FORM_SCHEMAS.attendance,ctx.lang==='ar'?'تسجيل حضور':'Log attendance');
 
   return html`<div class="view">
     <${Head} eyebrow="Team / HR" title="Employees" desc="Full employee profiles, HR, performance and access.">
@@ -8315,19 +8488,26 @@ function EmployeesView({ ctx, visible, ce }){
       <span class="muted" style=${{fontSize:12,marginLeft:'auto'}}>${rows.length} of ${all.length}</span>
     </div>
     <${Panel} pad=${false}><div style=${{overflowX:'auto'}}><table class="tbl"><thead><tr>
-      <th>Employee</th><th>Department</th><th>Type</th><th>Status</th><th>Work</th>
-      ${seeSalary?html`<th class="right">Salary</th>`:null}<th class="right">Score</th><th class="right">Load</th><th></th></tr></thead>
+      <th>Employee</th><th>Department</th><th>Type</th><th>Status</th><th>Work</th><th>Joined</th>
+      ${seeSalary?html`<th class="right">Salary</th>`:null}<th class="right">Score</th><th class="right">Load</th><th>Updated</th><th></th></tr></thead>
     <tbody>${rows.map(e=>{ const m=employeeMetrics(db,e); return html`<tr key=${e.id} style=${{cursor:'pointer'}} onClick=${()=>setSel(e)}>
       <td><div class="co-cell"><${Avatar} name=${e.fullName||e.name}/><div class="cn"><b>${e.fullName||e.name}</b><span>${e.jobTitle||e.role}</span></div></div></td>
       <td class="muted">${nameById(db.departments,e.departmentId)}</td>
       <td class="muted" style=${{fontSize:12.5}}>${e.employmentType||'—'}</td>
       <td><${Tag}>${e.status}<//></td>
       <td class="muted" style=${{fontSize:12.5}}>${e.workMode||'—'}</td>
+      <td class="muted" style=${{fontSize:12}}>${e.startDate?fmtDate(e.startDate):'—'}</td>
       ${seeSalary?html`<td class="num">${money(e.salary)}</td>`:null}
       <td class="num">${e.performanceScore||0}</td>
       <td class="num"><span class="mono" style=${{color:m.pct>100?'var(--neg)':'var(--ink-3)'}}>${m.pct}%</span></td>
-      <td class="right"><button class="mini" onClick=${ev=>{ev.stopPropagation();setSel(e);}}>Open</button>${ctx.canDelete('employees')?html`<button class="mini danger" onClick=${ev=>{ev.stopPropagation();ctx.delRec('employees',e.id,e.name||e.fullName);}}>Delete</button>`:''}</td></tr>`; })}
-    ${rows.length===0&&html`<tr><td colspan="9" class="muted" style=${{padding:28,textAlign:'center'}}>No employees match.</td></tr>`}
+      <td class="muted" style=${{fontSize:11.5}} title=${(ctx.lang==='ar'?'أُنشئ: ':'Created: ')+fmtDateTime(e.createdAt)}>${fmtDateTime(e.updatedAt||e.createdAt)}</td>
+      <td class="right"><div class="flex gap8" style=${{justifyContent:'flex-end',flexWrap:'wrap'}}>
+        <button class="mini" onClick=${ev=>{ev.stopPropagation();setSel(e);}}>${ctx.lang==='ar'?'فتح':'Open'}</button>
+        ${ctx.canEditSection('attendance')&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();logEmployeeAttendance(e);}}>${ctx.lang==='ar'?'حضور':'Attendance'}</button>`}
+        ${ctx.canEditSection('reports')&&html`<button class="mini pri" onClick=${ev=>{ev.stopPropagation();openEmployeeReport(e);}}>${ctx.lang==='ar'?'تقرير':'Report'}</button>`}
+        ${ctx.canDelete('employees')?html`<button class="mini danger" onClick=${ev=>{ev.stopPropagation();ctx.delRec('employees',e.id,e.name||e.fullName);}}>${ctx.lang==='ar'?'حذف':'Delete'}</button>`:''}
+      </div></td></tr>`; })}
+    ${rows.length===0&&html`<tr><td colspan=${seeSalary?11:10} class="muted" style=${{padding:28,textAlign:'center'}}>No employees match.</td></tr>`}
     </tbody></table></div><//>
     ${sel&&html`<${EmployeeProfile} ctx=${ctx} emp=${sel} ce=${ce} onClose=${()=>setSel(null)}/>`}
   </div>`;
@@ -8343,6 +8523,8 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
   const m = employeeMetrics(db,e);
   const myTasks=(db.tasks||[]).filter(t=>t.assignedTo===e.id||t.assignedTo===e.name);
   const stat=(l,v,c)=>html`<div style=${{flex:1,minWidth:120}}><div class="eyebrow">${l}</div><div style=${{fontFamily:'var(--display)',fontWeight:700,fontSize:18,marginTop:5,color:c||'var(--ink)'}}>${v}</div></div>`;
+  const savePaymentEmail=(r,result)=>{ if(!r||!result)return; ctx.updateRecord('employeePayments',r.id,{payslipEmailStatus:result.status||(result.ok?'Accepted':'Failed'),payslipEmailId:result.id||r.payslipEmailId||'',payslipEmailTo:result.to||'',payslipEmailAt:result.at||nowISO(),payslipEmailError:result.error||''}); };
+  const checkPaymentEmail=async(r)=>{ try{const result=await getEmailStatus(r.payslipEmailId);savePaymentEmail(r,Object.assign({},result,{to:r.payslipEmailTo||'',at:r.payslipEmailAt||nowISO()}));showProPopup('syncSuccess',(ctx.lang==='ar'?'حالة التسليم: ':'Delivery status: ')+result.status);}catch(err){alert(String((err&&err.message)||err));} };
 
   // onboarding/offboarding checklist editing
   const toggleCheck=(field,item)=>{ const cur=Object.assign({},e[field]||{}); cur[item]=!cur[item]; ctx.updateRecord('employees',e.id,{[field]:cur}); };
@@ -8425,8 +8607,8 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
             canEditFlag=${ce}
             onEdit=${ce?(r=>{onClose();ctx.openModal('employeePayments',r);}):null}
             onDelete=${ce?(r=>ctx.delRec('employeePayments',r.id,(e.fullName||e.name||'')+' · '+(r.month||''))):null}
-            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button><button class="mini" onClick=${()=>payslipWhatsApp(r,e)}>${ctx.lang==='ar'?'واتساب':'WhatsApp'}</button><button class="mini" onClick=${()=>emailPayslip(r,e)}>${ctx.lang==='ar'?'إيميل':'Email'}</button>`}
-            cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Status',tag:true}]}/></div>`}
+            extraActions=${(r)=>html`<button class="mini" onClick=${()=>generatePayslip(r,e)}>${ctx.lang==='ar'?'قسيمة':'Payslip'}</button><button class="mini" onClick=${()=>payslipWhatsApp(r,e)}>${ctx.lang==='ar'?'واتساب':'WhatsApp'}</button><button class="mini" onClick=${()=>emailPayslip(r,e,result=>savePaymentEmail(r,result))}>${ctx.lang==='ar'?'إيميل':'Email'}</button>${r.payslipEmailId?html`<button class="mini" onClick=${()=>checkPaymentEmail(r)}>${ctx.lang==='ar'?'فحص':'Check'}</button>`:''}`}
+            cols=${[{k:'month',label:'Month'},{k:'baseSalary',label:'Gross',num:true,money:true},{k:'socialInsurance',label:'Insurance',num:true,render:(r)=>money(r.socialInsurance!=null?r.socialInsurance:egyptPayroll(Number(r.baseSalary)||0,r).insuranceEmp)},{k:'incomeTax',label:'Tax',num:true,render:(r)=>money(r.incomeTax!=null?r.incomeTax:egyptPayroll(Number(r.baseSalary)||0,r).incomeTax)},{k:'deductions',label:'Other ded.',num:true,money:true},{k:'netAmount',label:'Net',num:true,render:(r)=>money(r.netAmount||empPaymentNet(r))},{k:'paymentStatus',label:'Payment',tag:true},{k:'payslipEmailStatus',label:'Email',tag:true,render:r=>r.payslipEmailStatus||'Not sent'}]}/></div>`}
 
         ${tab==='Attendance'&&html`<div>
           ${(()=>{ const recs=(db.attendance||[]).filter(a=>a.employeeId===e.id).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
@@ -8476,12 +8658,14 @@ function AttendanceView({ ctx, ce }){
   const seeSalary = canSeeSalary(role); // hide salary/payroll columns from PMs etc.
   const [month,setMonth]=useState(thisMonth());
   const [view,setView]=useState('records'); // records | calendar
-  const workDays = Number(appSettings.workDaysPerMonth)||26;
+  const rules=attendanceRules(appSettings);
+  const workDays = Number(appSettings.workDaysPerMonth)||monthWorkDays(month,appSettings);
+  const toggleWeekend=(dow)=>{ const next=new Set(rules.weekend); next.has(dow)?next.delete(dow):next.add(dow); ctx.applyAppSettings({weekendDays:[...next].sort().map(i=>ATT_DAYSHORT[i]).join(',')}); };
   const calCells=()=>{ const pr=String(month).split('-').map(Number),y=pr[0],mo=pr[1]; const firstDow=new Date(y,mo-1,1).getDay(),last=new Date(y,mo,0).getDate();
     const cells=[]; for(let i=0;i<firstDow;i++) cells.push(null);
     for(let d=1;d<=last;d++){ const ds=month+'-'+String(d).padStart(2,'0'); const recs=(db.attendance||[]).filter(r=>r.date===ds);
-      let present=0,late=0; recs.forEach(r=>{const c=computeAttendance(r); if(c.status==='Present'||c.status==='Weekend Work')present++; if(c.lateMin>0)late++;});
-      const dow=new Date(y,mo-1,d).getDay(); cells.push({d,ds,present,late,count:recs.length,weekend:dow===5||dow===6}); } return cells; };
+      let present=0,late=0; recs.forEach(r=>{const c=computeAttendance(r,appSettings); if(c.status==='Present'||c.status==='Weekend Work')present++; if(c.status==='Late')late++;});
+      const dow=new Date(y,mo-1,d).getDay(); cells.push({d,ds,present,late,count:recs.length,weekend:rules.weekend.has(dow)}); } return cells; };
   const hrsBetween=(a,b)=>{ if(!a||!b)return 0; const pa=String(a).split(':'),pb=String(b).split(':'); let d=((+pb[0]||0)*60+(+pb[1]||0))-((+pa[0]||0)*60+(+pa[1]||0)); if(d<0)d+=1440; return d/60; };
   const monthRecs=(db.attendance||[]).filter(r=>(r.date||'').slice(0,7)===month);
   const byEmp={};
@@ -8495,6 +8679,16 @@ function AttendanceView({ ctx, ce }){
     <${Head} eyebrow="Team / HR" title="Attendance & Payroll" desc="Auto check-in/out from login + payroll computed from days worked.">
       <div class="seg"><button class=${view==='records'?'on':''} onClick=${()=>setView('records')}>${ar?'سجلات':'Records'}</button><button class=${view==='calendar'?'on':''} onClick=${()=>setView('calendar')}>${ar?'كاليندر':'Calendar'}</button></div>
       ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('attendance',{date:todayISO(),status:'Present',workMode:'Office',source:'manual',createdBy:(ctx.user&&ctx.user.id)||'',createdByName:(ctx.user&&ctx.user.name)||'Manual'})}>${React.createElement(Icon.plus)} Log attendance</button>`}<//>
+    <${Panel} title=${ar?'قواعد الحضور':'Attendance rules'} sub=${ar?'إعداد واحد يُستخدم في الحضور والرواتب والتقارير':'One source used by attendance, payroll and reports'} className="mb18">
+      <div class="flex gap8" style=${{flexWrap:'wrap',alignItems:'flex-end'}}>
+        <label class="fld" style=${{minWidth:150}}><span>${ar?'بداية الدوام':'Work starts'}</span><input type="time" disabled=${!ce} value=${appSettings.workStartTime||'10:00'} onChange=${e=>ctx.applyAppSettings({workStartTime:e.target.value})}/></label>
+        <label class="fld" style=${{minWidth:150}}><span>${ar?'نهاية الدوام':'Work ends'}</span><input type="time" disabled=${!ce} value=${appSettings.workEndTime||'18:00'} onChange=${e=>ctx.applyAppSettings({workEndTime:e.target.value})}/></label>
+        <label class="fld" style=${{minWidth:150}}><span>${ar?'سماح التأخير (دقيقة)':'Late grace (min)'}</span><input type="number" min="0" disabled=${!ce} value=${appSettings.lateGraceMinutes==null?15:appSettings.lateGraceMinutes} onChange=${e=>ctx.applyAppSettings({lateGraceMinutes:Math.max(0,Number(e.target.value)||0)})}/></label>
+      </div>
+      <div style=${{marginTop:12}}><span class="eyebrow">${ar?'أيام الإجازة الأسبوعية':'Weekend days'}</span><div class="flex gap8" style=${{marginTop:8,flexWrap:'wrap'}}>
+        ${ATT_DAYSHORT.map((d,i)=>html`<label class="ver-toggle" key=${d} style=${{margin:0}}><input type="checkbox" disabled=${!ce} checked=${rules.weekend.has(i)} onChange=${()=>toggleWeekend(i)}/> ${(ar?['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][i]:d)}</label>`)}
+      </div></div>
+    <//>
     <${Panel} title=${(ar?'ملخّص الشهر · ':'Monthly summary · ')+month} sub=${(ar?'المرتب المستحق = اليومي × أيام الحضور':'Earned = daily rate × days present')}>
       <div class="flex gap8" style=${{marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         <select class="sel" value=${month} onChange=${e=>setMonth(e.target.value)}>${monthsList().map(m=>html`<option key=${m} value=${m}>${m}</option>`)}</select>
@@ -8510,7 +8704,7 @@ function AttendanceView({ ctx, ce }){
         <td data-label="Earned" class="right mono lime">${e.salary?money(e.earned):'—'}</td>`:''}
       </tr>`)}</tbody></table></div>
     <//>
-    ${view==='calendar'?html`<${Panel} title=${(ar?'كاليندر · ':'Calendar · ')+month} sub=${ar?'كل يوم: عدد الحاضرين والمتأخرين (الجمعة/السبت off)':'Per day: present + late counts (Fri/Sat off)'}>
+    ${view==='calendar'?html`<${Panel} title=${(ar?'كاليندر · ':'Calendar · ')+month} sub=${ar?'كل يوم: عدد الحاضرين والمتأخرين، حسب أيام الإجازة المحددة':'Per day: present + late counts using the selected weekend rules'}>
       <div style=${{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6}}>
         ${(ar?['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت']:['Sun','Mon','Tue','Wed','Thu','Fri','Sat']).map(d=>html`<div class="muted" key=${d} style=${{fontSize:11,textAlign:'center',fontWeight:600,padding:'4px 0'}}>${d}</div>`)}
         ${calCells().map((c,i)=> c===null?html`<div key=${'e'+i}></div>`:html`<div key=${c.ds} style=${{padding:8,minHeight:74,borderRadius:10,background:'rgba(255,255,255,.03)',opacity:c.weekend?0.5:1,border:c.ds===todayISO()?'1px solid var(--lime)':'1px solid rgba(255,255,255,.05)'}}>
@@ -8520,7 +8714,7 @@ function AttendanceView({ ctx, ce }){
       </div>
     <//>`
     :html`<${DataTable} db=${db} rows=${(db.attendance||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('attendance',r)):null} onDelete=${(ctx.canDelete&&ctx.canDelete('attendance'))?(r=>ctx.delRec('attendance',r.id,r.employeeName)):null}
-      cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'day',label:'Day',render:r=>computeAttendance(r).dayName||'—'},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'late',label:'Late',render:r=>{const c=computeAttendance(r);return c.lateMin?html`<span class="mono" style=${{color:'var(--neg)'}}>${c.lateMin}m</span>`:html`<span class="muted">—</span>`;}},{k:'hours',label:'Hrs',render:r=>{const c=computeAttendance(r);return c.hours?html`<span class="mono">${c.hours}h</span>`:html`<span class="muted">—</span>`;}},{k:'status',label:'Status',render:r=>{const s=computeAttendance(r).status;return html`<${Tag} type=${s==='Absent'?'neg':(s==='Late'?'warn':((s==='Present'||s==='Weekend Work')?'ok':''))}>${s}<//>`;}},{k:'source',label:'Added by',render:r=>r.source==='manual'?(r.createdByName||'Manual'):(r.source==='request'?'Request':'Auto')}]}/>`}</div>`;
+      cols=${[{k:'employeeId',label:'Employee',render:r=>{const n=nameById(db.employees,r.employeeId);return (n&&n!=='—')?n:(r.employeeName||'—');}},{k:'date',label:'Date',date:true},{k:'day',label:'Day',render:r=>computeAttendance(r,appSettings).dayName||'—'},{k:'checkIn',label:'In'},{k:'checkOut',label:'Out'},{k:'late',label:'Late',render:r=>{const c=computeAttendance(r,appSettings);return c.lateAfterGrace?html`<span class="mono" style=${{color:'var(--neg)'}}>${c.lateMin}m</span>`:(c.lateMin?html`<span class="muted" title=${ar?'داخل فترة السماح':'Within grace'}>${c.lateMin}m ✓</span>`:html`<span class="muted">—</span>`);}},{k:'hours',label:'Hrs',render:r=>{const c=computeAttendance(r,appSettings);return c.hours?html`<span class="mono">${c.hours}h</span>`:html`<span class="muted">—</span>`;}},{k:'status',label:'Status',render:r=>{const s=computeAttendance(r,appSettings).status;return html`<${Tag} type=${s==='Absent'?'neg':(s==='Late'?'warn':((s==='Present'||s==='Weekend Work')?'ok':''))}>${s}<//>`;}},{k:'source',label:'Added by',render:r=>r.source==='manual'?(r.createdByName||'Manual'):(r.source==='request'?'Request':'Auto')}]}/>`}</div>`;
 }
 
 // Leave balance for an employee this year (allowance from settings − approved days used).
@@ -8572,11 +8766,14 @@ function ReportsView({ ctx, visible, ce }){
     }
     ctx.deleteRecord('reports',r.id);
   };
+  const saveReportEmail=(r,result)=>ctx.updateRecord('reports',r.id,{status:result.ok?'Sent':r.status,emailDeliveryStatus:result.status||(result.ok?'Accepted':'Failed'),emailProviderId:result.id||r.emailProviderId||'',emailTo:result.to||'',emailSentAt:result.at||nowISO(),emailError:result.error||'',sentAt:result.ok?(result.at||nowISO()):(r.sentAt||'')});
+  const checkReportEmail=async(r)=>{try{const result=await getEmailStatus(r.emailProviderId);ctx.updateRecord('reports',r.id,{emailDeliveryStatus:result.status,emailCheckedAt:nowISO(),emailError:''});showProPopup('syncSuccess',(ar?'حالة التسليم: ':'Delivery status: ')+result.status);}catch(err){const message=String((err&&err.message)||err);ctx.updateRecord('reports',r.id,{emailError:message,emailCheckedAt:nowISO()});alert(message);}};
   const extra=(r)=>{ if(r.reportKind!=='Employee')return null; const emp=byId(db.employees,r.employeeId); if(!emp)return html`<span class="muted">${ar?'الموظف غير موجود':'Employee missing'}</span>`; const salaryAllowed=canSeeSalary(ctx.role);
     return html`<span class="flex gap8" style=${{justifyContent:'flex-end',flexWrap:'wrap'}}>
       <button class="mini pri" onClick=${()=>printEmployeeReport(r,emp,db,salaryAllowed)}>${ar?'معاينة / PDF':'Preview / PDF'}</button>
       ${r.status!=='Approved'&&ce?html`<button class="mini" onClick=${()=>ctx.updateRecord('reports',r.id,{status:'Approved',approvedAt:nowISO()})}>${ar?'اعتماد':'Approve'}</button>`:''}
-      <button class="mini" onClick=${()=>emailEmployeeReport(r,emp,db,salaryAllowed,()=>ctx.updateRecord('reports',r.id,{status:'Sent',sentAt:nowISO()}))}>${ar?'إيميل':'Email'}</button>
+      <button class="mini" onClick=${()=>emailEmployeeReport(r,emp,db,salaryAllowed,result=>saveReportEmail(r,result))}>${ar?'إيميل':'Email'}</button>
+      ${r.emailProviderId?html`<button class="mini" onClick=${()=>checkReportEmail(r)}>${ar?'فحص التسليم':'Check delivery'}</button>`:''}
     </span>`; };
   return html`<div class="view">
     <${Head} eyebrow="Operations" title=${ar?'التقارير':'Reports'} desc=${ar?'تقارير العملاء والموظفين — يدويًا أو مسودات شهرية تلقائية.':'Client and employee reports — manual or automatic monthly drafts.'}>
@@ -8594,16 +8791,17 @@ function ReportsView({ ctx, visible, ce }){
     <div class="seg" style=${{marginBottom:14}}>${['All','Employee','Client'].map(k=>html`<button key=${k} class=${kind===k?'on':''} onClick=${()=>setKind(k)}>${ar?({All:'الكل',Employee:'الموظفون',Client:'العملاء'}[k]):k} · ${k==='All'?all.length:all.filter(r=>(r.reportKind||'Client')===k).length}</button>`)}</div>
     <${DataTable} db=${db} rows=${rows} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal('reports',r)):null}
       onDelete=${ce?deleteReport:null} extraActions=${extra}
-      cols=${[{k:'title',label:'Report'},{k:'reportKind',label:'For',render:r=>(r.reportKind||'Client')==='Employee'?(nameById(db.employees,r.employeeId)||'—'):(nameById(db.clients,r.clientId)||'—')},{k:'period',label:'Period'},{k:'generationMode',label:'Mode',render:r=>r.generationMode||'Manual'},{k:'type',label:'Type'},{k:'status',label:'Status',tag:true}]}/></div>`;
+      cols=${[{k:'title',label:'Report'},{k:'reportKind',label:'For',render:r=>(r.reportKind||'Client')==='Employee'?(nameById(db.employees,r.employeeId)||'—'):(nameById(db.clients,r.clientId)||'—')},{k:'period',label:'Period'},{k:'generationMode',label:'Mode',render:r=>r.generationMode||'Manual'},{k:'type',label:'Type'},{k:'status',label:'Status',tag:true},{k:'emailDeliveryStatus',label:'Email',tag:true,render:r=>r.emailDeliveryStatus||'Not sent'}]}/></div>`;
 }
 
 function DocView({ coll, title, ctx, visible, ce, gen, cols }){
   const { db } = ctx; const [preview,setPreview]=useState(null);
   const markStatus=(r,s)=>ctx.updateRecord(coll,r.id,{status:s});
   const extra=(r)=>html`<button class="mini" onClick=${()=>setPreview(r)}>Preview</button>`;
+  const newDefaults=()=>coll==='contracts'?{status:'Draft',startDate:todayISO()}:{status:'Draft',issueDate:todayISO()};
   return html`<div class="view">
     <${Head} eyebrow="Sales" title=${title}>
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal(coll,{status:'Draft'})}>${React.createElement(Icon.plus)} New</button>`}<//>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal(coll,newDefaults())}>${React.createElement(Icon.plus)} New</button>`}<//>
     <${DataTable} db=${db} rows=${visible(coll)} canEditFlag=${ce} onEdit=${ce?(r=>ctx.openModal(coll,r)):null}
       onDelete=${ctx.canDelete(coll)?(r=>ctx.delRec(coll,r.id,r.title||r.contractNumber||r.proposalNumber)):null} extraActions=${extra} cols=${cols}/>
     ${preview&&html`<${Modal} title=${title+' preview'} wide=${true} onClose=${()=>setPreview(null)}>
@@ -8635,6 +8833,7 @@ function SettingsView({ ctx, x }){
   const [key,setKey]=useState((cfg&&cfg.key)||'');
   const [wh,setWh]=useState((cfg&&cfg.webhooks)||{});
   const [email,setEmail]=useState(''); const [pw,setPw]=useState('');
+  const [emailHealth,setEmailHealth]=useState(null);
   const fileRef=useRef(null);
   const [meta,setMeta]=useState(getBackupMeta());
   const snaps=listSnapshots();
@@ -8667,6 +8866,9 @@ function SettingsView({ ctx, x }){
       <div class="muted" style=${{fontSize:12,marginBottom:12}}>${arr?'معدلات افتراضية للسنة الحالية — راجعها مع محاسبك. بتنطبق على حساب الرواتب والقسائم.':'Default rates for the current year — verify with your accountant. Used by payroll & payslips.'}</div>
       <div class="flex gap8" style=${{flexWrap:'wrap'}}>
         ${[['insEmpPct',arr?'تأمين الموظف %':'Insurance employee %'],['insEmployerPct',arr?'تأمين الشركة %':'Insurance employer %'],['insMin',arr?'حد أدنى تأميني':'Insurance base min'],['insMax',arr?'حد أقصى تأميني':'Insurance base max'],['personalExemption',arr?'الإعفاء الشخصي (سنوي)':'Personal exemption (annual)']].map(([k,l])=>html`<label class="fld" style=${{minWidth:150}} key=${k}><span>${l}</span><input type="number" value=${pcfg[k]} onChange=${e=>setPay(k,Number(e.target.value)||0)}/></label>`)}
+        <label class="fld" style=${{minWidth:150}}><span>${arr?'بداية الدوام':'Work starts'}</span><input type="time" value=${ctx.appSettings.workStartTime||'10:00'} onChange=${e=>ctx.applyAppSettings({workStartTime:e.target.value})}/></label>
+        <label class="fld" style=${{minWidth:150}}><span>${arr?'نهاية الدوام':'Work ends'}</span><input type="time" value=${ctx.appSettings.workEndTime||'18:00'} onChange=${e=>ctx.applyAppSettings({workEndTime:e.target.value})}/></label>
+        <label class="fld" style=${{minWidth:150}}><span>${arr?'سماح التأخير (دقيقة)':'Late grace (min)'}</span><input type="number" min="0" value=${ctx.appSettings.lateGraceMinutes==null?15:ctx.appSettings.lateGraceMinutes} onChange=${e=>ctx.applyAppSettings({lateGraceMinutes:Math.max(0,Number(e.target.value)||0)})}/></label>
         <label class="fld" style=${{minWidth:150}}><span>${arr?'أيام العمل/شهر':'Work days / month'}</span><input type="number" value=${ctx.appSettings.workDaysPerMonth||26} onChange=${e=>ctx.applyAppSettings({workDaysPerMonth:Number(e.target.value)||26})}/></label>
         <label class="fld" style=${{minWidth:150}}><span>${arr?'رصيد الإجازة السنوية':'Annual leave (days)'}</span><input type="number" value=${ctx.appSettings.annualLeaveDefault!=null?ctx.appSettings.annualLeaveDefault:21} onChange=${e=>ctx.applyAppSettings({annualLeaveDefault:Number(e.target.value)||0})}/></label>
         <label class="fld" style=${{minWidth:150}}><span>${arr?'رصيد الإجازة المرضية':'Sick leave (days)'}</span><input type="number" value=${ctx.appSettings.sickLeaveDefault!=null?ctx.appSettings.sickLeaveDefault:6} onChange=${e=>ctx.applyAppSettings({sickLeaveDefault:Number(e.target.value)||0})}/></label>
@@ -8722,6 +8924,16 @@ function SettingsView({ ctx, x }){
       <label class="flex center gap8" style=${{fontSize:13,cursor:'pointer',marginBottom:12}}>
         <input type="checkbox" checked=${!!ctx.appSettings.emailNotifications} onChange=${e=>ctx.applyAppSettings({emailNotifications:e.target.checked})}/>
         <span>${ctx.lang==='ar'?'إرسال إشعارات بالبريد عند إسناد المهام والموافقات':'Email team members on task assignments & approvals'}</span></label>
+      <div class="flex gap8" style=${{alignItems:'center',flexWrap:'wrap',marginBottom:12}}>
+        <button class="mini" onClick=${async()=>{ setEmailHealth({loading:true}); try{setEmailHealth(await getEmailHealth());}catch(err){setEmailHealth({ok:false,error:String((err&&err.message)||err)});} }}>${ctx.lang==='ar'?'فحص إعداد البريد':'Check email setup'}</button>
+        ${emailHealth&&emailHealth.loading?html`<span class="muted" style=${{fontSize:12}}>${ctx.lang==='ar'?'جاري الفحص…':'Checking…'}</span>`:''}
+        ${emailHealth&&emailHealth.ok?html`<${Tag} type=${emailHealth.senderMode==='custom'?'ok':'warn'}>${emailHealth.senderMode==='custom'?(ctx.lang==='ar'?'دومين إرسال مفعّل':'Verified/custom sender'):(ctx.lang==='ar'?'وضع اختبار Resend':'Resend test sender')}<//>`:''}
+        ${emailHealth&&emailHealth.error?html`<span style=${{fontSize:12,color:'var(--neg)'}}>${emailHealth.error}</span>`:''}
+      </div>
+      ${emailHealth&&emailHealth.ok&&emailHealth.senderMode==='test'?html`<div style=${{padding:10,border:'1px solid var(--warn)',borderRadius:8,color:'var(--warn)',fontSize:12,lineHeight:1.6,marginBottom:12}}>${ctx.lang==='ar'
+        ?'تحذير: onboarding@resend.dev يرسل فقط لإيميل مالك حساب Resend. عشان كل الموظفين يستلموا، فعّل دومين شركتك في Resend واضبط FROM_EMAIL ثم أعد النشر.'
+        :'Warning: onboarding@resend.dev only sends to the Resend account owner. Verify your company domain, set FROM_EMAIL, then redeploy before emailing staff.'}</div>`:''}
+      <div class="muted" style=${{fontSize:11.5,marginBottom:12}}>${ctx.lang==='ar'?'إيميلات تالفة/مرتدة مسجلة: ':'Recorded failed/bounced emails: '}${(db.tasks||[]).filter(v=>['Failed','Bounced','Complained'].includes(v.assignmentEmailStatus)).length+(db.employeePayments||[]).filter(v=>['Failed','Bounced','Complained'].includes(v.payslipEmailStatus)).length}</div>
       <div class="flex gap8" style=${{flexWrap:'wrap',alignItems:'flex-end'}}>
         <label class="fld" style=${{minWidth:240}}><span>${ctx.lang==='ar'?'إيميل لاختبار الإرسال':'Send a test email to'}</span>
           <input value=${email} placeholder="you@example.com" onChange=${e=>setEmail(e.target.value)}/></label>
@@ -8769,7 +8981,7 @@ function SettingsView({ ctx, x }){
         <li><b>Staff:</b> open <a class="lime" style=${{cursor:'pointer'}} onClick=${()=>ctx.go('employees')}>Employees</a> → New employee. Set their <b>Login email</b> and <b>App role</b> (Admin / Project Manager / Designer / Video Editor / Accountant / Sales) in the Access section.</li>
         <li><b>Clients:</b> open <a class="lime" style=${{cursor:'pointer'}} onClick=${()=>ctx.go('contacts')}>Contacts</a> → add the client contact and enable <b>Portal access</b>. They get the Client portal automatically.</li>
         <li>In <b>Supabase → Authentication → Users → Add user</b>, create a login with the <b>same email</b> and a temporary password. Share it with them.</li>
-        <li>They open your site, sign in, and land in their role automatically. The first/unmatched login is treated as Admin (owner).</li>
+        <li>They open your site, sign in, and land in their role automatically. Any unmatched login gets the least-privilege Client role until you link it.</li>
       </ol>
       <div class="flex gap8" style=${{marginTop:14}}>
         <button class="btn btn-ghost" onClick=${()=>ctx.go('employees')}>Open Employees</button>
@@ -9205,6 +9417,16 @@ function TaskDetail({ ctx, task, ce, onClose }){
           <button class="mini" onClick=${()=>setStatus('Blocked')}>${ctx.lang==='ar'?'متعطلة':'Block'}</button>
           ${canManage&&html`<button class="btn btn-ghost" style=${{padding:'5px 10px'}} onClick=${()=>{onClose();ctx.openModal('tasks',t);}}>Edit all fields</button>
           <button class="btn btn-ghost danger" style=${{padding:'5px 10px'}} onClick=${()=>{ if(confirm((ctx.lang==='ar'?'حذف هذه المهمة نهائيًا؟':'Delete this task permanently?'))){ ctx.deleteRecord('tasks',t.id); onClose(); } }}>${ctx.lang==='ar'?'حذف':'Delete'}</button>`}</div>`}
+        ${t.assignedTo&&html`<div class="panel" style=${{padding:12,marginBottom:14}}>
+          <div class="flex between center" style=${{gap:10,flexWrap:'wrap'}}><div>
+            <div class="eyebrow">${ctx.lang==='ar'?'إيميل إسناد التاسك':'Assignment email'}</div>
+            <div style=${{marginTop:6,fontSize:12}}><${Tag} type=${['Delivered','Opened','Clicked'].includes(t.assignmentEmailStatus)?'ok':(['Failed','Bounced','Complained','Missing email'].includes(t.assignmentEmailStatus)?'neg':'warn')}>${t.assignmentEmailStatus||(ctx.lang==='ar'?'لم يُرسل':'Not sent')}<//>
+              ${t.assignmentEmailTo?html`<span class="muted" style=${{marginInlineStart:8}}>${t.assignmentEmailTo}</span>`:''}</div>
+            ${t.assignmentEmailAt?html`<div class="muted" style=${{fontSize:10,marginTop:5}}>${fmtDateTime(t.assignmentEmailAt)}</div>`:''}
+            ${t.assignmentEmailError?html`<div style=${{fontSize:11,color:'var(--neg)',marginTop:5}}>${t.assignmentEmailError}</div>`:''}
+          </div>${canManage&&html`<div class="flex gap8"><button class="mini" onClick=${()=>ctx.sendTaskAssignmentEmail(t,true)}>${ctx.lang==='ar'?'إرسال / إعادة إرسال':'Send / Retry'}</button>
+            ${t.assignmentEmailId&&html`<button class="mini" onClick=${()=>ctx.checkTaskAssignmentEmail(t,true)}>${ctx.lang==='ar'?'فحص التسليم':'Check delivery'}</button>`}</div>`}</div>
+        </div>`}
         ${t.brief?html`<div class="panel" style=${{padding:12,marginBottom:14}}><div class="eyebrow">Brief</div><div style=${{marginTop:6,fontSize:13,lineHeight:1.6,whiteSpace:'pre-wrap'}}>${t.brief}</div></div>`:''}
         ${t.requirements?html`<div class="panel" style=${{padding:12,marginBottom:14}}><div class="eyebrow">Requirements</div><div style=${{marginTop:6,fontSize:13,lineHeight:1.6}}>${t.requirements}</div></div>`:''}
         <div class="eyebrow" style=${{marginBottom:8}}>Checklist</div>

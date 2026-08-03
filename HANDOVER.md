@@ -1,5 +1,12 @@
 # Magnet OS — Handover / Continue in a new chat
 
+> **2026-08-03 release candidate:** see [SAAS_READINESS_REPORT.md](SAAS_READINESS_REPORT.md).
+> The current branch adds universal audit dates, configurable attendance rules,
+> automatic/manual employee reports, explicit payroll payment confirmation, and
+> tracked task/payslip/report email delivery. Latest checks: 34 smoke + 24 email
+> security + 26 static security passed with zero failures. Public multi-tenant
+> SaaS remains blocked on Auth/JWT workspace isolation and strict business-data RLS.
+
 > 📌 **Start here after the stabilization pass:** read **[README.md](README.md)** and
 > **[FINAL_ENGINEERING_REPORT.md](FINAL_ENGINEERING_REPORT.md)**. Before deploying,
 > back up (`npm run backup:supabase`) and follow **[DEPLOYMENT_FIXED.md](DEPLOYMENT_FIXED.md)**.

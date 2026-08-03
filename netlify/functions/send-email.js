@@ -35,7 +35,7 @@ function allowedOrigin(origin) {
 function headers(origin) {
   const out = {
     'Access-Control-Allow-Headers': 'Content-Type, x-magnet-secret',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json',
     Vary: 'Origin',
   };
@@ -58,7 +58,21 @@ function validPayload(body) {
   if (!subject || subject.length > 200 || /[\r\n]/.test(subject)) return null;
   if (!html && !text) return null;
   if (html.length > 100000 || text.length > 100000) return null;
-  return { recipients, subject, html, text };
+  const idempotencyKey = String((body && body.idempotencyKey) || '').trim();
+  if (idempotencyKey && (idempotencyKey.length > 256 || !/^[A-Za-z0-9_./:-]+$/.test(idempotencyKey))) return null;
+  return { recipients, subject, html, text, idempotencyKey };
+}
+
+function validEmailId(value) {
+  const id = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : '';
+}
+
+function senderInfo(from) {
+  const match = String(from || '').match(/<([^>]+)>/) || [];
+  const address = (match[1] || String(from || '')).trim();
+  const domain = (address.split('@')[1] || '').toLowerCase();
+  return { senderMode: domain === 'resend.dev' ? 'test' : 'custom', fromDomain: domain || null };
 }
 
 exports.handler = async (event) => {
@@ -66,8 +80,6 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return allowedOrigin(origin)
     ? response(200, origin, {})
     : response(403, origin, { error: 'Forbidden origin' });
-  if (event.httpMethod !== 'POST') return response(405, origin, { error: 'Method not allowed' });
-
   const secret = process.env.EMAIL_SHARED_SECRET;
   const suppliedSecret = event.headers && (event.headers['x-magnet-secret'] || event.headers['X-Magnet-Secret']);
   const hasSecret = !!(secret && suppliedSecret === secret);
@@ -76,6 +88,25 @@ exports.handler = async (event) => {
   const KEY = process.env.RESEND_API_KEY;
   const FROM = process.env.FROM_EMAIL || 'Magnet OS <onboarding@resend.dev>';
   if (!KEY) return response(500, origin, { error: 'RESEND_API_KEY is not set in Netlify environment variables.' });
+
+  if (event.httpMethod === 'GET') {
+    const rawId = event.queryStringParameters && event.queryStringParameters.id;
+    const id = validEmailId(rawId);
+    if (!rawId) return response(200, origin, Object.assign({ ok: true, configured: true }, senderInfo(FROM)));
+    if (!id) return response(400, origin, { error: 'Invalid email id' });
+    try {
+      const res = await fetch('https://api.resend.com/emails/' + encodeURIComponent(id), {
+        headers: { Authorization: 'Bearer ' + KEY, 'User-Agent': 'MagnetOS/1.0' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return response(res.status, origin, { error: (data && (data.message || data.name)) || ('Email provider rejected the request (' + res.status + ')') });
+      return response(200, origin, {
+        ok: true, id: data.id || id, last_event: data.last_event || 'sent',
+        to: data.to || [], created_at: data.created_at || null, subject: data.subject || '',
+      });
+    } catch (e) { return response(500, origin, { error: 'Email service is unavailable.' }); }
+  }
+  if (event.httpMethod !== 'POST') return response(405, origin, { error: 'Method not allowed' });
 
   let b = {};
   try { b = JSON.parse(event.body || '{}'); }
@@ -87,7 +118,8 @@ exports.handler = async (event) => {
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+      headers: Object.assign({ Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json', 'User-Agent': 'MagnetOS/1.0' },
+        message.idempotencyKey ? { 'Idempotency-Key': message.idempotencyKey } : {}),
       body: JSON.stringify({
         from: FROM,
         to: message.recipients,

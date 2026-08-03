@@ -15,10 +15,15 @@ const bad = (message) => { fail++; console.log('  FAIL ' + message); };
 const same = (actual, expected, message) => actual === expected ? ok(message) : bad(message + ` (expected ${expected}, got ${actual})`);
 
 let fetchCalls = 0;
+let lastFetch = null;
 const oldFetch = global.fetch;
-global.fetch = async () => {
+global.fetch = async (url, options) => {
   fetchCalls++;
-  return { ok: true, status: 200, json: async () => ({ id: 'test-email-id' }) };
+  lastFetch = { url: String(url), options: options || {} };
+  const statusRead = String(url).includes('/emails/test-email-id');
+  return { ok: true, status: 200, json: async () => statusRead
+    ? ({ id: 'test-email-id', last_event: 'delivered', to: ['person@example.com'], subject: 'Test message', created_at: '2026-08-03T00:00:00Z' })
+    : ({ id: 'test-email-id' }) };
 };
 
 process.env.RESEND_API_KEY = 'test-key';
@@ -31,7 +36,7 @@ function emailBody() {
   return { to: 'person@example.com', subject: 'Test message', text: 'This is an offline test.' };
 }
 
-async function callVercel({ origin, method = 'POST', body = emailBody(), secret }) {
+async function callVercel({ origin, method = 'POST', body = emailBody(), secret, query }) {
   const headers = {};
   if (origin !== undefined) headers.origin = origin;
   if (secret !== undefined) headers['x-magnet-secret'] = secret;
@@ -42,15 +47,15 @@ async function callVercel({ origin, method = 'POST', body = emailBody(), secret 
     set statusCode(value) { out.statusCode = value; },
     get statusCode() { return out.statusCode; },
   };
-  await vercelEmail({ method, headers, body }, res);
+  await vercelEmail({ method, headers, body, query: query || {} }, res);
   return out;
 }
 
-async function callNetlify({ origin, method = 'POST', body = emailBody(), secret }) {
+async function callNetlify({ origin, method = 'POST', body = emailBody(), secret, query }) {
   const headers = {};
   if (origin !== undefined) headers.origin = origin;
   if (secret !== undefined) headers['x-magnet-secret'] = secret;
-  return await netlifyEmail.handler({ httpMethod: method, headers, body: JSON.stringify(body) });
+  return await netlifyEmail.handler({ httpMethod: method, headers, body: JSON.stringify(body), queryStringParameters: query || {} });
 }
 
 (async () => {
@@ -69,14 +74,24 @@ async function callNetlify({ origin, method = 'POST', body = emailBody(), secret
   same(allowedVercel.headers['access-control-allow-origin'], 'https://magnet-op.vercel.app', 'returns exact-origin CORS');
   same(fetchCalls, 1, 'calls Resend once for a permitted email');
 
+  await callVercel({ origin: 'https://magnet-op.vercel.app', body: Object.assign(emailBody(), { idempotencyKey: 'task-assigned/task-1/emp-1' }) });
+  same(lastFetch.options.headers['Idempotency-Key'], 'task-assigned/task-1/emp-1', 'forwards a validated idempotency key');
+
+  const health = await callVercel({ origin: 'https://magnet-op.vercel.app', method: 'GET' });
+  same(health.statusCode, 200, 'exposes authenticated email configuration health');
+  same(JSON.parse(health.body).senderMode, 'test', 'identifies the Resend test sender');
+  const delivery = await callVercel({ origin: 'https://magnet-op.vercel.app', method: 'GET', query: { id: 'test-email-id' } });
+  same(delivery.statusCode, 200, 'retrieves provider delivery status');
+  same(JSON.parse(delivery.body).last_event, 'delivered', 'returns the provider delivery event');
+
   const invalidPayload = await callVercel({ origin: 'https://magnet-op.vercel.app', body: { to: 'person@example.com', subject: 'bad\nsubject', text: 'x' } });
   same(invalidPayload.statusCode, 400, 'rejects header-injection payloads');
-  same(fetchCalls, 1, 'does not call Resend for an invalid payload');
+  same(fetchCalls, 3, 'does not call Resend for an invalid payload');
 
   process.env.EMAIL_SHARED_SECRET = 'test-shared-secret';
   const trustedServer = await callVercel({ secret: 'test-shared-secret' });
   same(trustedServer.statusCode, 200, 'allows trusted origin-less server traffic');
-  same(fetchCalls, 2, 'calls Resend for trusted server traffic');
+  same(fetchCalls, 4, 'calls Resend for trusted server traffic');
 
   console.log('\n[2] Netlify legacy email guard');
   fetchCalls = 0;
@@ -88,9 +103,14 @@ async function callNetlify({ origin, method = 'POST', body = emailBody(), secret
   same(allowedNetlify.statusCode, 200, 'Netlify allows the exact production origin');
   same(fetchCalls, 1, 'Netlify calls Resend once for a permitted email');
 
+  const netlifyHealth = await callNetlify({ origin: 'https://magnet-op.vercel.app', method: 'GET' });
+  same(netlifyHealth.statusCode, 200, 'Netlify exposes email configuration health');
+  const netlifyDelivery = await callNetlify({ origin: 'https://magnet-op.vercel.app', method: 'GET', query: { id: 'test-email-id' } });
+  same(JSON.parse(netlifyDelivery.body).last_event, 'delivered', 'Netlify retrieves provider delivery status');
+
   const trustedNetlify = await callNetlify({ secret: 'test-shared-secret' });
   same(trustedNetlify.statusCode, 200, 'Netlify allows trusted origin-less server traffic');
-  same(fetchCalls, 2, 'Netlify calls Resend for trusted server traffic');
+  same(fetchCalls, 3, 'Netlify calls Resend for trusted server traffic');
 
   global.fetch = oldFetch;
   console.log(`\nResult: ${pass} passed, ${fail} failed.`);
