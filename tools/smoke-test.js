@@ -44,6 +44,15 @@ const acct = read('supabase/functions/accounts/index.ts');
 /next\.length<10/.test(acct) && /\!\/\[A-Z\]\//.test(acct)
   ? ok('server enforces strong new passwords')
   : bad('server password policy is weaker than the UI policy');
+/RL_LOGIN_WINDOW_MS/.test(acct) && /RL_FORGOT_WINDOW_MS/.test(acct) && /reason:'rate-limited'/.test(acct)
+  ? ok('login and password-recovery throttles are separate and report lockout')
+  : bad('login/recovery rate limits can still block the wrong flow');
+/action==='unlock'/.test(acct) && /liveActor/.test(acct)
+  ? ok('owner can unlock accounts and admin rights use the live account role')
+  : bad('account unlock/live-role authorization is missing');
+/duplicate-email/.test(acct) && /duplicate-username/.test(acct) && /last-owner/.test(acct)
+  ? ok('duplicate logins and last-owner lockout are blocked server-side')
+  : bad('account identity/last-owner guards are missing');
 
 console.log('\n[4] frontend password-change hardening');
 const html = read('index.html');
@@ -73,6 +82,15 @@ console.log('\n[5] dangerous-pattern scan');
 /emailDeliveryStatus/.test(html) && /employeeReportsAuto/.test(html)
   ? ok('employee reports support automation and tracked delivery')
   : bad('employee report automation/delivery tracking is missing');
+/saveUsersConfirmed/.test(html) && /The server did not confirm the change/.test(html)
+  ? ok('account administration waits for a confirmed server write')
+  : bad('role/password changes can still claim success before cloud persistence');
+/Linked employee/.test(html) && /Repair links & roles/.test(html) && /unlockUserConfirmed/.test(html)
+  ? ok('employee-account linking, role repair, and login unlock tools are present')
+  : bad('account recovery/link repair controls are missing');
+/cloudLoadDelta/.test(html) && /updated_at=gt\./.test(html) && !/setInterval\(tick,\s*5000\)/.test(html)
+  ? ok('live sync uses updated_at deltas instead of 5-second full-database downloads')
+  : bad('high-egress full-database polling has returned');
 
 console.log('\n[6] inline app scripts parse');
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];

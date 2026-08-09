@@ -1,11 +1,22 @@
 # Magnet OS — SaaS Readiness & Release Report
 
-Date: 2026-08-03
+Date: 2026-08-10
 Release branch: `codex/saas-readiness-foundation`
 
 ## Executive decision
 
 The current release is suitable for a **controlled private production rollout for Magnet's own team** after the deployment gates below pass. It is **not yet safe to sell as a public multi-tenant SaaS**: business records are still accessed from the browser with the shared Supabase anon key, so there is no database-enforced tenant or user isolation for clients, finance, payroll, and employee PII.
+
+## Production incident — login outage / Supabase quota
+
+- The live Supabase organization reported **16.29 GB / 5 GB egress (326%)** for the billing cycle, while the database itself was only **32.55 MB**. This confirms that the incident was bandwidth exhaustion, not lost data.
+- Root cause: when Realtime was unavailable, every open browser downloaded the entire shared records table every **5 seconds**.
+- Fix: the fallback now requests only records changed after the last server cursor, every **30 seconds** and on focus. Realtime remains the instant update path.
+- The accounts Edge Function was upgraded to v7 and deployed. Its live health check returns HTTP 200, `database: reachable`, and `version: 7`.
+- Login and forgot-password throttles are separate; an Owner/Admin/Manager can explicitly unlock a user; password resets clear locks; stale role tokens no longer retain account-administration rights.
+- A validated pre-release backup contains **1,444 business records across 43 collections** with checksum `sha256:280cc84bcea62b251cefb7f2f991d815ae69de3939437e951a6c7930b4880156`. `_accounts` is excluded because no service-role key is stored locally.
+
+The code change prevents the same download pattern from continuing, but the organization is still over its current free-tier egress quota. A billing-cycle reset or Supabase plan upgrade is an operational requirement for uninterrupted service; changing billing is intentionally not automated by this release.
 
 ## Completed in this release
 
@@ -54,13 +65,15 @@ The current release is suitable for a **controlled private production rollout fo
 
 | Check | Result |
 |---|---:|
-| Offline app/server smoke tests | 34 passed, 0 failed |
+| Offline app/server smoke tests | 45 passed, 0 failed |
 | Email endpoint behavior/security tests | 24 passed, 0 failed |
 | Static security verifier | 26 passed, 0 failed, 1 expected CSP warning |
 | Git whitespace validation | passed |
 | Live config probe | 0 failures, 2 local-secret warnings |
 | `_accounts` anonymous exposure | blocked by live RLS |
-| Pre-deploy business-data backup | 1,443 records / 43 collections, checksum validated |
+| Pre-deploy business-data backup | 1,444 records / 43 collections, checksum validated |
+| Live accounts Edge Function health | HTTP 200, version 7, database reachable |
+| Live incremental-sync query | HTTP 200; 17 changed rows / 2,066 bytes for the test window |
 | Browser test of local `127.0.0.1` | blocked by browser URL policy; must be repeated on the HTTPS deployment |
 
 The backup excludes `_accounts` because no service-role key is stored locally; account hashes remain protected by RLS. A full break-glass backup still requires the service-role key. The CSP warning exists because the app still runs a single inline Babel/HTM bundle. It should be removed during the modular build migration.
@@ -69,14 +82,16 @@ The backup excludes `_accounts` because no service-role key is stored locally; a
 
 Do not call the release complete until all gates are green:
 
-1. Back up the live Supabase records with a service-role key and validate the backup.
-2. Set/verify Vercel variables: `RESEND_API_KEY`, verified-domain `FROM_EMAIL`, `EMAIL_SHARED_SECRET`, and any custom `EMAIL_ALLOWED_ORIGINS`.
-3. Set the matching email/shared secrets on the Supabase accounts Edge Function; verify forgot-password end to end.
-4. Deploy this branch and test on HTTPS in English and Arabic at desktop and 375px mobile widths.
-5. Test one account for every live role: Owner, Manager/PM, HR, Finance/Accountant, Sales, Creative, and Client.
-6. Test: task assign email, task Done, attendance edit, duplicate attendance rejection, payroll email Accepted then Delivered, explicit Mark paid, report automatic draft, manual report, report edit/delete/send.
-7. Confirm no `Bounced`, `Complained`, or `Failed` rows remain in Settings email diagnostics.
-8. Keep the previous Vercel deployment available for rollback.
+1. Resolve the Supabase egress restriction by upgrading the organization or waiting for a confirmed cycle reset; keep usage alerts enabled.
+2. Back up the live Supabase records with a service-role key and validate the backup.
+3. Set/verify Vercel variables: `RESEND_API_KEY`, verified-domain `FROM_EMAIL`, `EMAIL_SHARED_SECRET`, and any custom `EMAIL_ALLOWED_ORIGINS`.
+4. Set the matching email/shared secrets on the Supabase accounts Edge Function; verify forgot-password end to end.
+5. Deploy this branch and test on HTTPS in English and Arabic at desktop and 375px mobile widths.
+6. In Users & Permissions, run **Repair links & roles**, review the exact-email/explicit-ID matches, then unlock or reset affected accounts.
+7. Test one account for every live role: Owner, Manager/PM, HR, Finance/Accountant, Sales, Creative, and Client.
+8. Test: task assign email, task Done, attendance edit, duplicate attendance rejection, payroll email Accepted then Delivered, explicit Mark paid, report automatic draft, manual report, report edit/delete/send.
+9. Confirm no `Bounced`, `Complained`, or `Failed` rows remain in Settings email diagnostics.
+10. Keep the previous Vercel deployment available for rollback.
 
 ## Why this is not public SaaS yet
 

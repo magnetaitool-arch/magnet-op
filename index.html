@@ -3994,7 +3994,10 @@ function setAcctToken(t, remember){ try{ if(!t){ store.del(ACCT_TOKEN_KEY); try{
 async function acctApi(cfg, action, payload){
   const res = await fetch(_acctUrl(cfg), { method:'POST', headers:{ apikey:cfg.key, 'Content-Type':'application/json' }, body: JSON.stringify(Object.assign({action}, payload||{})) });
   if(res.status===404) throw new Error('accounts function not deployed');
-  return await res.json();
+  const data=await res.json().catch(()=>({}));
+  if(res.status===402) return {ok:false,reason:'quota-exceeded',error:'quota-exceeded'};
+  if(!res.ok&&!data.error&&!data.reason)data.error='account-service-'+res.status;
+  return data;
 }
 
 async function cloudPing(cfg){
@@ -4028,7 +4031,36 @@ async function cloudLoadAll(cfg){
   const db = {};
   COLLECTIONS.forEach(c=>db[c]=[]);
   rows.forEach(r=>{ if(!db[r.coll]) db[r.coll]=[]; db[r.coll].push(Object.assign({id:r.id}, r.data||{})); });
+  const maxUpdated=rows.reduce((m,r)=>String(r.updated_at||'')>m?String(r.updated_at):m,'');
+  if(maxUpdated) window.__moCloudCursor=maxUpdated;
   return db;
+}
+// Low-egress fallback sync. After the one initial full load, request only rows whose
+// server-managed updated_at changed. The previous 5-second full-database poll was the
+// direct cause of the Supabase egress quota incident (16.29 GB / 5 GB).
+async function cloudLoadDelta(cfg, since){
+  if(!cfgComplete(cfg)||!since) return {rows:[],cursor:since||''};
+  const rows=[]; let start=0;
+  for(;;){
+    const q='records?select=id,coll,data,updated_at&updated_at=gt.'+encodeURIComponent(since)+'&order=updated_at.asc,id.asc';
+    const res=await fetch(_rest(cfg,q),{headers:_headers(cfg,{Range:start+'-'+(start+999),'Range-Unit':'items'})});
+    if(!res.ok) throw new Error('Delta load failed ('+res.status+')');
+    const chunk=await res.json(); rows.push.apply(rows,chunk);
+    if(!Array.isArray(chunk)||chunk.length<1000)break;
+    start+=1000;if(start>100000)break;
+  }
+  const cursor=rows.reduce((m,r)=>String(r.updated_at||'')>m?String(r.updated_at):m,since);
+  return {rows,cursor};
+}
+function applyCloudDelta(prev, rows){
+  if(!rows||!rows.length)return prev; const next={...prev}; const touched=new Set();
+  rows.forEach(r=>{ const coll=r.coll;if(!coll||coll==='_accounts'||coll==='_ratelimit')return;
+    if(!touched.has(coll)){next[coll]=(prev[coll]||[]).slice();touched.add(coll);}
+    const rec=Object.assign({id:r.id},r.data||{}), i=next[coll].findIndex(x=>x.id===rec.id);
+    if(rec._del){if(i>=0)next[coll].splice(i,1);return;}
+    if(i>=0)next[coll][i]=rec;else next[coll].push(rec);
+  });
+  return touched.size?next:prev;
 }
 // Diagnostics — run  __moDiag()  in the browser console to see why sync may be off.
 window.__moDiag = async function(){
@@ -4385,6 +4417,58 @@ async function verifyPassword(pw, hash){
 function loadUsers(){ try { return (JSON.parse(store.get(AUTH_KEYS.users)||'[]')||[]).filter(u=>u && !u._del); } catch(e){ return []; } }
 function saveUsers(list){ store.set(AUTH_KEYS.users, JSON.stringify(list)); try { cloudPushUsers(list); } catch(e){} }
 
+// Account-administration writes must be acknowledged by the server before the UI
+// says "saved". The old fire-and-forget path above remains only for non-critical
+// local profile cache updates; roles, status, access, and passwords use these APIs.
+async function saveUsersConfirmed(list){
+  list=(list||[]).filter(u=>u&&u.id);
+  const cfg=getCfg();
+  if(cfgComplete(cfg)){
+    const r=await acctApi(cfg,'save',{token:getAcctToken(),users:list});
+    if(!r||!r.ok){ const e=new Error((r&&r.error)||'account-save-failed'); e.code=(r&&r.error)||'account-save-failed'; throw e; }
+  } else if(!isLegacyAuthFallbackAllowed()) throw new Error('account-service-unavailable');
+  const cached=cfgComplete(cfg)?list.map(u=>{const x={...u};delete x.passwordHash;return x;}):list;
+  store.set(AUTH_KEYS.users,JSON.stringify(cached));
+  return true;
+}
+async function resetUserPasswordConfirmed(id,newPassword,temporary){
+  const cfg=getCfg();
+  if(cfgComplete(cfg)){
+    const r=await acctApi(cfg,'changepw',{token:getAcctToken(),id,newPassword,temporary:!!temporary});
+    if(!r||!r.ok){ const e=new Error((r&&r.error)||(r&&r.reason)||'password-reset-failed'); e.code=e.message; throw e; }
+  } else if(!isLegacyAuthFallbackAllowed()) throw new Error('account-service-unavailable');
+  const list=loadUsers(); const u=list.find(x=>x.id===id);
+  if(u){ if(!cfgComplete(cfg)) u.passwordHash=await hashPassword(newPassword); u.isDefaultPassword=!!temporary; store.set(AUTH_KEYS.users,JSON.stringify(list)); }
+  return true;
+}
+async function unlockUserConfirmed(id){
+  const cfg=getCfg(); if(!cfgComplete(cfg)) return true;
+  const r=await acctApi(cfg,'unlock',{token:getAcctToken(),id});
+  if(!r||!r.ok){ const e=new Error((r&&r.error)||'unlock-failed'); e.code=e.message; throw e; }
+  return true;
+}
+async function deleteUserConfirmed(id){
+  const cfg=getCfg();
+  if(cfgComplete(cfg)){
+    const r=await acctApi(cfg,'delete',{token:getAcctToken(),id});
+    if(!r||!r.ok){ const e=new Error((r&&r.error)||'account-delete-failed'); e.code=e.message; throw e; }
+  } else if(!isLegacyAuthFallbackAllowed()) throw new Error('account-service-unavailable');
+  store.set(AUTH_KEYS.users,JSON.stringify(loadUsers().filter(u=>u.id!==id)));
+  return true;
+}
+async function syncAccountFromEmployee(emp){
+  if(!emp) return {ok:false,reason:'employee-missing'};
+  await syncUsersFromCloud().catch(()=>{});
+  const list=loadUsers(); const n=s=>String(s||'').trim().toLowerCase();
+  const account=list.find(u=>u.employeeId===emp.id || emp.userId===u.id
+    || (n(emp.loginEmail||emp.email)&&[n(u.email),n(u.username)].includes(n(emp.loginEmail||emp.email))));
+  if(!account) return {ok:false,reason:'account-missing'};
+  const updated=Object.assign({},account,{employeeId:emp.id,role:emp.appRole||account.role,
+    email:emp.loginEmail||account.email,jobTitle:emp.jobTitle||account.jobTitle});
+  await saveUsersConfirmed(list.map(u=>u.id===account.id?updated:u));
+  return {ok:true,user:updated};
+}
+
 /* ---- shared team accounts are handled by the service-role accounts function.
    The raw `_accounts` fallback is limited to local development so a production
    browser never reads or writes password hashes through the anon REST key. ---- */
@@ -4518,7 +4602,7 @@ async function authLogin(identifier, password){
     try {
       const r = await acctApi(cfg,'login',{ identifier, password });
       if(r && typeof r.ok==='boolean'){
-        if(!r.ok) return { ok:false, reason:r.reason||'invalid' };
+        if(!r.ok) return { ok:false, reason:r.reason||'invalid', retryAfterSeconds:Number(r.retryAfterSeconds)||0 };
         // cache the (hash-free) user locally so the app has the roster offline
         try { const list=loadUsers(); const i=list.findIndex(u=>u.id===r.user.id); if(i>=0) list[i]=Object.assign({},list[i],r.user); else list.push(r.user); store.set(AUTH_KEYS.users, JSON.stringify(list)); } catch(e){}
         return { ok:true, user:r.user, token:r.token };
@@ -4551,7 +4635,7 @@ function validatePassword(pw, confirm){
   return null;
 }
 
-window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, syncUsersFromCloud };
+window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, syncUsersFromCloud };
 
 
 /* ===== crm-seed.js ===== */
@@ -5849,7 +5933,7 @@ function App(){
   };
   const doLogin = async (identifier, password, remember)=>{
     const res = await authLogin(identifier, password);
-    if(!res.ok) return res.reason;
+    if(!res.ok) return res;
     if(appSettings.requireVerification && res.user && res.user.role!=='Owner' && res.user.verified===false)
       return (lang==='ar') ? 'يجب تأكيد بريدك الإلكتروني أولاً (راجع رسالة التأكيد).' : 'Please verify your email first — check your inbox for the verification link.';
     if(res.token) setAcctToken(res.token, remember); // session token for account writes
@@ -5964,37 +6048,29 @@ function App(){
     };
     (async()=>{ await prune('activityLogs',500); await prune('notifications',300); try{ localStorage.setItem(KEY,String(Date.now())); }catch(e){} })();
   }, []);
-  // LIVE SYNC — unified poll: pull ALL collections in ONE request every 5s so
-  // EVERY module (clients, invoices, employees, tasks, chat…) stays live without a
-  // manual refresh, even if Realtime is blocked on the network. Change-detection
-  // means no wasted re-render when nothing changed. Also refreshes instantly when
-  // the tab regains focus. Realtime (below) adds instant-on-top when available.
+  // LIVE SYNC — Realtime is instant; a low-egress delta poll is the safety net.
+  // It never downloads the full database after startup and wakes every 30 seconds
+  // (plus immediately on focus), so a broken Realtime connection stays reliable
+  // without burning through Supabase's transfer quota.
   useEffect(()=>{
     if(!cfgComplete(cfg.current)) return;
     let stop=false, busy=false;
     const tick=async()=>{ if(stop||busy||document.hidden) return;
-      // Realtime delivers changes instantly; the full pull is only a safety net.
-      // While realtime is connected, pull once a minute instead of every 5s —
-      // 12x less bandwidth/egress as the database grows. No realtime => 5s.
-      if(window.__rtOn && window.__moLastSync && (Date.now()-window.__moLastSync)<55000) return;
+      const since=window.__moCloudCursor;if(!since)return; // initial load still running
       busy=true;
       try {
-        const d=await cloudLoadAll(cfg.current);
+        const d=await cloudLoadDelta(cfg.current,since);
         window.__moPollN=(window.__moPollN||0)+1; window.__moLastSync=Date.now();
-        if(!stop && d && Object.keys(d).some(k=>(d[k]||[]).length)){
-          setDb(prev=>{ const m=mergeDB(prev,d); let changed=false; const next={...prev};
-            COLLECTIONS.forEach(k=>{ if(!collSame(prev[k],m[k])){ next[k]=m[k]; changed=true; } });
-            return changed?next:prev; }); // no re-render when nothing changed
-        }
+        if(!stop&&d&&d.rows.length){setDb(prev=>applyCloudDelta(prev,d.rows));window.__moCloudCursor=d.cursor;}
         // The poll just SUCCEEDED, so the connection is alive right now — flush any
         // writes that failed earlier (network drop). This makes offline edits reach
-        // the cloud within one poll (~5s) of the connection coming back, with no data
+        // the cloud after the connection comes back, with no data
         // loss and nothing for the user to do.
         try { syncQueueDrain(); } catch(e){}
       } catch(e){}
       busy=false;
     };
-    const h=setInterval(tick, 5000); tick();
+    const h=setInterval(tick, 30000); setTimeout(tick,1500);
     const onVis=()=>{ if(!document.hidden){ busy=false; tick(); } };
     const onFocus=()=>{ busy=false; tick(); };
     document.addEventListener('visibilitychange', onVis);
@@ -6169,6 +6245,12 @@ function App(){
       out={...x,...patch,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
     if(out){
       cloudUpsert(cfg.current, coll, out); // push THIS record immediately (no shared-closure race)
+      if(coll==='employees' && _prev && patch.appRole && patch.appRole!==_prev.appRole){
+        AUTH.syncAccountFromEmployee(out).then(r=>{
+          if(r&&r.ok) showProPopup('savedNotes',getLang()==='ar'?'تم تحديث رول حساب الدخول على السيرفر':'Login role updated on the server');
+          else if(out.accountStatus==='Active') alert(getLang()==='ar'?'تم حفظ الموظف، لكن لا يوجد حساب دخول مرتبط. اربطه من المستخدمون والصلاحيات.':'Employee saved, but no linked login account was found. Link it in Users & Permissions.');
+        }).catch(()=>alert(getLang()==='ar'?'تم حفظ الموظف، لكن تحديث رول الدخول فشل. شغّل إصلاح الربط والرولز من المستخدمون والصلاحيات.':'Employee saved, but login-role sync failed. Run Repair links & roles in Users & Permissions.'));
+      }
       // Deploy 5: audit trail for edits & status changes (create & delete are already logged).
       if(!NO_AUDIT.has(coll)){
         const _lbl=out.name||out.title||out.invoiceNumber||out.projectName||out.fullName||'';
@@ -10015,9 +10097,12 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
     return ()=>{ document.removeEventListener('touchstart',kick); document.removeEventListener('pointerdown',kick); document.removeEventListener('visibilitychange',kick); };
   }, []);
   const submit=async()=>{ setErr(''); if(!id||!pw){ setErr(ar?'أدخل البريد وكلمة المرور.':'Enter your email/username and password.'); return; }
-    setBusy(true); const reason=await onLogin(id,pw,remember); setBusy(false);
+    setBusy(true); const result=await onLogin(id,pw,remember); setBusy(false);
+    const reason=result&&typeof result==='object'?result.reason:result;
     if(reason==='inactive') setErr(ar?'الحساب غير نشط. يرجى التواصل مع مالك النظام.':'Your account is inactive. Please contact the system owner.');
     else if(reason==='unavailable') setErr(ar?'خدمة تسجيل الدخول غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.':'The sign-in service is temporarily unavailable. Please try again shortly.');
+    else if(reason==='quota-exceeded') setErr(ar?'خدمة البيانات متوقفة بسبب تجاوز حد Supabase. البيانات لم تُحذف؛ لازم المالك يراجع Usage/Billing ثم يعيد المحاولة.':'The data service is restricted by the Supabase quota. Data is not deleted; the Owner must review Usage/Billing.');
+    else if(reason==='rate-limited'){ const mins=Math.max(1,Math.ceil((Number(result.retryAfterSeconds)||60)/60)); setErr(ar?('محاولات كثيرة. الحساب محمي مؤقتًا — جرّب بعد حوالي '+mins+' دقيقة أو اطلب من المالك فتحه.') : ('Too many attempts. Try again in about '+mins+' minute(s), or ask the Owner to unlock the account.')); }
     else if(reason) setErr(ar?'بيانات الدخول غير صحيحة.':'Invalid username/email or password.'); };
   const forgot=async()=>{
     const who=(id||window.prompt(ar?'اكتب بريدك الإلكتروني أو اسم المستخدم':'Enter your email or username')||'').trim();
@@ -10026,7 +10111,8 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
     try {
       const cfg=getCfg(); let handled=false;
       // PRIMARY: server-side reset (works even when _accounts is locked to anon).
-      if(cfg&&cfg.url&&cfg.key){ try { const r=await acctApi(cfg,'forgot',{ identifier:who }); if(r&&r.ok) handled=true; } catch(e){} }
+      if(cfg&&cfg.url&&cfg.key){ try { const r=await acctApi(cfg,'forgot',{ identifier:who }); if(r&&r.reason==='rate-limited'){ const mins=Math.max(1,Math.ceil((Number(r.retryAfterSeconds)||60)/60)); throw new Error(ar?('محاولات استرجاع كثيرة — جرّب بعد حوالي '+mins+' دقيقة.') : ('Too many recovery attempts — try again in about '+mins+' minute(s).')); } if(r&&r.reason==='quota-exceeded') throw new Error(ar?'خدمة Supabase مقيدة بسبب تجاوز الاستخدام. تواصل مع المالك لإعادة كلمة المرور يدويًا.':'Supabase is quota-restricted. Ask the Owner to reset your password manually.'); if(r&&r.ok) handled=true; } catch(e){ if(e&&/محاولات استرجاع|recovery attempts|Supabase|مقيدة/.test(e.message||'')) throw e; } }
+      if(!handled && !isLegacyAuthFallbackAllowed()) throw new Error(ar?'خدمة استرجاع الحساب غير متاحة حاليًا. تواصل مع المالك لإعادة كلمة المرور يدويًا.':'Account recovery is unavailable. Ask the Owner to reset your password manually.');
       if(!handled && isLegacyAuthFallbackAllowed()){
         // FALLBACK (function unreachable): legacy client-side reset.
         await AUTH.syncUsersFromCloud().catch(()=>{});
@@ -10444,8 +10530,16 @@ function UsersView({ ctx }){
   const [reset,setReset]=useState(null); // user being password-reset
   const [access,setAccess]=useState(null); // user whose per-module access is being edited
   const [bulkResult,setBulkResult]=useState(null); // result sheet after a team-wide password reset
-  const saveAccess=(acc)=>{ const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===access.id); if(tu){ tu.access=acc; AUTH.saveUsers(list.map(x=>x.id===tu.id?tu:x)); ctx.addActivity('users',tu.id,'access updated',tu.fullName); } refresh(); setAccess(null); showProPopup('savedNotes', ar?'تم حفظ الصلاحيات':'Access saved'); };
+  const [op,setOp]=useState('');
   const refresh=()=>setUsers(AUTH.loadUsers());
+  const linkedEmployee=(u)=>{ const es=ctx.db.employees||[], n=s=>String(s||'').trim().toLowerCase(), em=n(u&&u.email); return es.find(e=>e.id===(u&&u.employeeId)||e.userId===(u&&u.id)||(em&&(n(e.loginEmail)===em||n(e.email)===em)))||null; };
+  const accountErr=(e)=>{ const c=String((e&&e.code)||(e&&e.message)||''); const map={
+    'duplicate-email':ar?'فيه حساب تاني بنفس البريد. لازم كل حساب يكون له بريد مختلف.':'Another account already uses this email.',
+    'duplicate-username':ar?'فيه حساب تاني بنفس اسم المستخدم.':'Another account already uses this username.',
+    'last-owner':ar?'لا يمكن إزالة أو إيقاف آخر حساب Owner.':'The last active Owner cannot be removed or deactivated.',
+    'unauthorized':ar?'جلسة الإدارة انتهت. سجّل خروج وادخل تاني بحساب Owner.':'Your admin session expired. Sign out and back in as Owner.'};
+    return map[c]||(ar?'الحفظ على السيرفر فشل ولم يتم اعتماد التغيير. جرّب تسجيل الخروج والدخول ثم أعد المحاولة.':'The server did not confirm the change. Sign out/in and retry.'); };
+  const saveAccess=async(acc)=>{ const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===access.id); if(!tu)return; const next=list.map(x=>x.id===tu.id?Object.assign({},tu,{access:acc}):x); setOp('access-'+tu.id); try{ await AUTH.saveUsersConfirmed(next); ctx.addActivity('users',tu.id,'access updated',tu.fullName); refresh(); setAccess(null); showProPopup('savedNotes', ar?'تم حفظ الصلاحيات على السيرفر':'Access saved on the server'); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
   // Pull the full team roster from the cloud on open (token-gated Edge Function),
   // so ALL users show immediately without a manual refresh.
   useEffect(()=>{ let alive=true; AUTH.syncUsersFromCloud().then(()=>{ if(alive) setUsers(AUTH.loadUsers()); }).catch(()=>{}); return ()=>{ alive=false; }; }, []); // eslint-disable-line
@@ -10453,7 +10547,7 @@ function UsersView({ ctx }){
   const verifyLink=(tok)=>{ try { return location.origin+location.pathname+'?verify='+encodeURIComponent(tok); } catch(e){ return '?verify='+tok; } };
   const sendVerify=async(u, silent)=>{
     const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===u.id)||u;
-    let tok=tu.verifyToken; if(!tok){ tok='vt-'+randToken(18); tu.verifyToken=tok; tu.verified=false; AUTH.saveUsers(list.map(x=>x.id===tu.id?tu:x)); refresh(); }
+    let tok=tu.verifyToken; if(!tok){ tok='vt-'+randToken(18); tu.verifyToken=tok; tu.verified=false; await AUTH.saveUsersConfirmed(list.map(x=>x.id===tu.id?tu:x)); refresh(); }
     const link=verifyLink(tok);
     const body='<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto"><h2 style="color:#0a0a0a">Verify your Magnet OS account</h2><p>Hi '+(tu.fullName||'')+', please confirm your email to activate your account.</p><p style="margin:22px 0"><a href="'+link+'" style="background:#C4FF3D;color:#0a0a0a;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Verify my email</a></p><p style="color:#666;font-size:13px">Or open this link:<br>'+link+'</p></div>';
     try { await sendEmail({to:tu.email, subject:'Verify your Magnet OS account', html:body}); if(!silent) showProPopup('savedNotes', ar?'تم إرسال رابط التأكيد':'Verification email sent'); }
@@ -10463,24 +10557,38 @@ function UsersView({ ctx }){
   const save=async(form)=>{
     const list=AUTH.loadUsers();
     const v=AUTH.validatePassword(form._pw||'x'.repeat(6), form._pw2!=null?form._pw2:(form._pw||'x'.repeat(6)));
+    const linked=(ctx.db.employees||[]).find(e=>e.id===form.employeeId)||linkedEmployee(form);
+    const employeeId=(linked&&linked.id)||form.employeeId||'';
+    let next,u;
     if(form.id){ // edit existing (no password here)
-      const u=list.find(x=>x.id===form.id); Object.assign(u,{ fullName:form.fullName,username:form.username,email:form.email,phone:form.phone,jobTitle:form.jobTitle,role:form.role,status:form.status });
-      AUTH.saveUsers(list.map(x=>x.id===u.id?u:x)); ctx.addActivity('users',u.id,'user updated',u.fullName);
+      const old=list.find(x=>x.id===form.id); if(!old)return;
+      u=Object.assign({},old,{ fullName:form.fullName,username:form.username,email:form.email,phone:form.phone,jobTitle:form.jobTitle,role:form.role,status:form.status,employeeId });
+      next=list.map(x=>x.id===u.id?u:x);
     } else { // create new — requires password
       if(!form.fullName||!form.username||!form.email){ alert(ar?'الاسم واسم المستخدم والبريد مطلوبة.':'Name, username, and email are required.'); return; }
       if(v){ alert(v); return; }
-      const u={ id:uid('usr'), fullName:form.fullName,username:form.username,email:form.email,phone:form.phone||'',jobTitle:form.jobTitle||'',role:form.role||'Viewer',status:form.status||'Active',
+      u={ id:uid('usr'), fullName:form.fullName,username:form.username,email:form.email,phone:form.phone||'',jobTitle:form.jobTitle||'',role:form.role||'Viewer',status:form.status||'Active',employeeId,
         passwordHash:await AUTH.hashPassword(form._pw), assignedClients:[],assignedTasks:[],dataScope:'assigned',createdAt:nowISO(),lastLogin:'',isDefaultPassword:false,
         verified:false, verifyToken:'vt-'+randToken(18) };
-      AUTH.saveUsers([...list,u]); ctx.addActivity('users',u.id,'user created',u.fullName);
-      try { await sendVerify(u, true); } catch(e){}
+      next=[...list,u];
     }
-    refresh(); setEdit(null); showProPopup('taskCreated', ar?'تم حفظ المستخدم':'User saved');
+    const em=String(u.email||'').trim().toLowerCase(), un=String(u.username||'').trim().toLowerCase();
+    if(next.some(x=>x.id!==u.id&&String(x.email||'').trim().toLowerCase()===em)){ alert(accountErr({code:'duplicate-email'})); return; }
+    if(next.some(x=>x.id!==u.id&&String(x.username||'').trim().toLowerCase()===un)){ alert(accountErr({code:'duplicate-username'})); return; }
+    setOp('save-'+(u.id||'new'));
+    try{
+      await AUTH.saveUsersConfirmed(next);
+      if(linked){ ctx.updateRecord('employees',linked.id,{appRole:u.role,loginEmail:u.email,userId:u.id,accountStatus:u.status==='Active'?'Active':'Disabled'}); }
+      ctx.addActivity('users',u.id,form.id?'user updated':'user created',u.fullName);
+      if(!form.id){ try { await sendVerify(u, true); } catch(e){} }
+      refresh(); setEdit(null); showProPopup('taskCreated', ar?'تم حفظ المستخدم على السيرفر':'User saved on the server');
+    }catch(e){ alert(accountErr(e)); }
+    finally{ setOp(''); }
   };
   const doReset=async(form)=>{ const v=AUTH.validatePassword(form._pw,form._pw2); if(v){ alert(v); return; }
-    const list=AUTH.loadUsers(); const u=list.find(x=>x.id===reset.id); u.passwordHash=await AUTH.hashPassword(form._pw); u.isDefaultPassword=false;
-    AUTH.saveUsers(list.map(x=>x.id===u.id?u:x)); ctx.addActivity('users',u.id,'password reset','for '+u.fullName+' by '+ctx.user.name);
-    setReset(null); showProPopup('savedNotes', ar?'تمت إعادة التعيين':'Password reset'); };
+    const u=AUTH.loadUsers().find(x=>x.id===reset.id); if(!u)return; setOp('reset-'+u.id);
+    try{ await AUTH.resetUserPasswordConfirmed(u.id,form._pw,false); ctx.addActivity('users',u.id,'password reset','for '+u.fullName+' by '+ctx.user.name); refresh(); setReset(null); showProPopup('savedNotes', ar?'تمت إعادة التعيين على السيرفر وفتح الحساب':'Password reset on the server; login lock cleared'); }
+    catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
   // Owner-only: set ONE shared temp password for every active non-owner user at once, then show the sheet.
   const resetAllPw=async()=>{
     const pw=prompt(ar?'كلمة سر مؤقتة مشتركة للفريق (10 أحرف على الأقل، حرف كبير وصغير ورقم):':'One shared temporary password for the team (10+ characters, upper-case, lower-case, and a number):','');
@@ -10495,26 +10603,47 @@ function UsersView({ ctx }){
     if(!targets.length){ alert(ar?'مفيش مستخدمين لإعادة التعيين.':'No users to reset.'); return; }
     const skipTxt = skipped.length ? ((ar?'\n\nمش هيتغيّر (حسابات المالك — تفضل بباسوردها الحالي):\n':'\n\nNOT changed (Owner accounts — they keep their current password):\n')+skipped.map(u=>'• '+(u.fullName||u.username)).join('\n')) : '';
     if(!confirm((ar?'هيتعيّن الباسورد ده لـ ':'This will set this password for ')+targets.length+(ar?' مستخدم.':' users.')+skipTxt+(ar?'\n\nتمام؟':'\n\nContinue?'))) return;
-    for(const u of targets){ u.passwordHash=await AUTH.hashPassword(pw); u.isDefaultPassword=true; }
-    AUTH.saveUsers(list.map(x=>{ const m=targets.find(t=>t.id===x.id); return m||x; }));
-    ctx.addActivity('users','bulk','team password reset',targets.length+' users by '+ctx.user.name);
-    refresh();
-    setBulkResult({ pw, users:targets.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })),
+    setOp('bulk-reset'); const done=[],failed=[];
+    for(const u of targets){ try{ await AUTH.resetUserPasswordConfirmed(u.id,pw,true); done.push(u); }catch(e){ failed.push({u,error:accountErr(e)}); } }
+    if(done.length) ctx.addActivity('users','bulk','team password reset',done.length+' users by '+ctx.user.name);
+    refresh(); setOp('');
+    setBulkResult({ pw, users:done.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })), failed,
       skipped:skipped.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })) });
   };
-  const toggleStatus=(u)=>{ const list=AUTH.loadUsers();
+  const toggleStatus=async(u)=>{ const list=AUTH.loadUsers();
     if(u.role==='Owner'&&u.status==='Active'&&AUTH.activeOwners(list).length<=1){ alert(ar?'لا يمكن إيقاف آخر مالك نشط.':'Cannot deactivate the last active Owner.'); return; }
-    const t=list.find(x=>x.id===u.id); t.status=t.status==='Active'?'Inactive':'Active'; AUTH.saveUsers(list.map(x=>x.id===t.id?t:x)); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); refresh(); };
-  const del=(u)=>{ const list=AUTH.loadUsers();
+    const t=Object.assign({},list.find(x=>x.id===u.id)); t.status=t.status==='Active'?'Inactive':'Active'; setOp('status-'+t.id);
+    try{ await AUTH.saveUsersConfirmed(list.map(x=>x.id===t.id?t:x)); if(t.employeeId)ctx.updateRecord('employees',t.employeeId,{accountStatus:t.status==='Active'?'Active':'Disabled'}); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); refresh(); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
+  const unlock=async(u)=>{ setOp('unlock-'+u.id); try{ await AUTH.unlockUserConfirmed(u.id); ctx.addActivity('users',u.id,'login unlocked',u.fullName); showProPopup('savedNotes',ar?'تم فتح تسجيل الدخول للحساب':'Login lock cleared'); }catch(e){ alert(accountErr(e)); } finally{setOp('');} };
+  const del=async(u)=>{ const list=AUTH.loadUsers();
     if(u.role==='Owner'&&list.filter(x=>x.role==='Owner').length<=1){ alert(ar?'لا يمكن حذف آخر مالك.':'Cannot delete the last Owner.'); return; }
     if(!confirm(ar?'حذف هذا المستخدم؟':'Delete this user? This cannot be undone.')) return;
-    AUTH.saveUsers(list.filter(x=>x.id!==u.id)); AUTH.cloudDeleteUser(u.id); ctx.addActivity('users',u.id,'user deleted',u.fullName); refresh(); };
+    setOp('delete-'+u.id); try{ await AUTH.deleteUserConfirmed(u.id); if(u.employeeId)ctx.updateRecord('employees',u.employeeId,{accountStatus:'Disabled',userId:''}); ctx.addActivity('users',u.id,'user deleted',u.fullName); refresh(); }catch(e){ alert(accountErr(e)); } finally{setOp('');} };
+  const audit=()=>{ const emps=ctx.db.employees||[], n=s=>String(s||'').trim().toLowerCase(), used=new Set(); let linked=0,mismatch=0,duplicates=0;
+    const seen={}; users.forEach(u=>{ const k=n(u.email); if(k){seen[k]=(seen[k]||0)+1;if(seen[k]===2)duplicates++;} const e=linkedEmployee(u); if(e){linked++;used.add(e.id);if((e.appRole||e.role)&&u.role!==(e.appRole||e.role))mismatch++;} });
+    return {linked,mismatch,duplicates,unlinked:users.length-linked,withoutAccount:emps.filter(e=>!used.has(e.id)&&e.status!=='Inactive').length}; };
+  const repairLinks=async()=>{ const list=AUTH.loadUsers(), emps=ctx.db.employees||[], next=[], changes=[]; const claimed=new Set();
+    for(const u of list){ const e=linkedEmployee(u); if(!e||claimed.has(e.id)||u.role==='Owner'){ next.push(u); continue; } claimed.add(e.id); const desired=e.appRole||e.role||u.role; const nu=Object.assign({},u,{employeeId:e.id,role:desired,jobTitle:e.jobTitle||u.jobTitle,email:e.loginEmail||u.email}); next.push(nu); if(nu.employeeId!==u.employeeId||nu.role!==u.role||nu.email!==u.email)changes.push({u,nu,e}); }
+    if(!changes.length){ alert(ar?'كل الحسابات المرتبطة سليمة بالفعل.':'All linked accounts are already consistent.'); return; }
+    const details=changes.slice(0,12).map(x=>'• '+(x.u.fullName||x.u.username)+': '+x.u.role+' → '+x.nu.role).join('\n');
+    if(!confirm((ar?'سيتم ربط الحسابات بالموظفين واعتماد App role الموجود في ملف الموظف كدور الدخول:\n\n':'Accounts will be linked to employees, and each employee App role will become the login role:\n\n')+details+(changes.length>12?'\n…':'')))return;
+    setOp('repair'); try{ await AUTH.saveUsersConfirmed(next); changes.forEach(x=>ctx.updateRecord('employees',x.e.id,{userId:x.nu.id,loginEmail:x.nu.email,accountStatus:x.nu.status==='Active'?'Active':'Disabled'})); ctx.addActivity('users','repair','account links and roles repaired',changes.length+' accounts'); refresh(); showProPopup('savedNotes',(ar?'تم إصلاح ':'Repaired ')+changes.length+(ar?' حساب على السيرفر':' server account(s)')); }catch(e){alert(accountErr(e));}finally{setOp('');}
+  };
+  const qa=audit();
 
   return html`<div class="view">
     <${Head} eyebrow=${t('System')} title=${ar?'المستخدمون والصلاحيات':'Users & Permissions'} desc=${ar?'إنشاء المستخدمين وإدارة الأدوار وكلمات المرور.':'Create login users, manage roles, and reset passwords.'}>
-      ${ctx.role==='Owner'&&html`<button class="btn btn-ghost" onClick=${resetAllPw}>${ar?'إعادة تعيين باسوردات الفريق':'Reset team passwords'}</button>`}
-      <button class="btn btn-pri" onClick=${()=>setEdit({status:'Active',role:'Viewer'})}>${React.createElement(Icon.plus)} ${ar?'إنشاء مستخدم':'Create User'}</button>
+      ${ctx.role==='Owner'&&html`<button class="btn btn-ghost" disabled=${!!op} onClick=${repairLinks}>${op==='repair'?(ar?'جارٍ الإصلاح…':'Repairing…'):(ar?'فحص وإصلاح الربط والرولز':'Repair links & roles')}</button>`}
+      ${ctx.role==='Owner'&&html`<button class="btn btn-ghost" disabled=${!!op} onClick=${resetAllPw}>${ar?'إعادة تعيين باسوردات الفريق':'Reset team passwords'}</button>`}
+      <button class="btn btn-pri" disabled=${!!op} onClick=${()=>setEdit({status:'Active',role:'Designer'})}>${React.createElement(Icon.plus)} ${ar?'إنشاء مستخدم':'Create User'}</button>
     <//>
+    <div class="grid g-4 stagger" style=${{marginBottom:14}}>
+      <${KPI} label=${ar?'حسابات مرتبطة بموظف':'Linked accounts'} value=${qa.linked+'/'+users.length} icon="people"/>
+      <${KPI} label=${ar?'اختلافات في الرول':'Role mismatches'} value=${qa.mismatch} icon="shield"/>
+      <${KPI} label=${ar?'حسابات غير مرتبطة':'Unlinked accounts'} value=${qa.unlinked} icon="alert"/>
+      <${KPI} label=${ar?'موظفون بلا حساب':'Employees without login'} value=${qa.withoutAccount} icon="user"/>
+    </div>
+    ${(qa.mismatch||qa.unlinked||qa.duplicates)&&html`<div class="warn-note">${ar?('مراجعة مطلوبة: '+qa.mismatch+' اختلاف رول · '+qa.unlinked+' حساب غير مرتبط · '+qa.duplicates+' بريد مكرر. زر الإصلاح لا يحذف أي بيانات.'):(qa.mismatch+' role mismatch(es) · '+qa.unlinked+' unlinked account(s) · '+qa.duplicates+' duplicate email(s). Repair never deletes business data.')}</div>`}
     ${anyDefault&&html`<div class="warn-note">${ar?'يجب تغيير كلمة المرور الافتراضية قبل الاستخدام الفعلي للفريق.':'Default password should be changed before real team usage.'}</div>`}
     <label class="ver-toggle"><input type="checkbox" checked=${requireVer} onChange=${e=>ctx.applyAppSettings({requireVerification:e.target.checked})}/> ${ar?'اشترط تأكيد البريد قبل تسجيل الدخول (عدا المالك)':'Require email verification before login (except Owner)'}</label>
     <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
@@ -10531,14 +10660,15 @@ function UsersView({ ctx }){
       <td class="right cell-actions">
         <button class="mini" onClick=${()=>setEdit(u)}>${ar?'تعديل':'Edit'}</button>
         <button class="mini" onClick=${()=>setReset(u)}>${ar?'إعادة كلمة المرور':'Reset Password'}</button>
+        <button class="mini" disabled=${!!op} onClick=${()=>unlock(u)}>${ar?'فتح الدخول':'Unlock login'}</button>
         ${u.role!=='Owner'&&html`<button class="mini" onClick=${()=>setAccess(u)}>${ar?'الصلاحيات':'Access'}</button>`}
         ${u.role!=='Owner'&&!u.verified&&html`<button class="mini" onClick=${()=>sendVerify(u)}>${ar?'إرسال تأكيد':'Verify email'}</button>`}
         <button class="mini" onClick=${()=>toggleStatus(u)}>${u.status==='Active'?(ar?'إيقاف':'Deactivate'):(ar?'تفعيل':'Activate')}</button>
         <button class="mini" onClick=${()=>del(u)}>${ar?'حذف':'Delete'}</button>
       </td></tr>`)}</tbody></table></div><//>
-    <div class="muted" style=${{fontSize:11.5,marginTop:12}}>${ar?'هذا الإصدار يخزّن البيانات محليًا للاختبار فقط. للاستخدام الفعلي اربط النظام بـ Supabase أو Firebase أو خادم آمن.':'This version uses frontend/localStorage authentication for demo and internal testing only. For real multi-user production use, connect to Supabase, Firebase, or a secure backend.'}</div>
+    <div class="muted" style=${{fontSize:11.5,marginTop:12}}>${ar?'أي تعديل حساس هنا لا يظهر كناجح إلا بعد تأكيده من خادم الحسابات. إعادة كلمة المرور تفتح قفل المحاولات تلقائيًا.':'Sensitive changes show success only after the accounts server confirms them. Resetting a password also clears its login lock.'}</div>
 
-    ${edit&&html`<${UserForm} user=${edit} ar=${ar} onClose=${()=>setEdit(null)} onSave=${save}/>`}
+    ${edit&&html`<${UserForm} user=${edit} employees=${ctx.db.employees||[]} ar=${ar} busy=${!!op} onClose=${()=>setEdit(null)} onSave=${save}/>`}
     ${reset&&html`<${PwResetForm} user=${reset} ar=${ar} onClose=${()=>setReset(null)} onSave=${doReset}/>`}
     ${access&&html`<${AccessDrawer} user=${access} ar=${ar} onClose=${()=>setAccess(null)} onSave=${saveAccess}/>`}
     ${bulkResult&&html`<div class="ovl" onClick=${()=>setBulkResult(null)}>
@@ -10548,6 +10678,7 @@ function UsersView({ ctx }){
           <button class="icon-btn" onClick=${()=>setBulkResult(null)}><span style=${{fontSize:18}}>×</span></button></div>
         <div class="modal-b" style=${{maxHeight:'56vh',overflowY:'auto'}}>
           <div class="warn-note" style=${{marginBottom:10}}>${ar?'ابعت لكل واحد بريده + الباسورد ده، وقولهم يغيّروه من Profile بعد الدخول.':'Send each person their email + this password; ask them to change it from Profile after signing in.'}</div>
+          ${(bulkResult.failed||[]).length>0&&html`<div class="login-err" style=${{marginBottom:10}}>${ar?'لم يتم تغيير حسابات: ':'Accounts not changed: '}${bulkResult.failed.map(x=>x.u.fullName||x.u.username).join('، ')}</div>`}
           <table class="tbl"><thead><tr><th>${ar?'الاسم':'Name'}</th><th>${ar?'البريد':'Email'}</th><th>${ar?'كلمة السر':'Password'}</th></tr></thead>
             <tbody>${bulkResult.users.map(u=>html`<tr key=${u.email}><td><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.role}</div></td><td class="muted" style=${{fontSize:12}}>${u.email}</td><td class="mono">${bulkResult.pw}</td></tr>`)}
             ${(bulkResult.skipped||[]).map(u=>html`<tr key=${'sk-'+u.email} style=${{opacity:.65}}><td><b>${u.fullName}</b><div class="muted" style=${{fontSize:11}}>${u.role}</div></td><td class="muted" style=${{fontSize:12}}>${u.email}</td><td class="muted" style=${{fontSize:11.5}}>${ar?'زي ما هو (مالك)':'unchanged (Owner)'}</td></tr>`)}</tbody></table>
@@ -10558,11 +10689,13 @@ function UsersView({ ctx }){
       </div></div>`}
   </div>`;
 }
-function UserForm({ user, ar, onClose, onSave }){
+function UserForm({ user, employees, ar, busy, onClose, onSave }){
   const [f,setF]=useState(Object.assign({},user)); const set=(k,v)=>setF(Object.assign({},f,{[k]:v}));
   const isNew=!user.id;
+  const pickEmployee=(id)=>{ const e=(employees||[]).find(x=>x.id===id); if(!e){set('employeeId','');return;} setF(Object.assign({},f,{employeeId:e.id,fullName:e.fullName||e.name||f.fullName||'',email:e.loginEmail||e.email||f.email||'',jobTitle:e.jobTitle||f.jobTitle||'',role:e.appRole||e.role||f.role||'Designer'})); };
   return html`<${Modal} title=${isNew?(ar?'إنشاء مستخدم':'Create User'):(ar?'تعديل مستخدم':'Edit User')} onClose=${onClose}>
     <div class="form-grid">
+      <label class="fld"><span>${ar?'ربط بملف موظف':'Linked employee'}</span><select value=${f.employeeId||''} onChange=${e=>pickEmployee(e.target.value)}><option value="">${ar?'— بدون ربط —':'— Not linked —'}</option>${(employees||[]).map(e=>html`<option key=${e.id} value=${e.id}>${e.fullName||e.name} · ${e.appRole||e.role||'—'}</option>`)}</select></label>
       <label class="fld"><span>${ar?'الاسم الكامل':'Full name'}</span><input value=${f.fullName||''} onChange=${e=>set('fullName',e.target.value)}/></label>
       <label class="fld"><span>${ar?'اسم المستخدم':'Username'}</span><input value=${f.username||''} onChange=${e=>set('username',e.target.value)}/></label>
       <label class="fld"><span>${ar?'البريد':'Email'}</span><input type="email" value=${f.email||''} onChange=${e=>set('email',e.target.value)}/></label>
@@ -10573,7 +10706,8 @@ function UserForm({ user, ar, onClose, onSave }){
       ${isNew&&html`<label class="fld"><span>${ar?'كلمة المرور':'Password'}</span><input type="password" value=${f._pw||''} onChange=${e=>set('_pw',e.target.value)}/></label>`}
       ${isNew&&html`<label class="fld"><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" value=${f._pw2||''} onChange=${e=>set('_pw2',e.target.value)}/></label>`}
     </div>
-    <div class="form-foot"><button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button><button class="btn btn-pri" onClick=${()=>onSave(f)}>${ar?'حفظ':'Save'}</button></div>
+    <div class="muted" style=${{fontSize:11.5,marginTop:10}}>${ar?'ربط الحساب بالموظف يمنع اختلاف الرول ويضمن ظهور تسكاته وحضوره الصحيح.':'Linking the account prevents role drift and makes assigned tasks and attendance resolve correctly.'}</div>
+    <div class="form-foot"><button class="btn btn-ghost" disabled=${busy} onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button><button class="btn btn-pri" disabled=${busy} onClick=${()=>onSave(f)}>${busy?(ar?'جارٍ الحفظ…':'Saving…'):(ar?'حفظ':'Save')}</button></div>
   <//>`;
 }
 function PwResetForm({ user, ar, onClose, onSave }){

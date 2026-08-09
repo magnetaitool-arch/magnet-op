@@ -1,9 +1,7 @@
-// Magnet OS — accounts/auth Edge Function (service-role).
-// v6 = strict SUPERSET of v5: every existing action is byte-identical, plus ONE new
-// additive action `authv2` (the JWT layer). Legacy login/save/list/delete/verify/
-// changepw/forgot are unchanged, so existing clients never break. `authv2` is only
-// called when the client opts in (behind the AUTH_V2_ENABLED flag). It never touches
-// _accounts or profiles — it only syncs the Supabase Auth password and returns a session.
+// Magnet OS — accounts/auth Edge Function (service-role), v7.
+// v7 makes account administration confirmable and recoverable: separate login and
+// recovery throttles, explicit lock status/unlock, live-role authorization (so an old
+// token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
 const URL = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SECRET = KEY; // HMAC key material (server-only)
@@ -35,7 +33,7 @@ async function verifyPw(pw:string, hash:string){ hash=String(hash||''); if(hash.
 async function hmac(msg:string){ const key=await crypto.subtle.importKey('raw', enc.encode(SECRET), {name:'HMAC',hash:'SHA-256'}, false, ['sign']); const sig=await crypto.subtle.sign('HMAC', key, enc.encode(msg)); return b64url(String.fromCharCode(...new Uint8Array(sig))); }
 async function makeToken(u:any){ const payload=b64url(JSON.stringify({uid:u.id, role:u.role||'', exp:Date.now()+30*86400000})); return payload+'.'+await hmac(payload); }
 async function readToken(token:string){ try{ const [payload,sig]=String(token||'').split('.'); if(!payload||!sig) return null; if((await hmac(payload))!==sig) return null; const p=JSON.parse(unb64url(payload)); if(!p.exp||p.exp<Date.now()) return null; return p; }catch{ return null; } }
-function isAdmin(role:string){ const r=String(role||''); return ['Owner','Admin','Manager','Project Manager','HR'].includes(r); }
+function isAdmin(role:string){ const r=String(role||''); return ['Owner','Admin','Manager'].includes(r); }
 
 async function dbAll(){ const r=await fetch(REST+'?coll=eq._accounts&select=id,data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db read '+r.status); return await r.json(); }
 async function dbUpsert(rows:any[]){ const r=await fetch(REST+'?on_conflict=id', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify(rows) }); if(!r.ok) throw new Error('db write '+r.status+' '+await r.text()); }
@@ -77,11 +75,23 @@ async function sendMail(to:string, subject:string, text:string):Promise<boolean>
   }catch{ return false; }
 }
 
-const RL_WINDOW_MS = 15*60*1000;
-const RL_MAX = 10;
+const RL_LOGIN_WINDOW_MS = 15*60*1000;
+const RL_LOGIN_MAX = 10;
+const RL_FORGOT_WINDOW_MS = 60*60*1000;
+const RL_FORGOT_MAX = 4;
 async function rlKey(action:string, id:string){ const h=await crypto.subtle.digest('SHA-256', enc.encode(action+':'+String(id||'').trim().toLowerCase())); return 'rl-'+hex(h).slice(0,32); }
-async function rlBlocked(action:string, id:string):Promise<boolean>{ try{ const key=await rlKey(action,id); const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) return false; const rows=await r.json(); const d=(rows[0]&&rows[0].data)||null; if(!d) return false; if(Date.now()-(d.windowStart||0) > RL_WINDOW_MS) return false; return (d.count||0) >= RL_MAX; }catch{ return false; } }
-async function rlBump(action:string, id:string){ try{ const key=await rlKey(action,id); const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); let d:any={count:0, windowStart:Date.now()}; if(r.ok){ const rows=await r.json(); const ex=rows[0]&&rows[0].data; if(ex && Date.now()-(ex.windowStart||0)<=RL_WINDOW_MS) d={count:ex.count||0, windowStart:ex.windowStart}; } d.count=(d.count||0)+1; await dbUpsert([{ id:key, coll:'_ratelimit', data:d }]); }catch{} }
+async function rlState(action:string, id:string, windowMs:number, max:number):Promise<{blocked:boolean,retryAfterSeconds:number,count:number}>{
+  try{
+    const key=await rlKey(action,id); const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+    if(!r.ok) return {blocked:false,retryAfterSeconds:0,count:0};
+    const rows=await r.json(); const d=(rows[0]&&rows[0].data)||null;
+    if(!d) return {blocked:false,retryAfterSeconds:0,count:0};
+    const age=Date.now()-(Number(d.windowStart)||0);
+    if(age>windowMs){ await fetch(REST+'?id=eq.'+encodeURIComponent(key), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }).catch(()=>{}); return {blocked:false,retryAfterSeconds:0,count:0}; }
+    return {blocked:(Number(d.count)||0)>=max,retryAfterSeconds:Math.max(1,Math.ceil((windowMs-age)/1000)),count:Number(d.count)||0};
+  }catch{ return {blocked:false,retryAfterSeconds:0,count:0}; }
+}
+async function rlBump(action:string, id:string, windowMs:number){ try{ const key=await rlKey(action,id); const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); let d:any={count:0, windowStart:Date.now()}; if(r.ok){ const rows=await r.json(); const ex=rows[0]&&rows[0].data; if(ex && Date.now()-(ex.windowStart||0)<=windowMs) d={count:ex.count||0, windowStart:ex.windowStart}; } d.count=(d.count||0)+1; await dbUpsert([{ id:key, coll:'_ratelimit', data:d }]); }catch{} }
 async function rlClear(action:string, id:string){ try{ const key=await rlKey(action,id); await fetch(REST+'?id=eq.'+encodeURIComponent(key), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); }catch{} }
 
 Deno.serve(async (req)=>{
@@ -90,17 +100,27 @@ Deno.serve(async (req)=>{
   let body:any={}; try{ body=await req.json(); }catch{ return json({error:'bad json'},400); }
   const action=body.action;
   try{
-    if((action==='login'||action==='forgot'||action==='authv2') && await rlBlocked('login', body.identifier)){ return json({ ok:false, reason:'invalid' }); }
+    if(action==='login'||action==='authv2'){
+      const state=await rlState('login',body.identifier,RL_LOGIN_WINDOW_MS,RL_LOGIN_MAX);
+      if(state.blocked) return json({ ok:false, reason:'rate-limited', retryAfterSeconds:state.retryAfterSeconds },429);
+    }
+    if(action==='forgot'){
+      const state=await rlState('forgot',body.identifier,RL_FORGOT_WINDOW_MS,RL_FORGOT_MAX);
+      if(state.blocked) return json({ ok:false, reason:'rate-limited', retryAfterSeconds:state.retryAfterSeconds },429);
+    }
     const rows=await dbAll();
     const accounts=rows.map((r:any)=>({ rowId:r.id, u:r.data||{} }));
     const findByLogin=(id:string)=>{ id=(id||'').trim().toLowerCase(); return accounts.find((a:any)=> (a.u.email||'').toLowerCase()===id || (a.u.username||'').toLowerCase()===id); };
     const findById=(uid:string)=> accounts.find((a:any)=> a.u.id===uid);
+    const liveActor=async(token:string)=>{ const p=await readToken(token); if(!p) return null; const rec=findById(p.uid); return rec&&(!rec.u.status||rec.u.status==='Active')?rec.u:null; };
+
+    if(action==='health') return json({ok:true,service:'accounts',version:7,database:'reachable'});
 
     if(action==='login'){
       const rec=findByLogin(body.identifier);
-      if(!rec){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
+      if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
       if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
-      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
+      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
       await rlClear('login', body.identifier);
       const u={...rec.u, lastLogin:nowISO()};
       if(!String(u.passwordHash||'').startsWith('pbkdf2$')){ try{ u.passwordHash=await makePbkdf2(body.password); }catch{} }
@@ -113,9 +133,9 @@ Deno.serve(async (req)=>{
     // the Supabase Auth password to it and issues a session. Never modifies _accounts. ----
     if(action==='authv2'){
       const rec=findByLogin(body.identifier);
-      if(!rec){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
+      if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
       if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
-      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier); return json({ ok:false, reason:'invalid' }); }
+      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
       const email=String(rec.u.email||'').toLowerCase().trim();
       if(!email || email.indexOf('@')<1) return json({ ok:false, reason:'no-email' });
       let au=await adminFindUserByEmail(email);
@@ -127,9 +147,9 @@ Deno.serve(async (req)=>{
       return json({ ok:true, session, user:sanitize(rec.u) });
     }
 
-    if(action==='list'){ const p=await readToken(body.token); if(!p) return json({error:'unauthorized'},401); return json({ ok:true, users: accounts.map((a:any)=>sanitize(a.u)) }); }
+    if(action==='list'){ const actor=await liveActor(body.token); if(!actor||!isAdmin(actor.role)) return json({error:'unauthorized'},401); return json({ ok:true, users: accounts.map((a:any)=>sanitize(a.u)) }); }
     if(action==='save'){
-      const p=await readToken(body.token);
+      const p=await readToken(body.token); const actor=p?await liveActor(body.token):null;
       const incoming = Array.isArray(body.users)? body.users : (body.user? [body.user] : []);
       if(!incoming.length) return json({error:'no users'},400);
       const bootstrap = accounts.length===0;
@@ -137,24 +157,34 @@ Deno.serve(async (req)=>{
       // not grant the first anonymous visitor an Owner account. The deployment
       // owner supplies this one-time secret through the initial setup screen.
       if(bootstrap && (!INITIAL_OWNER_SETUP_SECRET || body.bootstrapSecret!==INITIAL_OWNER_SETUP_SECRET)) return json({error:'setup-required'},403);
-      if(!bootstrap && !p) return json({error:'accounts-exist'},401);
-      const admin = bootstrap || isAdmin(p.role);
+      if(!bootstrap && !actor) return json({error:'accounts-exist'},401);
+      const admin = bootstrap || !!(actor&&isAdmin(actor.role));
       const out:any[]=[];
       for(const nu of incoming){ if(!nu||!nu.id) continue;
         if(!admin && nu.id!==p.uid) continue;
         const ex=findById(nu.id); const merged={...(ex?ex.u:{}), ...nu};
         if(!merged.passwordHash && ex) merged.passwordHash=ex.u.passwordHash;
+        if(!ex && !/^pbkdf2\$\d+\$[^$]+\$[^$]+$/.test(String(merged.passwordHash||''))) return json({error:'invalid-password-hash'},400);
         if(!admin && ex){ merged.role=ex.u.role; merged.status=ex.u.status; merged.passwordHash=ex.u.passwordHash; merged.access=ex.u.access; }
         out.push({ id:'acct-'+nu.id, coll:'_accounts', data:merged });
       }
+      if(!out.length) return json({error:'unauthorized'},401);
+      const future=new Map(accounts.map((a:any)=>[a.u.id,{...a.u}])); out.forEach((r:any)=>future.set(r.data.id,r.data));
+      const seenEmail=new Map<string,string>(), seenUser=new Map<string,string>();
+      for(const u of future.values()){
+        const email=String((u as any).email||'').trim().toLowerCase(), username=String((u as any).username||'').trim().toLowerCase(), uid=String((u as any).id||'');
+        if(email){ if(seenEmail.has(email)&&seenEmail.get(email)!==uid) return json({error:'duplicate-email'},409); seenEmail.set(email,uid); }
+        if(username){ if(seenUser.has(username)&&seenUser.get(username)!==uid) return json({error:'duplicate-username'},409); seenUser.set(username,uid); }
+      }
+      if(![...future.values()].some((u:any)=>u.role==='Owner'&&(!u.status||u.status==='Active'))) return json({error:'last-owner'},409);
       if(out.length) await dbUpsert(out);
       return json({ ok:true, saved:out.length });
     }
-    if(action==='delete'){ const p=await readToken(body.token); if(!p||!isAdmin(p.role)) return json({error:'unauthorized'},401); if(!body.id) return json({error:'no id'},400); await dbDelete('acct-'+body.id); return json({ ok:true }); }
+    if(action==='delete'){ const actor=await liveActor(body.token); if(!actor||!isAdmin(actor.role)) return json({error:'unauthorized'},401); if(!body.id) return json({error:'no id'},400); const target=findById(body.id); if(target&&target.u.role==='Owner'&&accounts.filter((a:any)=>a.u.role==='Owner'&&(!a.u.status||a.u.status==='Active')).length<=1) return json({error:'last-owner'},409); await dbDelete('acct-'+body.id); return json({ ok:true }); }
     if(action==='verify'){ const tok=body.verifyToken; if(!tok) return json({error:'no token'},400); const rec=accounts.find((a:any)=> a.u.verifyToken===tok); if(!rec) return json({ ok:false }); const u={...rec.u, verified:true}; delete u.verifyToken; await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]); return json({ ok:true, user:sanitize(u) }); }
     if(action==='changepw'){
-      const p=await readToken(body.token); if(!p) return json({error:'unauthorized'},401);
-      const targetId = body.id && isAdmin(p.role) ? body.id : p.uid;
+      const p=await readToken(body.token); const actor=p?await liveActor(body.token):null; if(!p||!actor) return json({error:'unauthorized'},401);
+      const targetId = body.id && isAdmin(actor.role) ? body.id : p.uid;
       const rec=findById(targetId); if(!rec) return json({ ok:false });
       if(targetId===p.uid && body.currentPassword!=null){ if(!(await verifyPw(body.currentPassword, rec.u.passwordHash||''))) return json({ ok:false, reason:'bad-current' }); }
       let newHash:string|null = null;
@@ -165,14 +195,22 @@ Deno.serve(async (req)=>{
       }
       else if(typeof body.newHash==='string' && /^pbkdf2\$\d+\$/.test(body.newHash)){ newHash = body.newHash; }
       if(!newHash) return json({error:'no valid new password'},400);
-      const u={...rec.u, passwordHash:newHash, isDefaultPassword:false};
+      const u={...rec.u, passwordHash:newHash, isDefaultPassword:!!body.temporary};
       await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]);
+      await rlClear('login',rec.u.email||''); await rlClear('login',rec.u.username||'');
       return json({ ok:true });
     }
+    if(action==='unlock'){
+      const actor=await liveActor(body.token); if(!actor||!isAdmin(actor.role)) return json({error:'unauthorized'},401);
+      const rec=body.id?findById(body.id):findByLogin(body.identifier||''); if(!rec) return json({ok:true});
+      await rlClear('login',rec.u.email||''); await rlClear('login',rec.u.username||'');
+      await rlClear('forgot',rec.u.email||''); await rlClear('forgot',rec.u.username||'');
+      return json({ok:true});
+    }
     if(action==='forgot'){
-      await rlBump('forgot', body.identifier);
+      await rlBump('forgot', body.identifier, RL_FORGOT_WINDOW_MS);
       const rec=findByLogin(body.identifier);
-      if(rec && rec.u.email){ const temp='M'+hex(crypto.getRandomValues(new Uint8Array(6)).buffer)+'a1'; const sent=await sendMail(rec.u.email, 'Your temporary password — Magnet OS', 'Your temporary password is: '+temp+'\nPlease change it after signing in (Profile).'); if(sent){ const u={...rec.u, passwordHash:await makePbkdf2(temp), isDefaultPassword:true}; await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]); } }
+      if(rec && rec.u.email){ const temp='M'+hex(crypto.getRandomValues(new Uint8Array(6)).buffer)+'a1'; const sent=await sendMail(rec.u.email, 'Your temporary password — Magnet OS', 'Your temporary password is: '+temp+'\nPlease change it after signing in (Profile).'); if(sent){ const u={...rec.u, passwordHash:await makePbkdf2(temp), isDefaultPassword:true}; await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]); await rlClear('login',rec.u.email||''); await rlClear('login',rec.u.username||''); } }
       return json({ ok:true });
     }
     return json({error:'unknown action'},400);

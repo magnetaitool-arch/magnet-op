@@ -42,7 +42,7 @@ const lib = require('./_lib');
 
   console.log('\n[accounts edge function]');
   try {
-    const r = await fetch(url + '/functions/v1/accounts', { method: 'POST', headers: { apikey: anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'login', identifier: '__nobody__', password: '__x__' }) });
+    const r = await fetch(url + '/functions/v1/accounts', { method: 'POST', headers: { apikey: anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'health' }) });
     if (r.status === 404) w('accounts function NOT deployed (404) — login falls back to legacy path. Deploy it: supabase functions deploy accounts --no-verify-jwt');
     else { const d = await r.json().catch(() => ({})); (d && d.ok === false) ? ok('accounts function deployed and responding') : ok('accounts function reachable (' + r.status + ')'); }
   } catch (e) { w('accounts function unreachable: ' + (e.message || e)); }
