@@ -4418,7 +4418,17 @@ async function verifyPassword(pw, hash){
 
 /* ---- user store (localStorage) ---- */
 function loadUsers(){ try { return (JSON.parse(store.get(AUTH_KEYS.users)||'[]')||[]).filter(u=>u && !u._del); } catch(e){ return []; } }
-function saveUsers(list){ store.set(AUTH_KEYS.users, JSON.stringify(list)); try { cloudPushUsers(list); } catch(e){} }
+function saveUsers(list){
+  list=(list||[]).filter(u=>u&&u.id);
+  const before={}; loadUsers().forEach(u=>before[u.id]=u);
+  store.set(AUTH_KEYS.users, JSON.stringify(list));
+  // Profile edits used to push the ENTIRE local roster. A stale browser could
+  // therefore recreate an account that an Owner had already deleted in the
+  // cloud (the root cause of duplicate login identities). Only push records that
+  // actually changed; explicit deletes always go through cloudDeleteUser().
+  const changed=list.filter(u=>JSON.stringify(before[u.id]||null)!==JSON.stringify(u));
+  try { if(changed.length) cloudPushUsers(changed); } catch(e){}
+}
 
 // Account-administration writes must be acknowledged by the server before the UI
 // says "saved". The old fire-and-forget path above remains only for non-critical
@@ -4432,6 +4442,19 @@ async function saveUsersConfirmed(list){
   } else if(!isLegacyAuthFallbackAllowed()) throw new Error('account-service-unavailable');
   const cached=cfgComplete(cfg)?list.map(u=>{const x={...u};delete x.passwordHash;return x;}):list;
   store.set(AUTH_KEYS.users,JSON.stringify(cached));
+  return true;
+}
+async function saveUserConfirmed(user){
+  if(!user||!user.id) throw new Error('account-missing');
+  const cfg=getCfg();
+  if(cfgComplete(cfg)){
+    const r=await acctApi(cfg,'save',{token:getAcctToken(),user});
+    if(!r||!r.ok){ const e=new Error((r&&r.error)||'account-save-failed'); e.code=(r&&r.error)||'account-save-failed'; throw e; }
+  } else if(!isLegacyAuthFallbackAllowed()) throw new Error('account-service-unavailable');
+  const list=loadUsers(), cached={...user}; if(cfgComplete(cfg)) delete cached.passwordHash;
+  const i=list.findIndex(u=>u.id===cached.id);
+  if(i>=0) list[i]=Object.assign({},list[i],cached); else list.push(cached);
+  store.set(AUTH_KEYS.users,JSON.stringify(list));
   return true;
 }
 async function resetUserPasswordConfirmed(id,newPassword,temporary){
@@ -4472,8 +4495,10 @@ async function syncAccountFromEmployee(emp){
   // A real role change therefore returns the account to the new role defaults.
   const updated=Object.assign({},account,{employeeId:emp.id,role:nextRole,
     access:nextRole!==account.role?{}:(account.access||{}),
-    email:emp.loginEmail||account.email,jobTitle:emp.jobTitle||account.jobTitle});
-  await saveUsersConfirmed(list.map(u=>u.id===account.id?updated:u));
+    // Account email is the confirmed login identity. HR-profile typos may update
+    // only after the Owner deliberately edits the account itself.
+    email:account.email,jobTitle:emp.jobTitle||account.jobTitle});
+  await saveUserConfirmed(updated);
   return {ok:true,user:updated};
 }
 
@@ -4521,11 +4546,13 @@ async function cloudAccountStatus(){
 // Saves WITHOUT re-pushing to avoid a sync loop.
 async function syncUsersFromCloud(){
   const cloud=await cloudPullUsers(); if(!cloud) return loadUsers();
-  const byId={}; loadUsers().forEach(u=>byId[u.id]=u);
-  cloud.forEach(u=>{ if(u && u._del) delete byId[u.id]; else if(u) byId[u.id]=u; }); // cloud deletions purge locally — deleted accounts never come back
-  const merged=Object.values(byId).filter(u=>u && !u._del);
-  store.set(AUTH_KEYS.users, JSON.stringify(merged));
-  return merged;
+  // A successful token-gated roster response is authoritative. Merging it with
+  // localStorage resurrected deleted accounts on old devices and produced two
+  // different roles for one email. Replace the cache so absence in the server
+  // roster means deleted here too.
+  const canonical=cloud.filter(u=>u&&u.id&&!u._del);
+  store.set(AUTH_KEYS.users, JSON.stringify(canonical));
+  return canonical;
 }
 // Revalidate the signed-in person's role/status/access against the server. This
 // closes a role-drift bug where an employee repaired from Content -> Sales could
@@ -4555,20 +4582,17 @@ function setAuthSettings(p){ store.set(AUTH_KEYS.settings, JSON.stringify(Object
 // must collect a real owner identity and password in the setup screen below;
 // shipping a predictable built-in Owner account is unsafe.
 async function ensureDefaultOwner(){
-  // Merge any shared cloud accounts with whatever is local (non-destructive: a
-  // temporary cloud outage must never wipe local accounts). A new device joining
-  // the team picks up everyone; a device that created accounts offline pushes them up.
+  // A successful authenticated cloud roster is the only account authority. Older
+  // builds merged local-only identities back into it and could resurrect a login
+  // the Owner had deleted on another device.
   const cloud = await cloudPullUsers().catch(()=>null);
   const local = loadUsers();
-  if((cloud && cloud.length) || local.length){
-    const byId={}; local.forEach(u=>{ if(u&&u.id) byId[u.id]=u; });
-    (cloud||[]).forEach(u=>{ if(u&&u.id) byId[u.id]=u; }); // cloud authoritative on conflicts
-    const merged=Object.values(byId);
-    store.set(AUTH_KEYS.users, JSON.stringify(merged));
-    if(merged.length > (cloud?cloud.length:0)) cloudPushUsers(merged).catch(()=>{}); // sync local-only accounts up
-    return merged;
+  if(Array.isArray(cloud)){
+    const canonical=cloud.filter(u=>u&&u.id&&!u._del);
+    store.set(AUTH_KEYS.users,JSON.stringify(canonical));
+    return canonical;
   }
-  return [];
+  return local;
 }
 
 async function bootstrapOwner(details){
@@ -4671,7 +4695,7 @@ function validatePassword(pw, confirm){
   return null;
 }
 
-window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, cloudAccountStatus, syncUsersFromCloud, refreshCurrentUser };
+window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, saveUserConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, cloudAccountStatus, syncUsersFromCloud, refreshCurrentUser };
 
 
 /* ===== crm-seed.js ===== */
@@ -10649,7 +10673,7 @@ function UsersView({ ctx }){
     'last-owner':ar?'لا يمكن إزالة أو إيقاف آخر حساب Owner.':'The last active Owner cannot be removed or deactivated.',
     'unauthorized':ar?'جلسة الإدارة انتهت. سجّل خروج وادخل تاني بحساب Owner.':'Your admin session expired. Sign out and back in as Owner.'};
     return map[c]||(ar?'الحفظ على السيرفر فشل ولم يتم اعتماد التغيير. جرّب تسجيل الخروج والدخول ثم أعد المحاولة.':'The server did not confirm the change. Sign out/in and retry.'); };
-  const saveAccess=async(acc)=>{ const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===access.id); if(!tu)return; const next=list.map(x=>x.id===tu.id?Object.assign({},tu,{access:acc}):x); setOp('access-'+tu.id); try{ await AUTH.saveUsersConfirmed(next); ctx.addActivity('users',tu.id,'access updated',tu.fullName); refresh(); setAccess(null); showProPopup('savedNotes', ar?'تم حفظ الصلاحيات على السيرفر':'Access saved on the server'); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
+  const saveAccess=async(acc)=>{ const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===access.id); if(!tu)return; const updated=Object.assign({},tu,{access:acc}); setOp('access-'+tu.id); try{ await AUTH.saveUserConfirmed(updated); ctx.addActivity('users',tu.id,'access updated',tu.fullName); refresh(); setAccess(null); showProPopup('savedNotes', ar?'تم حفظ الصلاحيات على السيرفر':'Access saved on the server'); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
   // Pull the full team roster from the cloud on open (token-gated Edge Function),
   // so ALL users show immediately without a manual refresh.
   useEffect(()=>{ let alive=true; AUTH.syncUsersFromCloud().then(()=>{ if(alive) setUsers(AUTH.loadUsers()); }).catch(()=>{}); return ()=>{ alive=false; }; }, []); // eslint-disable-line
@@ -10657,7 +10681,7 @@ function UsersView({ ctx }){
   const verifyLink=(tok)=>{ try { return location.origin+location.pathname+'?verify='+encodeURIComponent(tok); } catch(e){ return '?verify='+tok; } };
   const sendVerify=async(u, silent)=>{
     const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===u.id)||u;
-    let tok=tu.verifyToken; if(!tok){ tok='vt-'+randToken(18); tu.verifyToken=tok; tu.verified=false; await AUTH.saveUsersConfirmed(list.map(x=>x.id===tu.id?tu:x)); refresh(); }
+    let tok=tu.verifyToken; if(!tok){ tok='vt-'+randToken(18); tu.verifyToken=tok; tu.verified=false; await AUTH.saveUserConfirmed(tu); refresh(); }
     const link=verifyLink(tok);
     const body='<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto"><h2 style="color:#0a0a0a">Verify your Magnet OS account</h2><p>Hi '+(tu.fullName||'')+', please confirm your email to activate your account.</p><p style="margin:22px 0"><a href="'+link+'" style="background:#C4FF3D;color:#0a0a0a;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Verify my email</a></p><p style="color:#666;font-size:13px">Or open this link:<br>'+link+'</p></div>';
     try { await sendEmail({to:tu.email, subject:'Verify your Magnet OS account', html:body}); if(!silent) showProPopup('savedNotes', ar?'تم إرسال رابط التأكيد':'Verification email sent'); }
@@ -10689,7 +10713,7 @@ function UsersView({ ctx }){
     if(next.some(x=>x.id!==u.id&&String(x.username||'').trim().toLowerCase()===un)){ alert(accountErr({code:'duplicate-username'})); return; }
     setOp('save-'+(u.id||'new'));
     try{
-      await AUTH.saveUsersConfirmed(next);
+      await AUTH.saveUserConfirmed(u);
       if(linked){ ctx.updateRecord('employees',linked.id,{appRole:u.role,loginEmail:u.email,userId:u.id,accountStatus:u.status==='Active'?'Active':'Disabled'}); }
       ctx.addActivity('users',u.id,form.id?'user updated':'user created',u.fullName);
       if(!form.id){ try { await sendVerify(u, true); } catch(e){} }
@@ -10725,7 +10749,7 @@ function UsersView({ ctx }){
   const toggleStatus=async(u)=>{ const list=AUTH.loadUsers();
     if(u.role==='Owner'&&u.status==='Active'&&AUTH.activeOwners(list).length<=1){ alert(ar?'لا يمكن إيقاف آخر مالك نشط.':'Cannot deactivate the last active Owner.'); return; }
     const t=Object.assign({},list.find(x=>x.id===u.id)); t.status=t.status==='Active'?'Inactive':'Active'; setOp('status-'+t.id);
-    try{ await AUTH.saveUsersConfirmed(list.map(x=>x.id===t.id?t:x)); if(t.employeeId)ctx.updateRecord('employees',t.employeeId,{accountStatus:t.status==='Active'?'Active':'Disabled'}); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); refresh(); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
+    try{ await AUTH.saveUserConfirmed(t); if(t.employeeId)ctx.updateRecord('employees',t.employeeId,{accountStatus:t.status==='Active'?'Active':'Disabled'}); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); refresh(); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
   const unlock=async(u)=>{ setOp('unlock-'+u.id); try{ await AUTH.unlockUserConfirmed(u.id); ctx.addActivity('users',u.id,'login unlocked',u.fullName); showProPopup('savedNotes',ar?'تم فتح تسجيل الدخول للحساب':'Login lock cleared'); }catch(e){ alert(accountErr(e)); } finally{setOp('');} };
   const del=async(u)=>{ const list=AUTH.loadUsers();
     if(u.role==='Owner'&&list.filter(x=>x.role==='Owner').length<=1){ alert(ar?'لا يمكن حذف آخر مالك.':'Cannot delete the last Owner.'); return; }
@@ -10734,12 +10758,17 @@ function UsersView({ ctx }){
   const audit=()=>{ const emps=ctx.db.employees||[], n=s=>String(s||'').trim().toLowerCase(), used=new Set(); let linked=0,mismatch=0,duplicates=0;
     const seen={}; users.forEach(u=>{ const k=n(u.email); if(k){seen[k]=(seen[k]||0)+1;if(seen[k]===2)duplicates++;} const e=linkedEmployee(u); if(e){linked++;used.add(e.id);if((e.appRole||e.role)&&u.role!==(e.appRole||e.role))mismatch++;} });
     return {linked,mismatch,duplicates,unlinked:users.length-linked,withoutAccount:emps.filter(e=>!used.has(e.id)&&e.status!=='Inactive').length}; };
-  const repairLinks=async()=>{ const list=AUTH.loadUsers(), emps=ctx.db.employees||[], next=[], changes=[]; const claimed=new Set();
-    for(const u of list){ const e=linkedEmployee(u); if(!e||claimed.has(e.id)||u.role==='Owner'){ next.push(u); continue; } claimed.add(e.id); const desired=e.appRole||e.role||u.role; const nu=Object.assign({},u,{employeeId:e.id,role:desired,access:desired!==u.role?{}:(u.access||{}),jobTitle:e.jobTitle||u.jobTitle,email:e.loginEmail||u.email}); next.push(nu); if(nu.employeeId!==u.employeeId||nu.role!==u.role||nu.email!==u.email)changes.push({u,nu,e}); }
+  const repairLinks=async()=>{ const list=AUTH.loadUsers(), emps=ctx.db.employees||[], changes=[]; const claimed=new Set();
+    for(const u of list){ const e=linkedEmployee(u); if(!e||claimed.has(e.id)||u.role==='Owner') continue; claimed.add(e.id); const desired=e.appRole||e.role||u.role;
+      // The login account owns its login identity. Copying an employee-profile
+      // email over it caused duplicate-email errors when the HR record had a typo.
+      // Link by stable ids and make the employee follow the confirmed account.
+      const nu=Object.assign({},u,{employeeId:e.id,role:desired,access:desired!==u.role?{}:(u.access||{}),jobTitle:e.jobTitle||u.jobTitle});
+      if(nu.employeeId!==u.employeeId||nu.role!==u.role)changes.push({u,nu,e}); }
     if(!changes.length){ alert(ar?'كل الحسابات المرتبطة سليمة بالفعل.':'All linked accounts are already consistent.'); return; }
     const details=changes.slice(0,12).map(x=>'• '+(x.u.fullName||x.u.username)+': '+x.u.role+' → '+x.nu.role).join('\n');
     if(!confirm((ar?'سيتم ربط الحسابات بالموظفين واعتماد App role الموجود في ملف الموظف كدور الدخول:\n\n':'Accounts will be linked to employees, and each employee App role will become the login role:\n\n')+details+(changes.length>12?'\n…':'')))return;
-    setOp('repair'); try{ await AUTH.saveUsersConfirmed(next); changes.forEach(x=>ctx.updateRecord('employees',x.e.id,{userId:x.nu.id,loginEmail:x.nu.email,accountStatus:x.nu.status==='Active'?'Active':'Disabled'})); ctx.addActivity('users','repair','account links and roles repaired',changes.length+' accounts'); refresh(); showProPopup('savedNotes',(ar?'تم إصلاح ':'Repaired ')+changes.length+(ar?' حساب على السيرفر':' server account(s)')); }catch(e){alert(accountErr(e));}finally{setOp('');}
+    setOp('repair'); try{ for(const x of changes) await AUTH.saveUserConfirmed(x.nu); changes.forEach(x=>ctx.updateRecord('employees',x.e.id,{userId:x.nu.id,loginEmail:x.nu.email,accountStatus:x.nu.status==='Active'?'Active':'Disabled'})); ctx.addActivity('users','repair','account links and roles repaired',changes.length+' accounts'); refresh(); showProPopup('savedNotes',(ar?'تم إصلاح ':'Repaired ')+changes.length+(ar?' حساب على السيرفر':' server account(s)')); }catch(e){alert(accountErr(e));}finally{setOp('');}
   };
   const qa=audit();
 
@@ -10804,7 +10833,10 @@ function UsersView({ ctx }){
 function UserForm({ user, employees, ar, busy, onClose, onSave }){
   const [f,setF]=useState(Object.assign({},user)); const set=(k,v)=>setF(Object.assign({},f,{[k]:v}));
   const isNew=!user.id;
-  const pickEmployee=(id)=>{ const e=(employees||[]).find(x=>x.id===id); if(!e){set('employeeId','');return;} setF(Object.assign({},f,{employeeId:e.id,fullName:e.fullName||e.name||f.fullName||'',email:e.loginEmail||e.email||f.email||'',jobTitle:e.jobTitle||f.jobTitle||'',role:e.appRole||e.role||f.role||'Designer'})); };
+  const pickEmployee=(id)=>{ const e=(employees||[]).find(x=>x.id===id); if(!e){set('employeeId','');return;} setF(Object.assign({},f,{employeeId:e.id,fullName:e.fullName||e.name||f.fullName||'',
+    // Existing account email/username are login identities and must not be
+    // silently overwritten by a possibly mistyped HR email while linking.
+    email:isNew?(e.loginEmail||e.email||f.email||''):(f.email||''),jobTitle:e.jobTitle||f.jobTitle||'',role:e.appRole||e.role||f.role||'Designer'})); };
   return html`<${Modal} title=${isNew?(ar?'إنشاء مستخدم':'Create User'):(ar?'تعديل مستخدم':'Edit User')} onClose=${onClose}>
     <div class="form-grid">
       <label class="fld"><span>${ar?'ربط بملف موظف':'Linked employee'}</span><select value=${f.employeeId||''} onChange=${e=>pickEmployee(e.target.value)}><option value="">${ar?'— بدون ربط —':'— Not linked —'}</option>${(employees||[]).map(e=>html`<option key=${e.id} value=${e.id}>${e.fullName||e.name} · ${e.appRole||e.role||'—'}</option>`)}</select></label>

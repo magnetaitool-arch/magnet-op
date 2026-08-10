@@ -1,4 +1,4 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v9.
+// Magnet OS — accounts/auth Edge Function (service-role), v10.
 // v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
@@ -116,7 +116,7 @@ Deno.serve(async (req)=>{
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:9,database:'reachable',needsSetup:accounts.length===0});
+    if(action==='health') return json({ok:true,service:'accounts',version:10,database:'reachable',needsSetup:accounts.length===0});
 
     // Return the CURRENT server-side identity for an existing session. The UI must
     // not keep trusting the role/access snapshot cached at login forever: an Owner
@@ -182,12 +182,18 @@ Deno.serve(async (req)=>{
         out.push({ id:'acct-'+nu.id, coll:'_accounts', data:merged });
       }
       if(!out.length) return json({error:'unauthorized'},401);
-      const future=new Map(accounts.map((a:any)=>[a.u.id,{...a.u}])); out.forEach((r:any)=>future.set(r.data.id,r.data));
-      const seenEmail=new Map<string,string>(), seenUser=new Map<string,string>();
-      for(const u of future.values()){
-        const email=String((u as any).email||'').trim().toLowerCase(), username=String((u as any).username||'').trim().toLowerCase(), uid=String((u as any).id||'');
-        if(email){ if(seenEmail.has(email)&&seenEmail.get(email)!==uid) return json({error:'duplicate-email'},409); seenEmail.set(email,uid); }
-        if(username){ if(seenUser.has(username)&&seenUser.get(username)!==uid) return json({error:'duplicate-username'},409); seenUser.set(username,uid); }
+      const current=new Map(accounts.map((a:any)=>[a.u.id,{...a.u}]));
+      const future=new Map(current); out.forEach((r:any)=>future.set(r.data.id,r.data));
+      // Block NEW identity collisions, but do not let a historical duplicate make
+      // every unrelated role/status repair impossible. Old duplicates are handled
+      // by an audited one-time merge; unchanged emails/usernames may still receive
+      // security and role updates in the meantime.
+      for(const row of out){
+        const u:any=row.data, ex:any=current.get(u.id), uid=String(u.id||'');
+        const email=String(u.email||'').trim().toLowerCase(), oldEmail=String((ex&&ex.email)||'').trim().toLowerCase();
+        const username=String(u.username||'').trim().toLowerCase(), oldUsername=String((ex&&ex.username)||'').trim().toLowerCase();
+        if(email && (!ex||email!==oldEmail) && [...future.values()].some((x:any)=>String(x.id||'')!==uid&&String(x.email||'').trim().toLowerCase()===email)) return json({error:'duplicate-email'},409);
+        if(username && (!ex||username!==oldUsername) && [...future.values()].some((x:any)=>String(x.id||'')!==uid&&String(x.username||'').trim().toLowerCase()===username)) return json({error:'duplicate-username'},409);
       }
       if(![...future.values()].some((u:any)=>u.role==='Owner'&&(!u.status||u.status==='Active'))) return json({error:'last-owner'},409);
       if(out.length) await dbUpsert(out);

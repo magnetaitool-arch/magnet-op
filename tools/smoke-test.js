@@ -53,6 +53,9 @@ const acct = read('supabase/functions/accounts/index.ts');
 /action==='me'/.test(acct) && /refreshCurrentUser/.test(read('index.html')) && /setInterval\(refreshIdentity,60000\)/.test(read('index.html'))
   ? ok('open sessions revalidate live role/status/access and cannot stay on a stale employee role')
   : bad('open sessions can keep a stale role after an account repair or downgrade');
+/version:10/.test(acct) && /historical duplicate/.test(acct)
+  ? ok('accounts v10 permits role repair while still blocking new identity collisions')
+  : bad('accounts service lacks the v10 duplicate-repair guard');
 /duplicate-email/.test(acct) && /duplicate-username/.test(acct) && /last-owner/.test(acct)
   ? ok('duplicate logins and last-owner lockout are blocked server-side')
   : bad('account identity/last-owner guards are missing');
@@ -97,6 +100,18 @@ console.log('\n[5] dangerous-pattern scan');
 /coll==='employees' && _prev && patch\.appRole && isAdminRole\(role\)/.test(html)
   ? ok('every Owner/Admin employee save reconciles the login account even when the profile role was already correct')
   : bad('saving an already-correct employee profile can leave a mismatched login role unchanged');
+/const canonical=cloud\.filter\(u=>u&&u\.id&&!u\._del\)/.test(html) && /store\.set\(AUTH_KEYS\.users, JSON\.stringify\(canonical\)\)/.test(html)
+  ? ok('successful cloud account roster replaces stale local cache so deleted logins cannot resurrect')
+  : bad('cloud account sync can merge deleted local accounts back into the live roster');
+!/merged\.length > \(cloud\?cloud\.length:0\)/.test(html) && /A successful authenticated cloud roster is the only account authority/.test(html)
+  ? ok('startup account discovery cannot upload local-only ghost accounts')
+  : bad('startup can still resurrect a deleted account from local storage');
+/async function saveUserConfirmed\(user\)/.test(html) && /acctApi\(cfg,'save',\{token:getAcctToken\(\),user\}\)/.test(html)
+  ? ok('single-account admin edits do not re-upload a stale full roster')
+  : bad('account edits can still re-upload stale unrelated identities');
+/Existing account email\/username are login identities/.test(html) && /email:isNew\?/.test(html)
+  ? ok('linking an existing account never overwrites its login email from an HR typo')
+  : bad('employee linking can silently replace an existing login email');
 /cloudLoadDelta/.test(html) && /updated_at=gt\./.test(html) && !/setInterval\(tick,\s*5000\)/.test(html)
   ? ok('live sync uses updated_at deltas instead of 5-second full-database downloads')
   : bad('high-egress full-database polling has returned');
