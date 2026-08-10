@@ -4502,6 +4502,13 @@ async function cloudPullUsers(){
     return rows.map(r=>r.data).filter(u=>u&&u.id);
   } catch(e){ return null; }
 }
+async function cloudAccountStatus(){
+  const cfg=getCfg(); if(!cfgComplete(cfg)) return null;
+  try{
+    const r=await acctApi(cfg,'health',{});
+    return r&&r.ok&&typeof r.needsSetup==='boolean'?{needsSetup:r.needsSetup,version:r.version||0}:null;
+  }catch(e){ return null; }
+}
 // Pull shared accounts and merge into the local store (cloud is authoritative).
 // Saves WITHOUT re-pushing to avoid a sync loop.
 async function syncUsersFromCloud(){
@@ -4635,7 +4642,7 @@ function validatePassword(pw, confirm){
   return null;
 }
 
-window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, syncUsersFromCloud };
+window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, cloudAccountStatus, syncUsersFromCloud };
 
 
 /* ===== crm-seed.js ===== */
@@ -5864,12 +5871,15 @@ function App(){
   const [needsSetup, setNeedsSetup] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   useEffect(()=>{ // discover accounts, then choose sign-in vs first-owner setup
-    const settle=(accounts)=>{ const u=getSessionUser(); setAuthUser(u);
+    const settle=(accounts,status)=>{ const u=getSessionUser(); setAuthUser(u);
       // Decide setup-vs-sign-in in BOTH paths. If discovery fails we still fall back to the
       // locally known roster: with no session and no accounts a sign-in screen is a dead end,
       // because there is no longer a built-in Owner to sign in as.
-      setNeedsSetup(!u && !(accounts||[]).length); setShowLogin(!u); setAuthReady(true); };
-    ensureDefaultOwner().then(settle).catch(()=>{ let local=[]; try{ local=loadUsers()||[]; }catch(e){} settle(local); });
+      const hasCloudAccounts=status&&typeof status.needsSetup==='boolean'?!status.needsSetup:null;
+      setNeedsSetup(!u && (hasCloudAccounts===null?!(accounts||[]).length:!hasCloudAccounts)); setShowLogin(!u); setAuthReady(true); };
+    Promise.all([ensureDefaultOwner().catch(()=>loadUsers()||[]),cloudAccountStatus().catch(()=>null)])
+      .then(([accounts,status])=>settle(accounts,status))
+      .catch(()=>{ let local=[]; try{ local=loadUsers()||[]; }catch(e){} settle(local,null); });
   },[]);
   const [navOpen, setNavOpen] = useState(false); // mobile drawer
   const [appSettings, setAppSettingsState] = useState(getAppSettings);

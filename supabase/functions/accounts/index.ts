@@ -1,5 +1,5 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v7.
-// v7 makes account administration confirmable and recoverable: separate login and
+// Magnet OS — accounts/auth Edge Function (service-role), v8.
+// v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
 const URL = Deno.env.get('SUPABASE_URL')!;
@@ -114,7 +114,9 @@ Deno.serve(async (req)=>{
     const findById=(uid:string)=> accounts.find((a:any)=> a.u.id===uid);
     const liveActor=async(token:string)=>{ const p=await readToken(token); if(!p) return null; const rec=findById(p.uid); return rec&&(!rec.u.status||rec.u.status==='Active')?rec.u:null; };
 
-    if(action==='health') return json({ok:true,service:'accounts',version:7,database:'reachable'});
+    // Public startup discovery reveals only whether first-owner setup is required.
+    // It never returns the account roster, identities, roles, or password metadata.
+    if(action==='health') return json({ok:true,service:'accounts',version:8,database:'reachable',needsSetup:accounts.length===0});
 
     if(action==='login'){
       const rec=findByLogin(body.identifier);

@@ -91,6 +91,9 @@ console.log('\n[5] dangerous-pattern scan');
 /cloudLoadDelta/.test(html) && /updated_at=gt\./.test(html) && !/setInterval\(tick,\s*5000\)/.test(html)
   ? ok('live sync uses updated_at deltas instead of 5-second full-database downloads')
   : bad('high-egress full-database polling has returned');
+/needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /hasCloudAccounts/.test(html)
+  ? ok('fresh browsers distinguish existing accounts from first-owner setup without exposing the roster')
+  : bad('fresh browsers can show first-owner setup when accounts already exist');
 
 console.log('\n[6] inline app scripts parse');
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];

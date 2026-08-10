@@ -12,7 +12,7 @@ The current release is suitable for a **controlled private production rollout fo
 - The live Supabase organization reported **16.29 GB / 5 GB egress (326%)** for the billing cycle, while the database itself was only **32.55 MB**. This confirms that the incident was bandwidth exhaustion, not lost data.
 - Root cause: when Realtime was unavailable, every open browser downloaded the entire shared records table every **5 seconds**.
 - Fix: the fallback now requests only records changed after the last server cursor, every **30 seconds** and on focus. Realtime remains the instant update path.
-- The accounts Edge Function was upgraded to v7 and deployed. Its live health check returns HTTP 200, `database: reachable`, and `version: 7`.
+- The accounts Edge Function was upgraded to v8 and deployed. Its live health check returns HTTP 200, `database: reachable`, and a privacy-safe first-owner setup state.
 - Login and forgot-password throttles are separate; an Owner/Admin/Manager can explicitly unlock a user; password resets clear locks; stale role tokens no longer retain account-administration rights.
 - A validated pre-release backup contains **1,444 business records across 43 collections** with checksum `sha256:280cc84bcea62b251cefb7f2f991d815ae69de3939437e951a6c7930b4880156`. `_accounts` is excluded because no service-role key is stored locally.
 
@@ -72,7 +72,7 @@ The code change prevents the same download pattern from continuing, but the orga
 | Live config probe | 0 failures, 2 local-secret warnings |
 | `_accounts` anonymous exposure | blocked by live RLS |
 | Pre-deploy business-data backup | 1,444 records / 43 collections, checksum validated |
-| Live accounts Edge Function health | HTTP 200, version 7, database reachable |
+| Live accounts Edge Function health | HTTP 200, version 8, database reachable, setup state available |
 | Live incremental-sync query | HTTP 200; 17 changed rows / 2,066 bytes for the test window |
 | Browser test of local `127.0.0.1` | blocked by browser URL policy; must be repeated on the HTTPS deployment |
 

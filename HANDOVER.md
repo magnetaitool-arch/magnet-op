@@ -9,7 +9,8 @@
 
 > **2026-08-10 incident root cause:** Supabase egress reached 16.29/5 GB because the
 > browser fallback downloaded the whole records table every 5 seconds. The fallback now
-> downloads deltas every 30 seconds. Accounts Edge Function v7 is live and health-checked.
+> downloads deltas every 30 seconds. Accounts Edge Function v8 is live and health-checked;
+> a fresh browser now detects existing accounts without exposing the private roster.
 > Business data is present; the latest validated backup contains 1,444 records. The
 > Supabase quota/plan still has to be resolved to guarantee uninterrupted service.
 
