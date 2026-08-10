@@ -6328,9 +6328,13 @@ function App(){
       out={...x,...patch,updatedAt:nowISO(),updatedBy:user.id}; return out; } return x; })}));
     if(out){
       cloudUpsert(cfg.current, coll, out); // push THIS record immediately (no shared-closure race)
-      if(coll==='employees' && _prev && patch.appRole && patch.appRole!==_prev.appRole){
+      // Always reconcile an employee save with the linked login account when an
+      // Owner/Admin is editing access. The employee card may already say Sales
+      // while the older login account still says Content; comparing only the
+      // employee card's previous value incorrectly treated that drift as "no change".
+      if(coll==='employees' && _prev && patch.appRole && isAdminRole(role)){
         AUTH.syncAccountFromEmployee(out).then(r=>{
-          if(r&&r.ok) showProPopup('savedNotes',getLang()==='ar'?'تم تحديث رول حساب الدخول على السيرفر':'Login role updated on the server');
+          if(r&&r.ok) showProPopup('savedNotes',getLang()==='ar'?'تم تأكيد ومزامنة رول حساب الدخول على السيرفر':'Login role confirmed and synchronized on the server');
           else if(out.accountStatus==='Active') alert(getLang()==='ar'?'تم حفظ الموظف، لكن لا يوجد حساب دخول مرتبط. اربطه من المستخدمون والصلاحيات.':'Employee saved, but no linked login account was found. Link it in Users & Permissions.');
         }).catch(()=>alert(getLang()==='ar'?'تم حفظ الموظف، لكن تحديث رول الدخول فشل. شغّل إصلاح الربط والرولز من المستخدمون والصلاحيات.':'Employee saved, but login-role sync failed. Run Repair links & roles in Users & Permissions.'));
       }

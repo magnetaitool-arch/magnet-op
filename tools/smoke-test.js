@@ -94,6 +94,9 @@ console.log('\n[5] dangerous-pattern scan');
 /Check & sync login role/.test(html) && /loginRoleMismatch/.test(html) && /access:nextRole!==account\.role\?\{\}/.test(html)
   ? ok('employee profiles detect role drift and can sync the login role without carrying stale overrides')
   : bad('employee/login role drift still requires external repair or can retain old-role overrides');
+/coll==='employees' && _prev && patch\.appRole && isAdminRole\(role\)/.test(html)
+  ? ok('every Owner/Admin employee save reconciles the login account even when the profile role was already correct')
+  : bad('saving an already-correct employee profile can leave a mismatched login role unchanged');
 /cloudLoadDelta/.test(html) && /updated_at=gt\./.test(html) && !/setInterval\(tick,\s*5000\)/.test(html)
   ? ok('live sync uses updated_at deltas instead of 5-second full-database downloads')
   : bad('high-egress full-database polling has returned');
