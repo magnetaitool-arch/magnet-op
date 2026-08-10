@@ -4466,7 +4466,12 @@ async function syncAccountFromEmployee(emp){
   const account=list.find(u=>u.employeeId===emp.id || emp.userId===u.id
     || (n(emp.loginEmail||emp.email)&&[n(u.email),n(u.username)].includes(n(emp.loginEmail||emp.email))));
   if(!account) return {ok:false,reason:'account-missing'};
-  const updated=Object.assign({},account,{employeeId:emp.id,role:emp.appRole||account.role,
+  const nextRole=emp.appRole||account.role;
+  // Per-module overrides belong to the OLD role context. Carrying a Content
+  // override into Sales can keep CRM hidden even after the role label is fixed.
+  // A real role change therefore returns the account to the new role defaults.
+  const updated=Object.assign({},account,{employeeId:emp.id,role:nextRole,
+    access:nextRole!==account.role?{}:(account.access||{}),
     email:emp.loginEmail||account.email,jobTitle:emp.jobTitle||account.jobTitle});
   await saveUsersConfirmed(list.map(u=>u.id===account.id?updated:u));
   return {ok:true,user:updated};
@@ -8675,6 +8680,28 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
   const e = normalizeEmployee(byId(db.employees, emp.id) || emp);
   const seeSalary = canSeeSalary(role);
   const seeAccess = canManageAccess(role);
+  const [accessOp,setAccessOp]=useState('');
+  const [,refreshAccess]=useState(0);
+  const _normLogin=s=>String(s||'').trim().toLowerCase();
+  const loginAccount=(AUTH.loadUsers()||[]).find(u=>u.employeeId===e.id||e.userId===u.id||(_normLogin(e.loginEmail||e.email)&&(_normLogin(u.email)===_normLogin(e.loginEmail||e.email)||_normLogin(u.username)===_normLogin(e.loginEmail||e.email))))||null;
+  const desiredLoginRole=e.appRole||e.role||'';
+  const loginRoleMismatch=!!(loginAccount&&desiredLoginRole&&loginAccount.role!==desiredLoginRole);
+  const syncEmployeeLogin=async()=>{
+    setAccessOp('sync');
+    try{
+      const r=await AUTH.syncAccountFromEmployee(e);
+      if(!r||!r.ok){
+        if(r&&r.reason==='account-missing') alert(ctx.lang==='ar'?'ملف الموظف محفوظ لكن مفيش حساب دخول مربوط. افتح المستخدمون والصلاحيات وأنشئ/اربط الحساب.':'Employee profile exists, but no login account is linked. Open Users & Permissions to create/link it.');
+        else alert(ctx.lang==='ar'?'تعذرت مزامنة حساب الدخول. تأكد إنك داخل بحساب Owner ثم جرّب تاني.':'Could not sync the login account. Make sure you are signed in as Owner and try again.');
+        return;
+      }
+      ctx.updateRecord('employees',e.id,{userId:r.user.id,loginEmail:r.user.email||e.loginEmail,accountStatus:r.user.status==='Active'?'Active':'Disabled'});
+      ctx.addActivity('users',r.user.id,'employee/login role synchronized',(loginAccount&&loginAccount.role?loginAccount.role+' → ':'')+r.user.role);
+      refreshAccess(n=>n+1);
+      showProPopup('savedNotes',ctx.lang==='ar'?'تم توحيد ملف الموظف وحساب الدخول ومسح صلاحيات الرول القديمة':'Employee profile and login account are synchronized; old role overrides were cleared');
+    }catch(err){ alert(ctx.lang==='ar'?'السيرفر لم يؤكد التعديل؛ لم يتم عرض نجاح وهمي. سجّل خروج وادخل Owner ثم أعد المحاولة.':'The server did not confirm the change. Sign out/in as Owner and retry.'); }
+    finally{ setAccessOp(''); }
+  };
   const TABS = ['Overview','Tasks','Projects & Clients','Performance','Attendance', ...(seeSalary?['Salary & Payments']:[]),'Documents', ...(seeAccess?['Access']:[]),'Notes / Activity'];
   const [tab,setTab]=useState('Overview');
   const m = employeeMetrics(db,e);
@@ -8789,10 +8816,16 @@ function EmployeeProfile({ ctx, emp, ce, onClose }){
         </div>`}
 
         ${tab==='Access'&&seeAccess&&html`<div>
-          <div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:16}}>${stat('App role',e.appRole)}${stat('Account',e.accountStatus)}${stat('Last login',e.lastLogin?fmtDateTime(e.lastLogin):'—')}</div>
-          <div class="muted" style=${{fontSize:12.5,marginBottom:10}}>Login email: ${e.loginEmail||'—'} · User ID: ${e.userId||'—'}</div>
+          <div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:16}}>${stat(ctx.lang==='ar'?'رول ملف الموظف':'Employee role',desiredLoginRole||'—')}${stat(ctx.lang==='ar'?'رول حساب الدخول':'Login role',loginAccount?(loginAccount.role||'—'):(ctx.lang==='ar'?'غير مربوط':'Not linked'),loginRoleMismatch?'var(--neg)':(loginAccount?'var(--pos)':null))}${stat('Account',loginAccount?(loginAccount.status||e.accountStatus||'—'):(e.accountStatus||'—'))}${stat('Last login',loginAccount&&loginAccount.lastLogin?fmtDateTime(loginAccount.lastLogin):(e.lastLogin?fmtDateTime(e.lastLogin):'—'))}</div>
+          ${loginRoleMismatch&&html`<div class="warn-note" style=${{marginBottom:12}}>${ctx.lang==='ar'?('خطأ صلاحيات: ملف الموظف '+desiredLoginRole+' لكن حساب الدخول '+loginAccount.role+'. ده ممكن يخفي الـCRM أو يظهر موديولات غلط.'):('Access mismatch: employee profile is '+desiredLoginRole+' but login account is '+loginAccount.role+'. Modules may be hidden or exposed incorrectly.')}</div>`}
+          ${!loginAccount&&html`<div class="warn-note" style=${{marginBottom:12}}>${ctx.lang==='ar'?'مفيش حساب دخول مربوط بالموظف. اعمل Check & Sync؛ لو الحساب غير موجود افتح Users & Permissions وأنشئه واربطه.':'No login account is linked. Run Check & Sync; if it does not exist, create/link it in Users & Permissions.'}</div>`}
+          <div class="flex center gap8" style=${{marginBottom:12,flexWrap:'wrap'}}>
+            <button class="btn btn-pri" disabled=${!!accessOp} onClick=${syncEmployeeLogin}>${accessOp?(ctx.lang==='ar'?'جاري الفحص والمزامنة…':'Checking & syncing…'):(ctx.lang==='ar'?'فحص ومزامنة رول الدخول':'Check & sync login role')}</button>
+            ${!loginAccount&&html`<button class="btn btn-ghost" onClick=${()=>{onClose();ctx.go('users');}}>${ctx.lang==='ar'?'فتح المستخدمين والصلاحيات':'Open Users & Permissions'}</button>`}
+          </div>
+          <div class="muted" style=${{fontSize:12.5,marginBottom:10}}>Login email: ${(loginAccount&&loginAccount.email)||e.loginEmail||'—'} · User ID: ${(loginAccount&&loginAccount.id)||e.userId||'—'}</div>
           <div class="check-grid">${[['canAccessCRM','CRM'],['canAccessFinance','Finance'],['canAccessClients','Clients'],['canAccessProjects','Projects'],['canAccessReports','Reports'],['canApproveDeliverables','Approve deliverables'],['canManageEmployees','Manage employees']].map(p=>html`<label class="check-row" key=${p[0]}><input type="checkbox" checked=${!!e[p[0]]} onChange=${()=>ctx.updateRecord('employees',e.id,{[p[0]]:!e[p[0]]})}/><span>${p[1]}</span></label>`)}</div>
-          <p class="muted" style=${{fontSize:11,marginTop:12}}>These flags document intended access. Enforced roles live in App role + Supabase (see ADD-PEOPLE-AND-ACCESS.md).</p>
+          <p class="muted" style=${{fontSize:11,marginTop:12}}>${ctx.lang==='ar'?'الرول الفعلي هو رول حساب الدخول. زر المزامنة يطابقه مع ملف الموظف على السيرفر ويمسح أي استثناءات تخص الرول القديم.':'The enforced role is the login-account role. Sync matches it to the employee profile on the server and clears overrides inherited from the old role.'}</p>
         </div>`}
 
         ${tab==='Notes / Activity'&&html`<div>
@@ -10592,7 +10625,7 @@ function AccessDrawer({ user, ar, onClose, onSave }){
           </div>`;})}
       </div>`)}
       <button class="btn btn-pri" style=${{marginTop:6}} onClick=${()=>onSave(acc)}>${ar?'حفظ الصلاحيات':'Save access'}</button>
-      <div class="muted" style=${{fontSize:11,marginTop:8}}>${ar?'الموظف يسجّل دخول من جديد عشان تتطبق عليه التغييرات.':'The employee re-logs in for the changes to apply.'}</div>
+      <div class="muted" style=${{fontSize:11,marginTop:8}}>${ar?'التعديل يتحفظ على السيرفر. الجلسات المفتوحة تتحدّث تلقائيًا بعد تفعيل خدمة الحسابات الجديدة؛ لحد وقتها تسجيل خروج/دخول يطبقه فورًا.':'Changes are saved on the server. Open sessions refresh automatically with the current accounts service; until then, sign out/in applies them immediately.'}</div>
     </div>
   </div></div>`;
 }
@@ -10635,7 +10668,9 @@ function UsersView({ ctx }){
     let next,u;
     if(form.id){ // edit existing (no password here)
       const old=list.find(x=>x.id===form.id); if(!old)return;
-      u=Object.assign({},old,{ fullName:form.fullName,username:form.username,email:form.email,phone:form.phone,jobTitle:form.jobTitle,role:form.role,status:form.status,employeeId });
+      u=Object.assign({},old,{ fullName:form.fullName,username:form.username,email:form.email,phone:form.phone,jobTitle:form.jobTitle,role:form.role,status:form.status,employeeId,
+        // Role-specific exceptions must never leak into a different job role.
+        access:old.role!==form.role?{}:(old.access||{}) });
       next=list.map(x=>x.id===u.id?u:x);
     } else { // create new — requires password
       if(!form.fullName||!form.username||!form.email){ alert(ar?'الاسم واسم المستخدم والبريد مطلوبة.':'Name, username, and email are required.'); return; }
@@ -10696,7 +10731,7 @@ function UsersView({ ctx }){
     const seen={}; users.forEach(u=>{ const k=n(u.email); if(k){seen[k]=(seen[k]||0)+1;if(seen[k]===2)duplicates++;} const e=linkedEmployee(u); if(e){linked++;used.add(e.id);if((e.appRole||e.role)&&u.role!==(e.appRole||e.role))mismatch++;} });
     return {linked,mismatch,duplicates,unlinked:users.length-linked,withoutAccount:emps.filter(e=>!used.has(e.id)&&e.status!=='Inactive').length}; };
   const repairLinks=async()=>{ const list=AUTH.loadUsers(), emps=ctx.db.employees||[], next=[], changes=[]; const claimed=new Set();
-    for(const u of list){ const e=linkedEmployee(u); if(!e||claimed.has(e.id)||u.role==='Owner'){ next.push(u); continue; } claimed.add(e.id); const desired=e.appRole||e.role||u.role; const nu=Object.assign({},u,{employeeId:e.id,role:desired,jobTitle:e.jobTitle||u.jobTitle,email:e.loginEmail||u.email}); next.push(nu); if(nu.employeeId!==u.employeeId||nu.role!==u.role||nu.email!==u.email)changes.push({u,nu,e}); }
+    for(const u of list){ const e=linkedEmployee(u); if(!e||claimed.has(e.id)||u.role==='Owner'){ next.push(u); continue; } claimed.add(e.id); const desired=e.appRole||e.role||u.role; const nu=Object.assign({},u,{employeeId:e.id,role:desired,access:desired!==u.role?{}:(u.access||{}),jobTitle:e.jobTitle||u.jobTitle,email:e.loginEmail||u.email}); next.push(nu); if(nu.employeeId!==u.employeeId||nu.role!==u.role||nu.email!==u.email)changes.push({u,nu,e}); }
     if(!changes.length){ alert(ar?'كل الحسابات المرتبطة سليمة بالفعل.':'All linked accounts are already consistent.'); return; }
     const details=changes.slice(0,12).map(x=>'• '+(x.u.fullName||x.u.username)+': '+x.u.role+' → '+x.nu.role).join('\n');
     if(!confirm((ar?'سيتم ربط الحسابات بالموظفين واعتماد App role الموجود في ملف الموظف كدور الدخول:\n\n':'Accounts will be linked to employees, and each employee App role will become the login role:\n\n')+details+(changes.length>12?'\n…':'')))return;

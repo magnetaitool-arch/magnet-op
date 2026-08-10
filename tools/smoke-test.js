@@ -91,6 +91,9 @@ console.log('\n[5] dangerous-pattern scan');
 /Linked employee/.test(html) && /Repair links & roles/.test(html) && /unlockUserConfirmed/.test(html)
   ? ok('employee-account linking, role repair, and login unlock tools are present')
   : bad('account recovery/link repair controls are missing');
+/Check & sync login role/.test(html) && /loginRoleMismatch/.test(html) && /access:nextRole!==account\.role\?\{\}/.test(html)
+  ? ok('employee profiles detect role drift and can sync the login role without carrying stale overrides')
+  : bad('employee/login role drift still requires external repair or can retain old-role overrides');
 /cloudLoadDelta/.test(html) && /updated_at=gt\./.test(html) && !/setInterval\(tick,\s*5000\)/.test(html)
   ? ok('live sync uses updated_at deltas instead of 5-second full-database downloads')
   : bad('high-egress full-database polling has returned');
