@@ -6015,7 +6015,9 @@ function App(){
     });
   } catch(e){} });
   useEffect(()=>{ store.set(SESSION_KEY, JSON.stringify(session)); }, [session]);
-  useEffect(()=>{ if(cfgComplete(cfg.current)){ loadAuthV2Flag(cfg.current); cloudLoadAll(cfg.current).then(d=>{ if(d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d)); }).catch(()=>{}); } }, []);
+  // Never download private business data for anonymous visitors or bots. Public
+  // campaign/brief routes fetch only their single required record themselves.
+  useEffect(()=>{ if(authReady&&authUser&&cfgComplete(cfg.current)){ loadAuthV2Flag(cfg.current); cloudLoadAll(cfg.current).then(d=>{ if(d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d)); }).catch(()=>{}); } }, [authReady,authUser&&authUser.id]);
   // AUTH_V2 (Step 3): multi-tab session sync + logout-all + wake/expiry refresh.
   // Every handler no-ops when the flag is OFF, so legacy behavior is unchanged.
   useEffect(()=>{
@@ -6040,7 +6042,7 @@ function App(){
   // its local cap by hard-deleting the oldest rows. Logs are ephemeral: no
   // tombstones here — a tombstone would ADD a row instead of freeing one.
   useEffect(()=>{
-    if(!cfgComplete(cfg.current) || !isAdminRole(role)) return;
+    if(!authReady || !authUser || !cfgComplete(cfg.current) || !isAdminRole(role)) return;
     const KEY='tia_log_prune_at';
     try { if(Date.now()-(+localStorage.getItem(KEY)||0) < 86400000) return; } catch(e){}
     const prune=async(coll,keep)=>{
@@ -6057,13 +6059,13 @@ function App(){
       } catch(e){}
     };
     (async()=>{ await prune('activityLogs',500); await prune('notifications',300); try{ localStorage.setItem(KEY,String(Date.now())); }catch(e){} })();
-  }, []);
+  }, [authReady,authUser&&authUser.id,role]);
   // LIVE SYNC — Realtime is instant; a low-egress delta poll is the safety net.
   // It never downloads the full database after startup and wakes every 30 seconds
   // (plus immediately on focus), so a broken Realtime connection stays reliable
   // without burning through Supabase's transfer quota.
   useEffect(()=>{
-    if(!cfgComplete(cfg.current)) return;
+    if(!authReady || !authUser || !cfgComplete(cfg.current)) return;
     let stop=false, busy=false;
     const tick=async()=>{ if(stop||busy||document.hidden) return;
       const since=window.__moCloudCursor;if(!since)return; // initial load still running
@@ -6086,14 +6088,14 @@ function App(){
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('focus', onFocus);
     return ()=>{ stop=true; clearInterval(h); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', onFocus); };
-  }, [cloudOn]); // eslint-disable-line
+  }, [cloudOn,authReady,authUser&&authUser.id]); // eslint-disable-line
   // REALTIME: subscribe to live INSERT/UPDATE/DELETE on the records table so
   // changes from any device appear INSTANTLY (no waiting for the poll). Loads the
   // Supabase client lazily from a CDN; if it can't load, the polling above stays
   // as the fallback so nothing breaks. Merges with change-detection (no wasted
   // re-renders). _accounts changes are not delivered (RLS blocks anon).
   useEffect(()=>{
-    if(!cfgComplete(cfg.current)) return;
+    if(!authReady || !authUser || !cfgComplete(cfg.current)) return;
     let client=null, channel=null, alive=true;
     const applyRow=(coll, rec)=>{ if(!coll||!rec||!rec.id) return; setDb(prev=>{ const arr=prev[coll]||[]; const i=arr.findIndex(x=>x.id===rec.id);
       if(i>=0){ const cur=arr[i]; if((cur.updatedAt||cur.createdAt||'')===(rec.updatedAt||rec.createdAt||'')) return prev; const na=arr.slice(); na[i]=rec; return {...prev,[coll]:na}; }
@@ -6117,21 +6119,22 @@ function App(){
       } catch(e){ /* CDN blocked/offline -> polling remains the fallback */ }
     })();
     return ()=>{ alive=false; window.__rtOn=false; try{ if(client&&channel) client.removeChannel(channel); }catch(e){} };
-  }, [cloudOn]); // eslint-disable-line
+  }, [cloudOn,authReady,authUser&&authUser.id]); // eslint-disable-line
   // Theme: apply light/dark by toggling a body class (CSS variables flip).
   useEffect(()=>{ const light=(appSettings.theme||'light')==='light';
     document.body.classList.toggle('theme-light', light);
     document.body.classList.toggle('theme-dark', !light);
   }, [appSettings.theme]);
   // Auto-backup: snapshot on every app start (and auto-download if scheduled)
-  useEffect(()=>{ try { runAutoBackup(db); } catch(e){} }, []); // eslint-disable-line
+  useEffect(()=>{ if(!authReady||!authUser)return; try { runAutoBackup(db); } catch(e){} }, [authReady,authUser&&authUser.id]); // eslint-disable-line
   // surface overdue items once on load via professional popup
   useEffect(()=>{ try {
+    if(!authReady||!authUser)return;
     const od=(db.tasks||[]).filter(t=>t.dueDate&&new Date(t.dueDate)<new Date(todayISO())&&!['Done','Delivered','Approved','Cancelled'].includes(t.status)).length;
     const oi=(db.invoices||[]).filter(i=>{const bal=(Number(i.amount)||0)*(1+(Number(i.tax)||0)/100)-(db.payments||[]).filter(p=>p.invoiceId===i.id).reduce((s,p)=>s+(+p.amount||0),0);return bal>0&&i.dueDate&&new Date(i.dueDate)<new Date(todayISO());}).length;
     if(od) setTimeout(()=>showProPopup('taskOverdue',od+' task(s) overdue'),1200);
     if(oi) setTimeout(()=>showProPopup('invoiceOverdue',oi+' invoice(s) overdue'),2600);
-  } catch(e){} }, []); // eslint-disable-line
+  } catch(e){} }, [authReady,authUser&&authUser.id]); // eslint-disable-line
 
   /* ---- logging helpers ---- */
   const addActivity = (entityType, entityId, action, details) => {

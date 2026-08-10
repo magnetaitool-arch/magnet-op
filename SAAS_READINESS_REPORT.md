@@ -12,6 +12,7 @@ The current release is suitable for a **controlled private production rollout fo
 - The live Supabase organization reported **16.29 GB / 5 GB egress (326%)** for the billing cycle, while the database itself was only **32.55 MB**. This confirms that the incident was bandwidth exhaustion, not lost data.
 - Root cause: when Realtime was unavailable, every open browser downloaded the entire shared records table every **5 seconds**.
 - Fix: the fallback now requests only records changed after the last server cursor, every **30 seconds** and on focus. Realtime remains the instant update path.
+- Anonymous login-page visitors and bots no longer start the initial full load, delta polling, Realtime subscription, log pruning, backups, or overdue-data popups. Cloud sync begins only after a valid Magnet OS login.
 - The accounts Edge Function was upgraded to v8 and deployed. Its live health check returns HTTP 200, `database: reachable`, and a privacy-safe first-owner setup state.
 - Login and forgot-password throttles are separate; an Owner/Admin/Manager can explicitly unlock a user; password resets clear locks; stale role tokens no longer retain account-administration rights.
 - A validated pre-release backup contains **1,444 business records across 43 collections** with checksum `sha256:280cc84bcea62b251cefb7f2f991d815ae69de3939437e951a6c7930b4880156`. `_accounts` is excluded because no service-role key is stored locally.
@@ -65,7 +66,7 @@ The code change prevents the same download pattern from continuing, but the orga
 
 | Check | Result |
 |---|---:|
-| Offline app/server smoke tests | 46 passed, 0 failed |
+| Offline app/server smoke tests | 47 passed, 0 failed |
 | Email endpoint behavior/security tests | 24 passed, 0 failed |
 | Static security verifier | 26 passed, 0 failed, 1 expected CSP warning |
 | Git whitespace validation | passed |

@@ -3,13 +3,13 @@
 > **2026-08-10 stabilization candidate:** see [SAAS_READINESS_REPORT.md](SAAS_READINESS_REPORT.md).
 > The current branch adds universal audit dates, configurable attendance rules,
 > automatic/manual employee reports, explicit payroll payment confirmation, and
-> tracked task/payslip/report email delivery. Latest checks: 46 smoke + 24 email
+> tracked task/payslip/report email delivery. Latest checks: 47 smoke + 24 email
 > security + 26 static security passed with zero failures. Public multi-tenant
 > SaaS remains blocked on Auth/JWT workspace isolation and strict business-data RLS.
 
 > **2026-08-10 incident root cause:** Supabase egress reached 16.29/5 GB because the
 > browser fallback downloaded the whole records table every 5 seconds. The fallback now
-> downloads deltas every 30 seconds. Accounts Edge Function v8 is live and health-checked;
+> downloads deltas every 30 seconds and never syncs business data before login. Accounts Edge Function v8 is live and health-checked;
 > a fresh browser now detects existing accounts without exposing the private roster.
 > Business data is present; the latest validated backup contains 1,444 records. The
 > Supabase quota/plan still has to be resolved to guarantee uninterrupted service.

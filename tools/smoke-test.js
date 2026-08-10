@@ -94,6 +94,10 @@ console.log('\n[5] dangerous-pattern scan');
 /needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /hasCloudAccounts/.test(html)
   ? ok('fresh browsers distinguish existing accounts from first-owner setup without exposing the roster')
   : bad('fresh browsers can show first-owner setup when accounts already exist');
+((html.match(/if\(!authReady \|\| !authUser \|\| !cfgComplete\(cfg\.current\)\) return;/g)||[]).length>=2)
+  && /if\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)/.test(html)
+  ? ok('anonymous visitors cannot start full, delta, or realtime business-data sync')
+  : bad('login page still downloads private business data or consumes database egress');
 
 console.log('\n[6] inline app scripts parse');
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
