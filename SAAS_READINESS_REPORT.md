@@ -65,7 +65,7 @@ The code change prevents the same download pattern from continuing, but the orga
 
 | Check | Result |
 |---|---:|
-| Offline app/server smoke tests | 45 passed, 0 failed |
+| Offline app/server smoke tests | 46 passed, 0 failed |
 | Email endpoint behavior/security tests | 24 passed, 0 failed |
 | Static security verifier | 26 passed, 0 failed, 1 expected CSP warning |
 | Git whitespace validation | passed |

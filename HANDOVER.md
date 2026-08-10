@@ -3,7 +3,7 @@
 > **2026-08-10 stabilization candidate:** see [SAAS_READINESS_REPORT.md](SAAS_READINESS_REPORT.md).
 > The current branch adds universal audit dates, configurable attendance rules,
 > automatic/manual employee reports, explicit payroll payment confirmation, and
-> tracked task/payslip/report email delivery. Latest checks: 45 smoke + 24 email
+> tracked task/payslip/report email delivery. Latest checks: 46 smoke + 24 email
 > security + 26 static security passed with zero failures. Public multi-tenant
 > SaaS remains blocked on Auth/JWT workspace isolation and strict business-data RLS.
 
