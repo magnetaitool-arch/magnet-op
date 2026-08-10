@@ -1,4 +1,4 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v8.
+// Magnet OS — accounts/auth Edge Function (service-role), v9.
 // v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
@@ -116,7 +116,18 @@ Deno.serve(async (req)=>{
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:8,database:'reachable',needsSetup:accounts.length===0});
+    if(action==='health') return json({ok:true,service:'accounts',version:9,database:'reachable',needsSetup:accounts.length===0});
+
+    // Return the CURRENT server-side identity for an existing session. The UI must
+    // not keep trusting the role/access snapshot cached at login forever: an Owner
+    // may promote, downgrade, disable, or repair a linked employee while that person
+    // still has the app open. `liveActor` deliberately resolves the token uid back
+    // through `_accounts`, so stale role claims inside an older token never win.
+    if(action==='me'){
+      const actor=await liveActor(body.token);
+      if(!actor) return json({error:'unauthorized'},401);
+      return json({ok:true,user:sanitize(actor)});
+    }
 
     if(action==='login'){
       const rec=findByLogin(body.identifier);

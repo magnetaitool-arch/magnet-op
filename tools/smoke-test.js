@@ -50,6 +50,9 @@ const acct = read('supabase/functions/accounts/index.ts');
 /action==='unlock'/.test(acct) && /liveActor/.test(acct)
   ? ok('owner can unlock accounts and admin rights use the live account role')
   : bad('account unlock/live-role authorization is missing');
+/action==='me'/.test(acct) && /refreshCurrentUser/.test(read('index.html')) && /setInterval\(refreshIdentity,60000\)/.test(read('index.html'))
+  ? ok('open sessions revalidate live role/status/access and cannot stay on a stale employee role')
+  : bad('open sessions can keep a stale role after an account repair or downgrade');
 /duplicate-email/.test(acct) && /duplicate-username/.test(acct) && /last-owner/.test(acct)
   ? ok('duplicate logins and last-owner lockout are blocked server-side')
   : bad('account identity/last-owner guards are missing');

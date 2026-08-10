@@ -4522,6 +4522,27 @@ async function syncUsersFromCloud(){
   store.set(AUTH_KEYS.users, JSON.stringify(merged));
   return merged;
 }
+// Revalidate the signed-in person's role/status/access against the server. This
+// closes a role-drift bug where an employee repaired from Content -> Sales could
+// keep the stale Content navigation until they manually logged out and back in.
+// Network/quota failures are non-destructive; only an explicit 401 is treated as a
+// revoked/disabled session.
+async function refreshCurrentUser(){
+  const cfg=getCfg(), token=getAcctToken();
+  if(!cfgComplete(cfg)||!token) return {ok:false,offline:true};
+  try{
+    const r=await acctApi(cfg,'me',{token});
+    if(r&&r.ok&&r.user&&r.user.id){
+      const users=loadUsers(), i=users.findIndex(u=>u.id===r.user.id);
+      if(i>=0) users[i]=Object.assign({},users[i],r.user); else users.push(r.user);
+      store.set(AUTH_KEYS.users,JSON.stringify(users));
+      const remembered=!!store.get(AUTH_KEYS.current);
+      setSessionUser(r.user,remembered);
+      return {ok:true,user:r.user};
+    }
+    return {ok:false,unauthorized:!!(r&&r.error==='unauthorized')};
+  }catch(e){ return {ok:false,offline:true}; }
+}
 function getAuthSettings(){ try { return Object.assign({ defaultPasswordWarning:true }, JSON.parse(store.get(AUTH_KEYS.settings)||'{}')); } catch(e){ return { defaultPasswordWarning:true }; } }
 function setAuthSettings(p){ store.set(AUTH_KEYS.settings, JSON.stringify(Object.assign(getAuthSettings(),p))); }
 
@@ -4645,7 +4666,7 @@ function validatePassword(pw, confirm){
   return null;
 }
 
-window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, cloudAccountStatus, syncUsersFromCloud };
+window.AUTH = { AUTH_KEYS, hashPassword, verifyPassword, loadUsers, saveUsers, saveUsersConfirmed, resetUserPasswordConfirmed, unlockUserConfirmed, deleteUserConfirmed, syncAccountFromEmployee, ensureDefaultOwner, bootstrapOwner, getSessionUser, setSessionUser, clearSessionUser, authLogin, getAuthSettings, setAuthSettings, activeOwners, validatePassword, cloudPushUsers, cloudDeleteUser, cloudPullUsers, cloudAccountStatus, syncUsersFromCloud, refreshCurrentUser };
 
 
 /* ===== crm-seed.js ===== */
@@ -5979,6 +6000,43 @@ function App(){
     return null;
   };
   const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
+
+  // A login session is a cached identity snapshot, not the source of truth. Refresh
+  // it on startup/focus and periodically so role repairs (for example Content ->
+  // Sales) and account disables take effect without asking staff to clear storage or
+  // log out manually. Temporary network/quota outages leave the current session
+  // untouched; only a confirmed server rejection signs it out.
+  useEffect(()=>{
+    if(!authReady||!authUser||!cfgComplete(cfg.current)) return;
+    let stopped=false, busy=false;
+    const refreshIdentity=async()=>{
+      if(stopped||busy||document.hidden) return;
+      busy=true;
+      try{
+        const r=await AUTH.refreshCurrentUser();
+        if(stopped) return;
+        if(r&&r.ok&&r.user){
+          setAuthUser(prev=>{
+            if(!prev) return r.user;
+            const a=JSON.stringify([prev.role,prev.status,prev.employeeId,prev.access||{}]);
+            const b=JSON.stringify([r.user.role,r.user.status,r.user.employeeId,r.user.access||{}]);
+            return a===b?prev:r.user;
+          });
+          setRoleOverride(null);
+        } else if(r&&r.unauthorized){
+          clearSessionUser(); setAcctToken(null); setSbSession(null);
+          setAuthUser(null); setShowLogin(true); setRoleOverride(null);
+        }
+      }catch(e){} finally{ busy=false; }
+    };
+    const onFocus=()=>refreshIdentity();
+    const onVisible=()=>{ if(!document.hidden) refreshIdentity(); };
+    const timer=setInterval(refreshIdentity,60000);
+    window.addEventListener('focus',onFocus);
+    document.addEventListener('visibilitychange',onVisible);
+    refreshIdentity();
+    return ()=>{ stopped=true; clearInterval(timer); window.removeEventListener('focus',onFocus); document.removeEventListener('visibilitychange',onVisible); };
+  },[authReady,authUser&&authUser.id]); // eslint-disable-line
 
   // Magnet Radio — endless YouTube "radio" mix per station, low volume, topbar player.
   const musicGetOn = ()=>{ try { return localStorage.getItem('magnet_music')!=='off'; } catch(e){ return true; } };
