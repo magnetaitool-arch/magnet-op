@@ -21,7 +21,7 @@ collections, gamification, and public client/candidate forms — all in one plac
 
 ## 2. Core concepts
 - **Everything is a record.** Each item (client, task, invoice, collection…) is a record you create/edit through a form.
-- **Brands:** data is tagged Magnet / Spark; filter with the brand switch at the top.
+- **Brand:** Magnet is the single workspace brand; legacy records remain compatible without a brand switch.
 - **Permissions are per role** (see §3) and can be fine-tuned per employee (Hidden/View/Edit) in **Users & Permissions**.
 - **Cloud sync:** all devices share the same live data (Supabase). Changes appear on other devices within seconds.
 - **Currency:** default **EGP**. Set per record where relevant.

@@ -2016,7 +2016,7 @@ const FIELD_AR = {
   'Scheduled content assigned':'اتسند لك محتوى مجدول','Ready for your review':'جاهز لمراجعتك','Deliverable approved':'تمت الموافقة على المخرَج',
   'Revision requested':'مطلوب تعديل','Revision assigned to you':'اتسند لك تعديل','Collections due':'تحصيلات مستحقة','Changes requested':'مطلوب تعديلات',
   'Workflow advanced':'اتحركت خطوة في الورك فلو','Invoice overdue':'فاتورة متأخرة','Good morning.':'صباح الخير.','Good evening.':'مساء الخير.',
-  'Live snapshot across Magnet and Spark Marketing.':'نظرة حية على شغل ماجنت وسبارك.','Awaiting':'في انتظار موافقة','manager':'المدير',
+  'Live snapshot across Magnet.':'نظرة حية على شغل ماجنت.','Awaiting':'في انتظار موافقة','manager':'المدير',
   // ---- dashboard KPI labels ----
   'Active clients':'عملاء نشطين','Active employees':'موظفين نشطين','Active items':'عناصر نشطة','Active projects':'مشاريع نشطة','Active tasks':'مهام نشطة',
   'Available (≤50%)':'متاح (نص طاقته أو أقل)','Avg rounds / deliverable':'متوسط جولات التعديل','Avg. performance':'متوسط الأداء','Awaiting your approval':'مستني موافقتك',
@@ -2501,7 +2501,10 @@ const PLAN_QUARTERS = ['Q1','Q2','Q3','Q4'];
 const PLAN_STATUS = ['To-do','In Progress','Done'];
 const cycleToMonthly = (amt,cycle)=>{ const a=Number(amt)||0; return cycle==='Yearly'?a/12:cycle==='Quarterly'?a/3:a; };
 const PRIORITIES = ['Low','Med','High','Urgent'];
-const BRANDS = ['Magnet','Spark Marketing'];
+// Magnet OS is now a single-brand workspace. Keep the field internally for
+// backward compatibility with existing cloud rows, but never expose legacy
+// multi-brand values in the UI or create new records with those values.
+const BRANDS = ['Magnet'];
 // Gamification: badges unlocked at cumulative work points.
 const BADGES = [
   {id:'starter', label:'Starter',  pts:50,   icon:'bolt'},
@@ -3411,7 +3414,7 @@ Agency: ____________________     Client: ____________________`;
 /* ============================ PRINTABLE DOCUMENT BUILDER ============================ */
 /* Clean white documents, isolated from the dark app. printDocument() opens a
    dedicated print window so window.print() only outputs the document, never the app. */
-const COMPANY = { name:'Magnet', tagline:'Magnet · Spark Marketing', email:'Info@magnetofficial.com', site:'magnetofficial.com' };
+const COMPANY = { name:'Magnet', tagline:'Magnet', email:'Info@magnetofficial.com', site:'magnetofficial.com' };
 /* HTML-escape any record/user-supplied value before it goes into a document
    HTML string. These docs are rendered via document.write()/innerHTML, so any
    raw field (e.g. a lead/brief note an anonymous visitor submitted) would
@@ -3510,7 +3513,7 @@ function generateProposalHTML(p, db){ _docCur=p.currency||null;
   const sec=(t,v)=>v?`<h3 class="sec">${t}</h3><div class="sec"><div>${esc(v)}</div></div>`:'';
   return _docShell('Proposal '+(p.proposalNumber||''), `<div class="page">
     ${_docHead('PROPOSAL', p.proposalNumber, fmtDate(p.issueDate||p.createdAt||todayISO()))}
-    <h1 class="doc">${esc(p.title||PL('Proposal'))}</h1><div class="sub">${PL('Prepared for')} ${esc(c.brandName||c.name||PL('Client'))} · ${PL('by')} ${esc(p.preparedBy||COMPANY.name)} · ${esc(p.brand||'')}</div>
+    <h1 class="doc">${esc(p.title||PL('Proposal'))}</h1><div class="sub">${PL('Prepared for')} ${esc(c.brandName||c.name||PL('Client'))} · ${PL('by')} ${esc(p.preparedBy||COMPANY.name)} · Magnet</div>
     ${sec(PL('Executive Summary'),p.executiveSummary)}${sec(PL('Client Situation'),p.clientSituation)}${sec(PL('Goals'),p.goals)}
     ${sec(PL('Recommended Strategy'),p.strategy)}${sec(PL('Scope of Work'),p.scopeOfWork||p.scope)}${sec(PL('Deliverables'),p.deliverables)}
     ${sec(PL('Timeline'),p.timeline)}${sec(PL('Packages'),p.packages)}${sec(PL('Pricing'),p.pricing||(p.price?_money(p.price):''))}
@@ -4664,11 +4667,11 @@ function seed(){
     base({id:'dep-fin',name:'Finance',status:'Active'}),
   ];
   const employees = [
-    base({id:'emp-sara',name:'Sara Imani',fullName:'Sara Imani',jobTitle:'Senior Account Manager',role:'Sales',appRole:'Sales',departmentId:'dep-sales',email:'sara@tia.com',loginEmail:'sara@tia.com',phone:'+97150001',whatsapp:'+97150001',salary:14000,currency:'USD',employmentType:'Full-time',workMode:'Hybrid',startDate:'2025-02-01',contractEndDate:'2026-02-01',status:'Active',capacityPerWeek:40,performanceScore:88,qualityScore:90,communicationScore:92,attendanceScore:95,skills:'Sales, CRM, Negotiation',city:'Dubai',country:'UAE',accountStatus:'Active'}),
-    base({id:'emp-omar',name:'Omar Belkacem',fullName:'Omar Belkacem',jobTitle:'Head of Operations',role:'Project Manager',appRole:'Project Manager',departmentId:'dep-pm',email:'omar@tia.com',loginEmail:'omar@tia.com',phone:'+97150002',salary:16000,currency:'USD',employmentType:'Full-time',workMode:'Office',startDate:'2024-09-01',status:'Active',capacityPerWeek:40,performanceScore:92,qualityScore:91,communicationScore:90,attendanceScore:93,skills:'PM, Delivery, Team Lead',city:'Dubai',country:'UAE',accountStatus:'Active'}),
-    base({id:'emp-layla',name:'Layla Haddad',fullName:'Layla Haddad',jobTitle:'Senior Designer',role:'Designer',appRole:'Designer',departmentId:'dep-design',managerId:'emp-omar',email:'layla@tia.com',loginEmail:'layla@tia.com',phone:'+97150003',salary:11000,currency:'USD',employmentType:'Full-time',workMode:'Remote',startDate:'2025-01-10',probationEndDate:'2025-04-10',status:'Active',capacityPerWeek:40,performanceScore:90,qualityScore:94,communicationScore:88,attendanceScore:90,skills:'Branding, Social, Print',city:'Beirut',country:'Lebanon',accountStatus:'Active'}),
-    base({id:'emp-dan',name:'Daniyar Toktarov',fullName:'Daniyar Toktarov',jobTitle:'Video Editor',role:'Video Editor',appRole:'Video Editor',departmentId:'dep-video',managerId:'emp-omar',email:'dan@tia.com',loginEmail:'dan@tia.com',phone:'+97150004',salary:10000,currency:'USD',employmentType:'Full-time',workMode:'Hybrid',startDate:'2025-03-15',status:'Probation',probationEndDate:'2025-06-15',capacityPerWeek:40,performanceScore:85,qualityScore:86,communicationScore:82,attendanceScore:88,skills:'Reels, Color, Motion',city:'Almaty',country:'Kazakhstan',accountStatus:'Active'}),
-    base({id:'emp-lena',name:'Lena Haddad',fullName:'Lena Haddad',jobTitle:'Finance Lead',role:'Accountant',appRole:'Accountant',departmentId:'dep-fin',email:'lena@tia.com',loginEmail:'lena@tia.com',phone:'+97150005',salary:15000,currency:'USD',employmentType:'Full-time',workMode:'Office',startDate:'2024-08-01',status:'Active',capacityPerWeek:40,performanceScore:91,qualityScore:93,communicationScore:90,attendanceScore:96,skills:'Accounting, Payroll',city:'Dubai',country:'UAE',accountStatus:'Active'}),
+    base({id:'emp-sara',name:'Sara Imani',fullName:'Sara Imani',jobTitle:'Senior Account Manager',role:'Sales',appRole:'Sales',departmentId:'dep-sales',email:'sara@magnetofficial.com',loginEmail:'sara@magnetofficial.com',phone:'+97150001',whatsapp:'+97150001',salary:14000,currency:'USD',employmentType:'Full-time',workMode:'Hybrid',startDate:'2025-02-01',contractEndDate:'2026-02-01',status:'Active',capacityPerWeek:40,performanceScore:88,qualityScore:90,communicationScore:92,attendanceScore:95,skills:'Sales, CRM, Negotiation',city:'Dubai',country:'UAE',accountStatus:'Active'}),
+    base({id:'emp-omar',name:'Omar Belkacem',fullName:'Omar Belkacem',jobTitle:'Head of Operations',role:'Project Manager',appRole:'Project Manager',departmentId:'dep-pm',email:'omar@magnetofficial.com',loginEmail:'omar@magnetofficial.com',phone:'+97150002',salary:16000,currency:'USD',employmentType:'Full-time',workMode:'Office',startDate:'2024-09-01',status:'Active',capacityPerWeek:40,performanceScore:92,qualityScore:91,communicationScore:90,attendanceScore:93,skills:'PM, Delivery, Team Lead',city:'Dubai',country:'UAE',accountStatus:'Active'}),
+    base({id:'emp-layla',name:'Layla Haddad',fullName:'Layla Haddad',jobTitle:'Senior Designer',role:'Designer',appRole:'Designer',departmentId:'dep-design',managerId:'emp-omar',email:'layla@magnetofficial.com',loginEmail:'layla@magnetofficial.com',phone:'+97150003',salary:11000,currency:'USD',employmentType:'Full-time',workMode:'Remote',startDate:'2025-01-10',probationEndDate:'2025-04-10',status:'Active',capacityPerWeek:40,performanceScore:90,qualityScore:94,communicationScore:88,attendanceScore:90,skills:'Branding, Social, Print',city:'Beirut',country:'Lebanon',accountStatus:'Active'}),
+    base({id:'emp-dan',name:'Daniyar Toktarov',fullName:'Daniyar Toktarov',jobTitle:'Video Editor',role:'Video Editor',appRole:'Video Editor',departmentId:'dep-video',managerId:'emp-omar',email:'dan@magnetofficial.com',loginEmail:'dan@magnetofficial.com',phone:'+97150004',salary:10000,currency:'USD',employmentType:'Full-time',workMode:'Hybrid',startDate:'2025-03-15',status:'Probation',probationEndDate:'2025-06-15',capacityPerWeek:40,performanceScore:85,qualityScore:86,communicationScore:82,attendanceScore:88,skills:'Reels, Color, Motion',city:'Almaty',country:'Kazakhstan',accountStatus:'Active'}),
+    base({id:'emp-lena',name:'Lena Haddad',fullName:'Lena Haddad',jobTitle:'Finance Lead',role:'Accountant',appRole:'Accountant',departmentId:'dep-fin',email:'lena@magnetofficial.com',loginEmail:'lena@magnetofficial.com',phone:'+97150005',salary:15000,currency:'USD',employmentType:'Full-time',workMode:'Office',startDate:'2024-08-01',status:'Active',capacityPerWeek:40,performanceScore:91,qualityScore:93,communicationScore:90,attendanceScore:96,skills:'Accounting, Payroll',city:'Dubai',country:'UAE',accountStatus:'Active'}),
   ];
   const attendance = [
     base({id:'att-1',employeeId:'emp-layla',date:todayISO(),checkIn:'09:05',checkOut:'18:10',workMode:'Remote',status:'Late'}),
@@ -4730,7 +4733,7 @@ function seed(){
   ];
   const leads = [
     base({id:'ld-vertex',name:'Vertex Clinic – Branding',company:'Vertex Clinic',brand:'Magnet',source:'Referral',serviceInterest:'Branding',value:15000,status:'Proposal Sent',ownerId:'emp-sara',email:'info@vertex.com',phone:'+97150333'}),
-    base({id:'ld-blue',name:'BluePeak – Ads',company:'BluePeak',brand:'Spark Marketing',source:'Website',serviceInterest:'Media Buying / Ads',value:5000,status:'Qualified',ownerId:'emp-sara',email:'hi@bluepeak.com',phone:'+97150444'}),
+    base({id:'ld-blue',name:'BluePeak – Ads',company:'BluePeak',brand:'Magnet',source:'Website',serviceInterest:'Media Buying / Ads',value:5000,status:'Qualified',ownerId:'emp-sara',email:'hi@bluepeak.com',phone:'+97150444'}),
     base({id:'ld-orbit',name:'Orbit Cafe – SMM',company:'Orbit Cafe',brand:'Magnet',source:'Instagram',serviceInterest:'Social Media Management',value:8000,status:'New Lead',ownerId:'emp-sara',email:'orbit@mail.com',phone:'+97150555'}),
   ];
   const salesActivities = [
@@ -5456,7 +5459,7 @@ function PublicForm({ slug, cfg }){
     setBusy(true);
     const id='lea-'+Math.random().toString(36).slice(2,10);
     const now=new Date().toISOString();
-    const lead={ id, name:vals.name.trim(), source:'Campaign: '+(camp.name||slug), campaignId:camp.id, campaignName:camp.name||'', status:'New Lead', brand:camp.brand||'Magnet', createdAt:now, updatedAt:now };
+    const lead={ id, name:vals.name.trim(), source:'Campaign: '+(camp.name||slug), campaignId:camp.id, campaignName:camp.name||'', status:'New Lead', brand:'Magnet', createdAt:now, updatedAt:now };
     CAMPAIGN_FIELD_CATALOG.forEach(f=>{ const v=vals[f.key]; if(v!=null&&String(v).trim()!=='') lead[f.lead]=v; });
     const notif={ id:'nt-'+Math.random().toString(36).slice(2,10), userId:null, role:'Sales', title:'New campaign lead', message:(lead.name||'Someone')+(camp.name?(' · '+camp.name):''), entityType:'leads', entityId:id, read:false, createdAt:now };
     try {
@@ -5530,8 +5533,8 @@ function CampaignsView({ ctx }){
   const newDraft = ()=>({ name:'', brand:'Magnet', status:'Active', headline:'', subtext:'', buttonText:'Submit', accent:'#C4FF3D', fields:['email','phone','company','serviceInterest','message'] });
   const save = (draft)=>{
     const slug = draft.slug || (slugify(draft.name)+'-'+Math.random().toString(36).slice(2,6));
-    if(draft.id){ ctx.updateRecord('campaigns', draft.id, {...draft, slug}); }
-    else { ctx.createRecord('campaigns', {...draft, slug, name:draft.name||'Untitled campaign'}); }
+    if(draft.id){ ctx.updateRecord('campaigns', draft.id, {...draft, brand:'Magnet', slug}); }
+    else { ctx.createRecord('campaigns', {...draft, brand:'Magnet', slug, name:draft.name||'Untitled campaign'}); }
     setEdit(null);
   };
   return html`<div class="view">
@@ -5543,7 +5546,7 @@ function CampaignsView({ ctx }){
       : html`<div class="grid g-2" style=${{gap:14}}>${camps.map(c=>html`<div class="panel camp-card" key=${c.id}>
           <div class="flex between center">
             <div><b style=${{fontSize:15}}>${c.name}</b>
-              <div class="muted" style=${{fontSize:11.5,marginTop:3}}>${c.brand||'Magnet'} · ${(c.fields||[]).length+1} fields</div></div>
+              <div class="muted" style=${{fontSize:11.5,marginTop:3}}>Magnet · ${(c.fields||[]).length+1} fields</div></div>
             <span class="tag ${c.status==='Active'?'ok':''}">${c.status||'Active'}</span>
           </div>
           <div class="camp-stat"><span class="mono lime" style=${{fontSize:22}}>${leadCount(c.id)}</span><span class="muted" style=${{fontSize:11}}> leads captured</span></div>
@@ -5571,7 +5574,6 @@ function CampaignEditor({ draft, onClose, onSave }){
       <button class="mini" onClick=${onClose}>×</button></div>
     <div class="cdrawer-b">
       <div class="cd-sec"><label>Campaign name</label><input class="inp" value=${d.name||''} onInput=${e=>set({name:e.target.value})} placeholder="e.g. Ramadan Offer 2026"/></div>
-      <div class="cd-sec"><label>Brand</label><input class="inp" value=${d.brand||''} onInput=${e=>set({brand:e.target.value})} placeholder="Magnet"/></div>
       <div class="cd-sec"><label>Form headline</label><input class="inp" value=${d.headline||''} onInput=${e=>set({headline:e.target.value})} placeholder="Let's grow your brand"/></div>
       <div class="cd-sec"><label>Sub-text</label><textarea class="inp" rows=${2} value=${d.subtext||''} onInput=${e=>set({subtext:e.target.value})} placeholder="Tell us a bit about your project."></textarea></div>
       <div class="cd-sec"><label>Fields to collect</label>
@@ -5831,7 +5833,9 @@ function App(){
   const [cloudOn, setCloudOn] = useState(cfgComplete(cfg.current));
   const [session, setSession] = useState(()=>{ try { return JSON.parse(store.get(SESSION_KEY)||'null'); } catch(e){ return null; } });
   const [route, setRoute] = useState('dashboard');
-  const [brand, setBrand] = useState('All');
+  // Single-brand workspace. Retain a stable value for email labels and legacy
+  // records without keeping a brand switch in the product UI.
+  const brand = 'Magnet';
   const [modal, setModal] = useState(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [musicOn, setMusicOn] = useState(()=>{ try{ return localStorage.getItem('magnet_music')!=='off'; }catch(e){ return true; } });
@@ -6189,7 +6193,9 @@ function App(){
 
   /* ---- generic CRUD ---- */
   const createRecord = (coll, data) => {
-    const rec = Object.assign({ id:uid(coll.slice(0,3)), createdAt:nowISO(), updatedAt:nowISO(), createdBy:user.id }, data);
+    const cleanData=Object.assign({},data||{});
+    if(['leads','clients','projects','campaigns','proposals','contentCalendar','packages'].includes(coll)) cleanData.brand='Magnet';
+    const rec = Object.assign({ id:uid(coll.slice(0,3)), createdAt:nowISO(), updatedAt:nowISO(), createdBy:user.id }, cleanData);
     setDb(d=>({...d,[coll]:[...(d[coll]||[]), rec]}));
     cloudUpsert(cfg.current, coll, rec);
     addActivity(coll, rec.id, 'created', rec.name||rec.title||rec.invoiceNumber||'');
@@ -6246,6 +6252,7 @@ function App(){
   };
   const updateRecord = (coll, id, updates) => {
     const patch=Object.assign({},updates||{});
+    if(['leads','clients','projects','campaigns','proposals','contentCalendar','packages'].includes(coll)) patch.brand='Magnet';
     let out=null, _prev=null;
     setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ _prev=x;
       // Always stamp business milestones, no matter whether the change came
@@ -6705,7 +6712,7 @@ function App(){
     invTotal, invPaid, openModal:(coll,initial,schema,title)=>setModal({coll,initial,schema:schema||FORM_SCHEMAS[coll],title:title||((initial&&initial.id?(getLang()==='ar'?'تعديل ':'Edit '):(getLang()==='ar'?'إضافة ':'New '))+(t(coll)!==coll?t(coll):coll))}),
     go };
 
-  const byBrand = (arr)=> brand==='All'?arr:(arr||[]).filter(x=>!x.brand||x.brand===brand);
+  const byBrand = (arr)=>arr||[];
   const visible = (coll)=> filterRecordsByRole(coll, byBrand(db[coll]||[]), role, user, db);
 
   // Public campaign form (?form=SLUG): a no-login, branded lead-capture page.
@@ -6781,9 +6788,6 @@ function App(){
       <header class="topbar">
         <button class="icon-btn hamburger" onClick=${()=>setNavOpen(true)} title="Menu">${React.createElement(Icon.menu||Icon.command)}</button>
         <div class="crumbs"><img class="topbar-logo" src="/magnet-logo.png" alt="Magnet"/><b>Magnet OS</b><span class="sep">/</span><span>${t(route)!==route?t(route):route}</span></div>
-        <div class="seg" style=${{marginLeft:16}}>
-          ${['All',...BRANDS].map(b=>html`<button key=${b} class=${brand===b?'on':''} onClick=${()=>setBrand(b)}>${b==='Spark Marketing'?'Spark':b}</button>`)}
-        </div>
         <div class="top-actions">
           <button class="icon-btn" title=${(lang==='ar'?'بحث':'Search')+' (⌘K)'} onClick=${()=>setCmdkOpen(true)}>${React.createElement(Icon.search||Icon.command)}</button>
           ${quickCreate.length?html`<div class="qc-wrap">
@@ -6890,7 +6894,7 @@ function App(){
    FORM SCHEMAS + ROUTE RENDERER (all sections)
    ============================================================================ */
 const FORM_SCHEMAS = {
-  leads:[{k:'name',label:'Lead name',req:true},{k:'company',label:'Company'},{k:'brand',label:'Brand',type:'select',opts:BRANDS},{k:'source',label:'Source',type:'select',opts:['Referral','Instagram','Website','Ads','Cold','Event']},{k:'serviceInterest',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES},{k:'value',label:'Est. value',type:'number'},{k:'status',label:'Stage',type:'select',opts:ST.leadStage},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'notes',label:'Notes',type:'textarea'}],
+  leads:[{k:'name',label:'Lead name',req:true},{k:'company',label:'Company'},{k:'source',label:'Source',type:'select',opts:['Referral','Instagram','Website','Ads','Cold','Event']},{k:'serviceInterest',label:'Services (choose all that apply)',type:'multi',opts:PROJECT_TYPES},{k:'value',label:'Est. value',type:'number'},{k:'status',label:'Stage',type:'select',opts:ST.leadStage},{k:'ownerId',label:'Owner',type:'ref',coll:'employees'},{k:'email',label:'Email',type:'email'},{k:'phone',label:'Phone'},{k:'notes',label:'Notes',type:'textarea'}],
   candidates:[
     {k:'fullName',label:'Full name',req:true,group:'Personal'},{k:'age',label:'Age',type:'number',group:'Personal'},
     {k:'mobile',label:'Mobile',req:true,group:'Personal'},{k:'otherPhones',label:'Other phone(s)',group:'Personal'},
@@ -6908,7 +6912,7 @@ const FORM_SCHEMAS = {
   clients:[
     // Essentials — what you actually need to add a client
     {k:'brandName',label:'Brand name',req:true,group:'Basic'},{k:'industry',label:'Industry',group:'Basic'},
-    {k:'brand',label:'Brand',type:'select',opts:BRANDS,group:'Basic'},{k:'clientType',label:'Client type',type:'select',opts:CLIENT_TYPES,group:'Basic'},
+    {k:'clientType',label:'Client type',type:'select',opts:CLIENT_TYPES,group:'Basic'},
     {k:'status',label:'Status',type:'select',opts:ST.client,group:'Basic'},
     {k:'mainContactName',label:'Main contact',req:true,group:'Contact'},
     {k:'mainContactPhone',label:'Phone',group:'Contact'},{k:'mainContactWhatsapp',label:'WhatsApp',group:'Contact'},{k:'mainContactEmail',label:'Email',type:'email',group:'Contact'},
@@ -6945,7 +6949,7 @@ const FORM_SCHEMAS = {
   collections:[{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Collection'},{k:'contractId',label:'Contract',type:'ref',coll:'contracts',group:'Collection'},{k:'title',label:'Description',group:'Collection'},{k:'amount',label:'Amount',type:'number',req:true,group:'Collection'},{k:'dueDate',label:'Collection date',type:'date',req:true,group:'Collection'},{k:'status',label:'Status',type:'select',opts:['Pending','Collected','Cancelled'],group:'Collection'},{k:'method',label:'Method',type:'select',opts:PAYMENT_METHODS,group:'Payment'},{k:'collectedDate',label:'Collected on',type:'date',group:'Payment'},{k:'notes',label:'Notes',type:'textarea',group:'Notes'}],
   projects:[
     {k:'projectName',label:'Project name',req:true,group:'Basic'},{k:'clientId',label:'Client',type:'ref',coll:'clients',req:true,group:'Basic'},
-    {k:'brand',label:'Brand',type:'select',opts:BRANDS,group:'Basic'},{k:'projectType',label:'Project type',type:'select',opts:PROJECT_TYPES,req:true,group:'Basic'},
+    {k:'projectType',label:'Project type',type:'select',opts:PROJECT_TYPES,req:true,group:'Basic'},
     {k:'status',label:'Status',type:'select',opts:ST.project,group:'Basic'},{k:'priority',label:'Priority',type:'select',opts:CLIENT_PRIORITIES,group:'Basic'},
     {k:'objective',label:'Objective',type:'textarea',group:'Basic'},{k:'scope',label:'Scope',type:'textarea',group:'Basic'},
     {k:'brief',label:'Client brief (what the agency received)',type:'textarea',group:'Brief'},{k:'briefLink',label:'Brief link',group:'Brief'},{k:'referencesLinks',label:'Reference links',group:'Brief'},
@@ -7778,14 +7782,14 @@ function DashboardView({ ctx, byBrand }){
   const isPM = aliasRole(role)==='Project Manager';
 
   return html`<div class="view">
-    <${Head} eyebrow=${ctx.lang==='ar'?'غرفة القيادة':'Group Command'} title=${t(new Date().getHours()<12?'Good morning.':'Good evening.')} desc=${t('Live snapshot across Magnet and Spark Marketing.')}/>
+    <${Head} eyebrow=${ctx.lang==='ar'?'غرفة القيادة':'Magnet Command'} title=${t(new Date().getHours()<12?'Good morning.':'Good evening.')} desc=${t('Live snapshot across Magnet.')}/>
     <div class="dash-hero">
       <img class="dh-img" src="/magnet-hero.jpg" alt="" loading="lazy"/>
       <div class="dh-ov"></div>
       <div class="dh-c">
         <div class="dh-eye">Attract · Organize · Deliver</div>
         <h2 class="dh-t">${ctx.lang==='ar'?`أهلاً ${(user.name||'').split(' ')[0]||''} — كل شغلك اتجمّع هنا`:`Welcome ${(user.name||'').split(' ')[0]||'back'} — everything pulled into one place`}</h2>
-        <p class="dh-s">${ctx.lang==='ar'?'نظرة حية على العملاء، المهام، والفلوس عبر ماجنت وسبارك.':'A live snapshot of clients, tasks and cash across Magnet and Spark.'}</p>
+        <p class="dh-s">${ctx.lang==='ar'?'نظرة حية على العملاء، المهام، والفلوس في ماجنت.':'A live snapshot of Magnet clients, tasks and cash.'}</p>
         <div class="dh-chips">
           <span class="dh-chip">${ctx.lang==='ar'?'عملاء نشطين':'Active clients'}<b>${byBrand(db.clients||[]).filter(c=>c.status==='Active').length}</b></span>
           <span class="dh-chip">${ctx.lang==='ar'?'مشاريع':'Projects'}<b>${byBrand(db.projects||[]).filter(p=>!['Completed','Archived'].includes(p.status)).length}</b></span>
@@ -9832,7 +9836,7 @@ function ContentCalendarView({ ctx, visible, clientFilter }){
   const [anchor,setAnchor]=useState(todayISO());           // ISO date the views pivot on
   const [view,setView]=useState('month');                  // month|week|day|list|client
   const [sel,setSel]=useState(null);                       // detail modal item
-  const [f,setF]=useState({client:clientFilter||'',brand:'',platform:'',status:'',approval:'',priority:''});
+  const [f,setF]=useState({client:clientFilter||'',platform:'',status:'',approval:'',priority:''});
   const setFi=(k,v)=>setF(Object.assign({},f,{[k]:v}));
   const [y,mo]=anchor.split('-').map(Number);
 
@@ -9841,7 +9845,6 @@ function ContentCalendarView({ ctx, visible, clientFilter }){
   // role scope: clients see only their own
   if(role==='Client'||aliasRole(role)==='Client') items=items.filter(i=>i.clientId===ctx.user.clientId);
   if(f.client) items=items.filter(i=>i.clientId===f.client);
-  if(f.brand) items=items.filter(i=>(i.brand||'')===f.brand || (f.brand==='TIA'&&!i.brand));
   if(f.platform) items=items.filter(i=>i.platform===f.platform);
   if(f.status) items=items.filter(i=>i.status===f.status);
   if(f.approval) items=items.filter(i=>i.approvalStatus===f.approval);
@@ -9874,10 +9877,9 @@ function ContentCalendarView({ ctx, visible, clientFilter }){
     </div>
     <div class="flex gap8" style=${{marginBottom:16,flexWrap:'wrap'}}>
       <select class="sel" value=${f.client} onChange=${e=>setFi('client',e.target.value)}><option value="">${TT('All clients')}</option>${(db.clients||[]).map(c=>html`<option key=${c.id} value=${c.id}>${c.brandName||c.name}</option>`)}</select>
-      <select class="sel" value=${f.brand} onChange=${e=>setFi('brand',e.target.value)}><option value="">${ar?'كل العلامات':'All brands'}</option><option value="Magnet">Magnet</option><option value="Spark Marketing">Spark</option><option value="TIA">TIA</option></select>
       <select class="sel" value=${f.platform} onChange=${e=>setFi('platform',e.target.value)}><option value="">${TT('All platforms')}</option>${CONTENT_PLATFORMS.map(p=>html`<option key=${p} value=${p}>${p}</option>`)}</select>
       <select class="sel" value=${f.status} onChange=${e=>setFi('status',e.target.value)}><option value="">${TT('All statuses')}</option>${CONTENT_STATUSES.map(s=>html`<option key=${s} value=${s}>${TT(s)}</option>`)}</select>
-      ${(f.client||f.brand||f.platform||f.status||f.approval||f.priority)&&html`<button class="mini" onClick=${()=>setF({client:'',brand:'',platform:'',status:'',approval:'',priority:''})}>${TT('Clear filters')}</button>`}
+      ${(f.client||f.platform||f.status||f.approval||f.priority)&&html`<button class="mini" onClick=${()=>setF({client:'',platform:'',status:'',approval:'',priority:''})}>${TT('Clear filters')}</button>`}
     </div>
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
       <${KPI} label=${TT('Scheduled this month')} value=${monthItems.length} icon="calendar"/>

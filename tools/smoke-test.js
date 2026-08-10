@@ -94,6 +94,10 @@ console.log('\n[5] dangerous-pattern scan');
 /needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /hasCloudAccounts/.test(html)
   ? ok('fresh browsers distinguish existing accounts from first-owner setup without exposing the roster')
   : bad('fresh browsers can show first-owner setup when accounts already exist');
+!/Spark Marketing/.test(html) && !/<option[^>]*value=["']TIA["']/.test(html) && !/@tia\.com/.test(html)
+  && /const BRANDS = \['Magnet'\]/.test(html) && !/setBrand\(/.test(html)
+  ? ok('workspace branding is Magnet-only with no legacy brand selector')
+  : bad('legacy TIA/Spark branding or multi-brand selector has returned');
 ((html.match(/if\(!authReady \|\| !authUser \|\| !cfgComplete\(cfg\.current\)\) return;/g)||[]).length>=2)
   && /if\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)/.test(html)
   ? ok('anonymous visitors cannot start full, delta, or realtime business-data sync')
