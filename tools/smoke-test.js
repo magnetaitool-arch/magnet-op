@@ -53,12 +53,16 @@ const acct = read('supabase/functions/accounts/index.ts');
 /action==='me'/.test(acct) && /refreshCurrentUser/.test(read('index.html')) && /setInterval\(refreshIdentity,60000\)/.test(read('index.html'))
   ? ok('open sessions revalidate live role/status/access and cannot stay on a stale employee role')
   : bad('open sessions can keep a stale role after an account repair or downgrade');
-/version:10/.test(acct) && /historical duplicate/.test(acct)
-  ? ok('accounts v10 permits role repair while still blocking new identity collisions')
-  : bad('accounts service lacks the v10 duplicate-repair guard');
+/version:11/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
+  ? ok('accounts v11 fails closed on an ambiguous login instead of selecting an arbitrary role')
+  : bad('accounts service can still select an arbitrary duplicate login identity');
 /duplicate-email/.test(acct) && /duplicate-username/.test(acct) && /last-owner/.test(acct)
   ? ok('duplicate logins and last-owner lockout are blocked server-side')
   : bad('account identity/last-owner guards are missing');
+/records_accounts_email_unique/.test(read('supabase/migrations/006_canonicalize_duplicate_logins.sql'))
+  && /records_accounts_username_unique/.test(read('supabase/migrations/006_canonicalize_duplicate_logins.sql'))
+  ? ok('database unique indexes make duplicate email/username identities impossible')
+  : bad('database does not enforce unique login identities');
 
 console.log('\n[4] frontend password-change hardening');
 const html = read('index.html');

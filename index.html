@@ -10237,6 +10237,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
     else if(reason==='unavailable') setErr(ar?'خدمة تسجيل الدخول غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.':'The sign-in service is temporarily unavailable. Please try again shortly.');
     else if(reason==='quota-exceeded') setErr(ar?'خدمة البيانات متوقفة بسبب تجاوز حد Supabase. البيانات لم تُحذف؛ لازم المالك يراجع Usage/Billing ثم يعيد المحاولة.':'The data service is restricted by the Supabase quota. Data is not deleted; the Owner must review Usage/Billing.');
     else if(reason==='rate-limited'){ const mins=Math.max(1,Math.ceil((Number(result.retryAfterSeconds)||60)/60)); setErr(ar?('محاولات كثيرة. الحساب محمي مؤقتًا — جرّب بعد حوالي '+mins+' دقيقة أو اطلب من المالك فتحه.') : ('Too many attempts. Try again in about '+mins+' minute(s), or ask the Owner to unlock the account.')); }
+    else if(reason==='identity-conflict') setErr(ar?'يوجد أكثر من حساب بنفس البريد أو اسم المستخدم. تم منع الدخول لحمايتك من فتح رول خاطئ — اطلب من المالك تشغيل فحص الحسابات من المستخدمين والصلاحيات.':'More than one account owns this email/username. Sign-in was blocked to prevent the wrong role; ask the Owner to run the account check in Users & Permissions.');
     else if(reason) setErr(ar?'بيانات الدخول غير صحيحة.':'Invalid username/email or password.'); };
   const forgot=async()=>{
     const who=(id||window.prompt(ar?'اكتب بريدك الإلكتروني أو اسم المستخدم':'Enter your email or username')||'').trim();

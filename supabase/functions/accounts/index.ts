@@ -1,4 +1,4 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v10.
+// Magnet OS — accounts/auth Edge Function (service-role), v11.
 // v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
@@ -110,13 +110,19 @@ Deno.serve(async (req)=>{
     }
     const rows=await dbAll();
     const accounts=rows.map((r:any)=>({ rowId:r.id, u:r.data||{} }));
-    const findByLogin=(id:string)=>{ id=(id||'').trim().toLowerCase(); return accounts.find((a:any)=> (a.u.email||'').toLowerCase()===id || (a.u.username||'').toLowerCase()===id); };
+    const findAllByLogin=(id:string)=>{ id=(id||'').trim().toLowerCase(); return accounts.filter((a:any)=> (a.u.email||'').trim().toLowerCase()===id || (a.u.username||'').trim().toLowerCase()===id); };
+    // Login identity must be one-to-one. Historically duplicated rows used to make
+    // `Array.find()` select an arbitrary account/role. Fail closed instead: the
+    // database unique indexes and Owner diagnostics can then repair the conflict
+    // without ever signing somebody into the wrong workspace role.
+    const uniqueByLogin=(id:string)=>{ const matches=findAllByLogin(id); return matches.length===1?{rec:matches[0],conflict:false}:{rec:null,conflict:matches.length>1}; };
+    const findByLogin=(id:string)=>uniqueByLogin(id).rec;
     const findById=(uid:string)=> accounts.find((a:any)=> a.u.id===uid);
     const liveActor=async(token:string)=>{ const p=await readToken(token); if(!p) return null; const rec=findById(p.uid); return rec&&(!rec.u.status||rec.u.status==='Active')?rec.u:null; };
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:10,database:'reachable',needsSetup:accounts.length===0});
+    if(action==='health') return json({ok:true,service:'accounts',version:11,database:'reachable',needsSetup:accounts.length===0});
 
     // Return the CURRENT server-side identity for an existing session. The UI must
     // not keep trusting the role/access snapshot cached at login forever: an Owner
@@ -130,7 +136,9 @@ Deno.serve(async (req)=>{
     }
 
     if(action==='login'){
-      const rec=findByLogin(body.identifier);
+      const lookup=uniqueByLogin(body.identifier);
+      if(lookup.conflict) return json({ok:false,reason:'identity-conflict'},409);
+      const rec=lookup.rec;
       if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
       if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
       if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
@@ -145,7 +153,9 @@ Deno.serve(async (req)=>{
     // to (not instead of) the legacy flow. Verifies the SAME legacy password, then syncs
     // the Supabase Auth password to it and issues a session. Never modifies _accounts. ----
     if(action==='authv2'){
-      const rec=findByLogin(body.identifier);
+      const lookup=uniqueByLogin(body.identifier);
+      if(lookup.conflict) return json({ok:false,reason:'identity-conflict'},409);
+      const rec=lookup.rec;
       if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
       if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
       if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
@@ -228,7 +238,10 @@ Deno.serve(async (req)=>{
     }
     if(action==='forgot'){
       await rlBump('forgot', body.identifier, RL_FORGOT_WINDOW_MS);
-      const rec=findByLogin(body.identifier);
+      const lookup=uniqueByLogin(body.identifier);
+      // Keep recovery enumeration-safe while refusing to rotate the password of
+      // an ambiguous historical identity. Owners see the conflict in Users QA.
+      const rec=lookup.conflict?null:lookup.rec;
       if(rec && rec.u.email){ const temp='M'+hex(crypto.getRandomValues(new Uint8Array(6)).buffer)+'a1'; const sent=await sendMail(rec.u.email, 'Your temporary password — Magnet OS', 'Your temporary password is: '+temp+'\nPlease change it after signing in (Profile).'); if(sent){ const u={...rec.u, passwordHash:await makePbkdf2(temp), isDefaultPassword:true}; await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]); await rlClear('login',rec.u.email||''); await rlClear('login',rec.u.username||''); } }
       return json({ ok:true });
     }
