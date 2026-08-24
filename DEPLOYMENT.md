@@ -6,6 +6,12 @@
 > this file said `ksunojpdzunyqrxdmogd` — that was wrong and is corrected below).
 > The "edit index.html line ~773 by hand" step is no longer needed: the real anon
 > key is already wired in `index.html`.
+>
+> ⛔ **Do not execute the historical SQL/key steps below.** They describe the old
+> anonymous internal-app architecture and can expose private employee/client data.
+> New database work must follow `docs/PRODUCTION_READINESS.md`,
+> `docs/DATABASE.md`, and the ordered Supabase CLI migrations after a verified
+> service-role backup and staging restore. This file remains historical only.
 
 دليل التشغيل أونلاين خطوة بخطوة. نفّذه مرة واحدة.
 
@@ -13,7 +19,7 @@
 
 ## 1) Supabase (الداتابيز)
 1. افتح مشروعك على Supabase → **SQL Editor** → **New query**.
-2. الصق محتوى ملف `supabase-schema.sql` كامل واضغط **Run**. (بيعمل الجدول + الفهارس + الـ trigger + RLS.)
+2. **متشغّليش `supabase-schema.sql`** — الملف قديم وبيفتح بيانات الشغل للـ anon. استخدم الـ migrations المرتبة بعد backup وstaging.
 3. روح **Project Settings → API** وانسخ:
    - **Project URL** = `https://jdylrthffifbhyrrhuqd.supabase.co`
    - **anon public key** (هتتحط في `index.html`).
@@ -108,7 +114,7 @@ async function submitClientForm(form) {
 - داخل التطبيق: **Settings → Cloud → Test connection** المفروض تنجح.
 
 ## 6) الدخول
-- المستخدم الافتراضي: **owner** / كلمة السر **admin123** (غيّرها بعد أول دخول).
+- مفيش مستخدم أو باسورد افتراضي. إنشاء أول Owner محمي بـ `INITIAL_OWNER_SETUP_SECRET` من إعدادات السيرفر.
 
 ---
 

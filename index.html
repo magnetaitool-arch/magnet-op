@@ -3911,14 +3911,16 @@ window.TIA = { canView, canEdit, canApprove, canSeeFinance, filterRecordsByRole,
 /* ============================================================================
    CLOUD LAYER — Supabase compatibility with the simple records table.
 
-   CURRENT SCHEMA (run supabase-schema.sql):
+   LEGACY COMPATIBILITY SCHEMA (do not provision from supabase-schema.sql):
      create table records ( id text primary key, coll text, data jsonb,
                              updated_at timestamptz default now() );
    We store each app record as one row: { id, coll, data:{...record} }.
 
    FUTURE PROPER SCHEMA (optional, see supabase-schema-future.sql): one real
    table per collection with typed columns + foreign keys + RLS by auth.uid().
-   This app reads/writes only with the ANON PUBLIC KEY — never the service role.
+   The current compatibility layer can use the public key only while Auth v2 is
+   optional. The SaaS cutover requires a user JWT and tenant RLS; service-role
+   credentials always remain server-only.
    ============================================================================ */
 const getCfg = () => { try { return JSON.parse(store.get(CFG_KEY)||'null'); } catch(e){ return null; } };
 const setCfg = (c) => c ? store.set(CFG_KEY, JSON.stringify(c)) : store.del(CFG_KEY);
@@ -3931,23 +3933,27 @@ function _headers(cfg, extra){
   // breaks anon access. For those, the apikey header alone authenticates as `anon`.
   var h = { apikey:cfg.key, 'Content-Type':'application/json' };
   // AUTH_V2 (flag-gated): if enabled AND a logged-in user's JWT is present, authenticate
-  // AS THAT USER so the server (RLS) enforces permissions. Flag OFF or no session ->
-  // falls through to the exact legacy behavior below (anon).
+  // AS THAT USER so the server (RLS) enforces permissions. Once `required` is set,
+  // missing JWTs must fail closed — falling through to anon would bypass identity and
+  // make a visually logged-in user anonymous to Postgres.
   var _uj = (typeof AUTH_V2!=='undefined' && AUTH_V2 && AUTH_V2.enabled) ? sbAccessToken() : '';
   if(_uj) h.Authorization = 'Bearer '+_uj;
+  else if(typeof AUTH_V2!=='undefined' && AUTH_V2 && AUTH_V2.required) throw new Error('authenticated-session-required');
   else if(/^eyJ/.test(cfg.key||'')) h.Authorization = 'Bearer '+cfg.key;
   return Object.assign(h, extra||{});
 }
 function _rest(cfg, path){ return cfg.url.replace(/\/$/,'') + '/rest/v1/' + path; }
-/* ---- AUTH_V2 (additive, flag-gated) — JWT session layer. Inert until the '_cfg-authv2'
-   record has enabled:true AND the user's role is allowed; with the flag OFF the app
-   behaves exactly as before. Instant rollback = flip the flag (no redeploy). ---- */
+/* ---- AUTH_V2 (additive, flag-gated) — JWT session layer. `enabled` supports a
+   migration cohort; `required` makes private access fail closed without a JWT.
+   Instant pre-RLS rollback = clear required/disable the flag (no redeploy). ---- */
 const SB_SESSION_KEY='tia_sb_session';
-let AUTH_V2={enabled:false, roles:[]};
+let AUTH_V2={enabled:false, required:false, roles:[]};
 function getSbSession(){ try{ return JSON.parse(store.get(SB_SESSION_KEY)||'null'); }catch(e){ return null; } }
 function setSbSession(s){ try{ if(s) store.set(SB_SESSION_KEY, JSON.stringify(s)); else store.del(SB_SESSION_KEY); }catch(e){} }
 function sbAccessToken(){ try{ const s=getSbSession(); if(!s||!s.access_token) return ''; if(s.expires_at && (Number(s.expires_at)*1000) < (Date.now()+5000)) return ''; return s.access_token; }catch(e){ return ''; } }
-async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return; const r=await fetch(_rest(cfg,'records?id=eq._cfg-authv2&select=data'), { headers:{ apikey:cfg.key } }); if(r.ok){ const rows=await r.json(); const d=rows&&rows[0]&&rows[0].data; if(d){ AUTH_V2={ enabled:!!d.enabled, roles:Array.isArray(d.roles)?d.roles:[] }; } } }catch(e){} }
+function applyAuthV2Contract(d){ if(d) AUTH_V2={enabled:!!d.enabled||!!d.required,required:!!d.required,roles:Array.isArray(d.roles)?d.roles:[]}; return AUTH_V2; }
+async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return AUTH_V2; const r=await fetch(_acctUrl(cfg),{method:'POST',headers:{apikey:cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'health'})}); if(r.ok){ const j=await r.json(); applyAuthV2Contract(j&&j.authV2); } return AUTH_V2; }catch(e){ return AUTH_V2; } }
+function authV2AppliesTo(user){ return !!(AUTH_V2.enabled && user && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(user.role)>=0)); }
 try{ window.__authv2={ get:()=>AUTH_V2, session:getSbSession, token:sbAccessToken, reload:loadAuthV2Flag }; }catch(e){}
 /* ---- AUTH_V2 session management (Step 3): access+refresh tokens, auto-refresh,
    wake/expiry handling. All inert unless AUTH_V2.enabled. Distinguishes an AUTH
@@ -3987,9 +3993,9 @@ async function sbEnsureFresh(cfg){                        // on load / wake: ref
 }
 
 /* ---- Accounts/auth via the service-role `accounts` Edge Function. Password
-   hashes stay on the server and never reach the browser. A short-lived HMAC token
-   (issued on login) authorizes account writes. Every call falls back to the legacy
-   anon path if the function is unreachable, so an outage never blocks login. ---- */
+   hashes stay on the server and never reach the browser. A legacy HMAC token
+   authorizes account administration; production browser password fallback is
+   disabled. In required Auth v2 mode, private data also requires a Supabase JWT. ---- */
 const ACCT_TOKEN_KEY = 'tia_acct_token';
 function _acctUrl(cfg){ return (cfg.url||'').replace(/\/$/,'') + '/functions/v1/accounts'; }
 function getAcctToken(){ try{ return store.get(ACCT_TOKEN_KEY) || sessionStorage.getItem(ACCT_TOKEN_KEY) || ''; }catch(e){ return ''; } }
@@ -4665,7 +4671,7 @@ async function authLogin(identifier, password){
         if(!r.ok) return { ok:false, reason:r.reason||'invalid', retryAfterSeconds:Number(r.retryAfterSeconds)||0 };
         // cache the (hash-free) user locally so the app has the roster offline
         try { const list=loadUsers(); const i=list.findIndex(u=>u.id===r.user.id); if(i>=0) list[i]=Object.assign({},list[i],r.user); else list.push(r.user); store.set(AUTH_KEYS.users, JSON.stringify(list)); } catch(e){}
-        return { ok:true, user:r.user, token:r.token };
+        return { ok:true, user:r.user, token:r.token, authV2:r.authV2 };
       }
     } catch(e){ /* local-only fallback below */ }
   }
@@ -5996,24 +6002,36 @@ function App(){
     }
   };
   const doLogin = async (identifier, password, remember)=>{
+    // Load the rollout contract BEFORE authenticating. Previously this happened
+    // after login in parallel with cloudLoadAll, so a fresh browser never requested
+    // a Supabase JWT on its first login and silently continued as anon.
+    await loadAuthV2Flag(cfg.current);
     const res = await authLogin(identifier, password);
     if(!res.ok) return res;
+    applyAuthV2Contract(res.authV2); // the successful login response is authoritative even if the earlier health probe raced or failed
     if(appSettings.requireVerification && res.user && res.user.role!=='Owner' && res.user.verified===false)
       return (lang==='ar') ? 'يجب تأكيد بريدك الإلكتروني أولاً (راجع رسالة التأكيد).' : 'Please verify your email first — check your inbox for the verification link.';
     if(res.token) setAcctToken(res.token, remember); // session token for account writes
     // AUTH_V2 (flag-gated): additionally obtain a real Supabase session so data requests
-    // carry the user's JWT. NEVER blocks login — the legacy session already succeeded; on
-    // any failure the app simply keeps using the anon key. Only runs for allowed roles.
+    // carry the user's JWT. During an optional cohort rollout failure keeps legacy
+    // behavior; after `required:true`, failure must block private app entry.
+    let authV2Ready=false;
     try {
-      if(AUTH_V2.enabled && res.user && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(res.user.role)>=0)){
+      if(authV2AppliesTo(res.user)){
         // Race the JWT fetch against a timeout so a slow/unreachable server can NEVER stall login.
         const _sv = await Promise.race([
           acctApi(cfg.current, 'authv2', { identifier, password }),
           new Promise(r=>setTimeout(()=>r(null), 7000))
         ]);
-        if(_sv && _sv.ok && _sv.session && _sv.session.access_token){ setSbSession(_sv.session); scheduleSbRefresh(cfg.current); } else { setSbSession(null); }
+        if(_sv && _sv.ok && _sv.session && _sv.session.access_token){ setSbSession(_sv.session); scheduleSbRefresh(cfg.current); authV2Ready=true; } else { setSbSession(null); }
       } else { setSbSession(null); }
     } catch(e){ setSbSession(null); }
+    if(AUTH_V2.required && !authV2Ready){
+      setAcctToken(null); setSbSession(null); clearSessionUser();
+      return lang==='ar'
+        ? 'تعذّر إنشاء جلسة آمنة للحساب. لم يتم فتح البيانات. تواصل مع المسؤول أو جرّب مرة أخرى.'
+        : 'A secure account session could not be created. No private data was opened. Contact an administrator or try again.';
+    }
     try { AUTH.syncUsersFromCloud().catch(()=>{}); } catch(e){} // pull full team roster now that we have a token
     setSessionUser(res.user, remember); setAuthUser(res.user); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
     try { recordLogin(res.user); } catch(e){}
@@ -6108,7 +6126,18 @@ function App(){
   useEffect(()=>{ store.set(SESSION_KEY, JSON.stringify(session)); }, [session]);
   // Never download private business data for anonymous visitors or bots. Public
   // campaign/brief routes fetch only their single required record themselves.
-  useEffect(()=>{ if(authReady&&authUser&&cfgComplete(cfg.current)){ loadAuthV2Flag(cfg.current); cloudLoadAll(cfg.current).then(d=>{ if(d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d)); }).catch(()=>{}); } }, [authReady,authUser&&authUser.id]);
+  useEffect(()=>{ if(!(authReady&&authUser&&cfgComplete(cfg.current))) return; let cancelled=false; (async()=>{
+    await loadAuthV2Flag(cfg.current);
+    if(AUTH_V2.required){
+      await sbEnsureFresh(cfg.current);
+      if(!sbAccessToken()){
+        if(!cancelled){ clearSessionUser(); setAcctToken(null); setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); }
+        return;
+      }
+    }
+    const d=await cloudLoadAll(cfg.current);
+    if(!cancelled&&d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d));
+  })().catch(()=>{}); return()=>{cancelled=true;}; }, [authReady,authUser&&authUser.id]);
   // AUTH_V2 (Step 3): multi-tab session sync + logout-all + wake/expiry refresh.
   // Every handler no-ops when the flag is OFF, so legacy behavior is unchanged.
   useEffect(()=>{
@@ -9172,7 +9201,7 @@ function SettingsView({ ctx, x }){
 
     <div class="grid g-2 stagger">
       <${Panel} title="Supabase connection">
-        <p class="muted" style=${{fontSize:13,lineHeight:1.6,marginBottom:14}}>Run <b>supabase-schema.sql</b>, then paste your Project URL + anon public key. Uses the anon key only — never the service role.</p>
+        <p class="muted" style=${{fontSize:13,lineHeight:1.6,marginBottom:14}}>Legacy connection diagnostics only. Database provisioning and RLS changes must use the reviewed Supabase migrations after a verified backup. Paste a publishable key only; private SaaS data additionally requires the signed-in user's JWT. Never paste a service-role key here.</p>
         <div class="form-grid">
           <label class="fld full"><span>Project URL</span><input value=${url} placeholder="https://jdylrthffifbhyrrhuqd.supabase.co" onChange=${e=>setUrl(e.target.value)}/></label>
           <label class="fld full"><span>Anon public key</span><input value=${key} placeholder="eyJhbGciOi..." onChange=${e=>setKey(e.target.value)}/></label>

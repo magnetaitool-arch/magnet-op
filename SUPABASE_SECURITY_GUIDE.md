@@ -3,6 +3,11 @@
 How the database is protected, what the migrations change, and how to verify and
 roll back. **No migration here drops a table or deletes a row.**
 
+> This document describes the historical Stage-A internal-app model. It is not a
+> SaaS security target. The current authoritative plan is in `docs/DATABASE.md`,
+> `docs/AUTH_ARCHITECTURE.md`, and `docs/PRODUCTION_READINESS.md`. Never provision
+> a new environment from the loose root SQL files.
+
 ## The security model (read this first)
 
 The app is a **browser client that talks to Postgres with the PUBLIC anon key**
@@ -49,7 +54,9 @@ Preconditions:
    ```
 2. Take a backup: `npm run backup:supabase`.
 
-Apply, in order, in **Supabase → SQL Editor** (or `supabase db push`):
+Historical migrations were applied in order. For future changes, use the
+Supabase CLI migration workflow after backup/staging; do not paste an incomplete
+bundle into the SQL Editor:
 ```
 001_backup_and_audit.sql
 002_records_rls_hardening.sql
@@ -65,7 +72,7 @@ Run `tools/check-rls.sql` in the SQL Editor, then the anon probes:
 # _accounts must now be 401/403 for the ANON key:
 curl -s -o /dev/null -w "%{http_code}\n" \
   "$SUPABASE_URL/rest/v1/records?select=id&coll=eq._accounts&limit=1" -H "apikey: $ANON_KEY"
-# clients must still be 200:
+# SaaS target: clients must return no private rows to anon:
 curl -s -o /dev/null -w "%{http_code}\n" \
   "$SUPABASE_URL/rest/v1/records?select=id&coll=eq.clients&limit=1"    -H "apikey: $ANON_KEY"
 ```
@@ -77,22 +84,15 @@ the records reachability check, and the Edge Function/email checks automatically
 
 | Actor | Key | Can read `_accounts`? | Can read business colls? |
 |---|---|---|---|
-| Browser app | anon (public) | **No** (after 002) | Yes |
+| Legacy browser app | anon (public) | **No** (after 002) | Yes — **P0, not SaaS-safe** |
+| Target browser app | publishable key + user JWT | No | Only tenant/capability-authorized rows |
 | Edge Function `accounts` | service_role (secret) | Yes (bypasses RLS) | Yes |
 | Backup/restore tools | service_role preferred | Yes | Yes |
 | Public intake function | service_role or anon | No (only writes leads/candidates) | writes only |
 
-## Rollback (non-destructive)
+## Rollback safety
 
-To restore the old fully-open behaviour (only if login breaks and the Edge Function
-is down):
-```sql
-drop policy if exists records_anon_select on public.records;
-drop policy if exists records_anon_insert on public.records;
-drop policy if exists records_anon_update on public.records;
-drop policy if exists records_anon_delete on public.records;
-create policy "team access" on public.records for all to anon, authenticated
-  using (true) with check (true);
-```
-`003`/`004` additions can be dropped per the ROLLBACK notes at the bottom of each
-file. None of this deletes data.
+Never restore fully-open anonymous business-data access as an outage workaround.
+Rollback must promote the previous compatible application and its reviewed policy
+set together. If authentication is unavailable, show a controlled outage/recovery
+state and repair Auth; do not expose employee, finance, client, or lead data.

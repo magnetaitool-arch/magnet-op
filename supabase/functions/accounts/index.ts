@@ -1,10 +1,10 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v11.
+// Magnet OS — accounts/auth Edge Function (service-role), v13.
 // v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
 const URL = Deno.env.get('SUPABASE_URL')!;
 const KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const SECRET = KEY; // HMAC key material (server-only)
+const SECRET = Deno.env.get('ACCOUNTS_SESSION_SECRET') || KEY; // set a dedicated secret to decouple sessions from service-key rotation
 const REST = URL.replace(/\/$/,'') + '/rest/v1/records';
 const AUTHB = URL.replace(/\/$/,'') + '/auth/v1';
 const RESEND = Deno.env.get('RESEND_API_KEY') || '';
@@ -12,6 +12,9 @@ const FROM = Deno.env.get('FROM_EMAIL') || 'Magnet OS <onboarding@resend.dev>';
 const EMAIL_ENDPOINT = 'https://magnet-op.vercel.app/api/send-email';
 const EMAIL_SHARED_SECRET = Deno.env.get('EMAIL_SHARED_SECRET') || '';
 const INITIAL_OWNER_SETUP_SECRET = Deno.env.get('INITIAL_OWNER_SETUP_SECRET') || '';
+const AUTH_V2_REQUIRED_ENV = String(Deno.env.get('AUTH_V2_REQUIRED') || '').toLowerCase()==='true';
+const AUTH_V2_ENABLED_ENV = AUTH_V2_REQUIRED_ENV || String(Deno.env.get('AUTH_V2_ENABLED') || '').toLowerCase()==='true';
+const AUTH_V2_ROLES_ENV = String(Deno.env.get('AUTH_V2_ROLES') || '').split(',').map(x=>x.trim()).filter(Boolean);
 
 const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'authorization,apikey,content-type', 'Access-Control-Allow-Methods':'POST,OPTIONS', 'Content-Type':'application/json' };
 const json = (obj:unknown, status=200)=> new Response(JSON.stringify(obj), { status, headers: CORS });
@@ -36,6 +39,23 @@ async function readToken(token:string){ try{ const [payload,sig]=String(token||'
 function isAdmin(role:string){ const r=String(role||''); return ['Owner','Admin','Manager'].includes(r); }
 
 async function dbAll(){ const r=await fetch(REST+'?coll=eq._accounts&select=id,data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db read '+r.status); return await r.json(); }
+async function dbAuthConfig(){
+  // Environment values are a cutover safety belt: once mandatory Auth is enabled
+  // there, a missing/malformed legacy flag can never silently downgrade the app.
+  const fallback={enabled:AUTH_V2_ENABLED_ENV,required:AUTH_V2_REQUIRED_ENV,roles:AUTH_V2_ROLES_ENV};
+  try{
+    const r=await fetch(REST+'?id=eq._cfg-authv2&select=data&limit=1', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+    if(!r.ok) return fallback;
+    const rows=await r.json(); const d=rows&&rows[0]&&rows[0].data;
+    if(!d) return fallback;
+    const dbRoles=Array.isArray(d.roles)?d.roles.map(String):[];
+    return {
+      enabled:AUTH_V2_ENABLED_ENV||!!d.enabled||!!d.required,
+      required:AUTH_V2_REQUIRED_ENV||!!d.required,
+      roles:AUTH_V2_ROLES_ENV.length?AUTH_V2_ROLES_ENV:dbRoles,
+    };
+  }catch{ return fallback; }
+}
 async function dbUpsert(rows:any[]){ const r=await fetch(REST+'?on_conflict=id', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify(rows) }); if(!r.ok) throw new Error('db write '+r.status+' '+await r.text()); }
 async function dbDelete(id:string){ const r=await fetch(REST+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db del '+r.status); }
 const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.verifyToken; return c; };
@@ -43,10 +63,17 @@ const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.veri
 // ---- AUTH_V2 (additive) helpers: Supabase Auth Admin API + password grant ----
 async function adminFindUserByEmail(email:string){
   try{
-    const r=await fetch(AUTHB+'/admin/users?per_page=200', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
-    if(!r.ok) return null;
-    const d=await r.json(); const list=(d && (d.users||d)) || [];
-    return (Array.isArray(list)?list:[]).find((u:any)=> String(u.email||'').toLowerCase()===email.toLowerCase()) || null;
+    const target=String(email||'').trim().toLowerCase();
+    for(let page=1;page<=1000;page++){
+      const r=await fetch(AUTHB+'/admin/users?page='+page+'&per_page=1000', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+      if(!r.ok) return null;
+      const d=await r.json(); const list=(d && (d.users||d)) || [];
+      const batch=Array.isArray(list)?list:[];
+      const found=batch.find((u:any)=> String(u.email||'').trim().toLowerCase()===target);
+      if(found) return found;
+      if(batch.length<1000 || (d&&d.last_page&&page>=Number(d.last_page))) break;
+    }
+    return null;
   }catch{ return null; }
 }
 async function adminSetPassword(uid:string, password:string){
@@ -94,7 +121,20 @@ async function rlState(action:string, id:string, windowMs:number, max:number):Pr
 async function rlBump(action:string, id:string, windowMs:number){ try{ const key=await rlKey(action,id); const r=await fetch(REST+'?id=eq.'+encodeURIComponent(key)+'&select=data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); let d:any={count:0, windowStart:Date.now()}; if(r.ok){ const rows=await r.json(); const ex=rows[0]&&rows[0].data; if(ex && Date.now()-(ex.windowStart||0)<=windowMs) d={count:ex.count||0, windowStart:ex.windowStart}; } d.count=(d.count||0)+1; await dbUpsert([{ id:key, coll:'_ratelimit', data:d }]); }catch{} }
 async function rlClear(action:string, id:string){ try{ const key=await rlKey(action,id); await fetch(REST+'?id=eq.'+encodeURIComponent(key), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); }catch{} }
 
+// Best-effort structured auth observability. The normalized auth_events table is
+// introduced by the SaaS foundation migration. Until it exists this intentionally
+// no-ops; authentication must never fail because telemetry is unavailable. The
+// subject is a one-way hash and no email, username, password, or token is logged.
+async function logAuthEvent(requestId:string,eventType:string,success:boolean,errorCategory:string|null,subject:string){
+  try{
+    const subjectRef=subject?await rlKey('auth-subject',subject):'';
+    const r=await fetch(URL.replace(/\/$/,'')+'/rest/v1/auth_events',{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({request_id:requestId,event_type:eventType,success,error_category:errorCategory||null,safe_context:subjectRef?{subject_ref:subjectRef}:{}})});
+    if(!r.ok) return;
+  }catch{}
+}
+
 Deno.serve(async (req)=>{
+  const requestId=crypto.randomUUID();
   if(req.method==='OPTIONS') return new Response('ok',{headers:CORS});
   if(req.method!=='POST') return json({error:'POST only'},405);
   let body:any={}; try{ body=await req.json(); }catch{ return json({error:'bad json'},400); }
@@ -102,7 +142,7 @@ Deno.serve(async (req)=>{
   try{
     if(action==='login'||action==='authv2'){
       const state=await rlState('login',body.identifier,RL_LOGIN_WINDOW_MS,RL_LOGIN_MAX);
-      if(state.blocked) return json({ ok:false, reason:'rate-limited', retryAfterSeconds:state.retryAfterSeconds },429);
+      if(state.blocked){ await logAuthEvent(requestId,action+'_failed',false,'rate_limited',body.identifier); return json({ ok:false, reason:'rate-limited', retryAfterSeconds:state.retryAfterSeconds },429); }
     }
     if(action==='forgot'){
       const state=await rlState('forgot',body.identifier,RL_FORGOT_WINDOW_MS,RL_FORGOT_MAX);
@@ -122,7 +162,7 @@ Deno.serve(async (req)=>{
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:11,database:'reachable',needsSetup:accounts.length===0});
+    if(action==='health') return json({ok:true,service:'accounts',version:13,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
 
     // Return the CURRENT server-side identity for an existing session. The UI must
     // not keep trusting the role/access snapshot cached at login forever: an Owner
@@ -137,16 +177,17 @@ Deno.serve(async (req)=>{
 
     if(action==='login'){
       const lookup=uniqueByLogin(body.identifier);
-      if(lookup.conflict) return json({ok:false,reason:'identity-conflict'},409);
+      if(lookup.conflict){ await logAuthEvent(requestId,'login_failed',false,'identity_conflict',body.identifier); return json({ok:false,reason:'identity-conflict'},409); }
       const rec=lookup.rec;
-      if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
-      if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
-      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
+      if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); await logAuthEvent(requestId,'login_failed',false,'invalid_credentials',body.identifier); return json({ ok:false, reason:'invalid' }); }
+      if(rec.u.status && rec.u.status!=='Active'){ await logAuthEvent(requestId,'login_failed',false,'account_inactive',rec.u.id); return json({ ok:false, reason:'inactive' }); }
+      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); await logAuthEvent(requestId,'login_failed',false,'invalid_credentials',rec.u.id); return json({ ok:false, reason:'invalid' }); }
       await rlClear('login', body.identifier);
       const u={...rec.u, lastLogin:nowISO()};
       if(!String(u.passwordHash||'').startsWith('pbkdf2$')){ try{ u.passwordHash=await makePbkdf2(body.password); }catch{} }
       await dbUpsert([{ id:rec.rowId, coll:'_accounts', data:u }]);
-      return json({ ok:true, user:sanitize(u), token:await makeToken(u) });
+      await logAuthEvent(requestId,'login_succeeded',true,null,u.id);
+      return json({ ok:true, user:sanitize(u), token:await makeToken(u), authV2:await dbAuthConfig() });
     }
 
     // ---- NEW additive action: JWT layer. Returns a real Supabase session in addition
@@ -154,19 +195,20 @@ Deno.serve(async (req)=>{
     // the Supabase Auth password to it and issues a session. Never modifies _accounts. ----
     if(action==='authv2'){
       const lookup=uniqueByLogin(body.identifier);
-      if(lookup.conflict) return json({ok:false,reason:'identity-conflict'},409);
+      if(lookup.conflict){ await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_conflict',body.identifier); return json({ok:false,reason:'identity-conflict'},409); }
       const rec=lookup.rec;
-      if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
-      if(rec.u.status && rec.u.status!=='Active') return json({ ok:false, reason:'inactive' });
-      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); return json({ ok:false, reason:'invalid' }); }
+      if(!rec){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); await logAuthEvent(requestId,'session_upgrade_failed',false,'invalid_credentials',body.identifier); return json({ ok:false, reason:'invalid' }); }
+      if(rec.u.status && rec.u.status!=='Active'){ await logAuthEvent(requestId,'session_upgrade_failed',false,'account_inactive',rec.u.id); return json({ ok:false, reason:'inactive' }); }
+      if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); await logAuthEvent(requestId,'session_upgrade_failed',false,'invalid_credentials',rec.u.id); return json({ ok:false, reason:'invalid' }); }
       const email=String(rec.u.email||'').toLowerCase().trim();
-      if(!email || email.indexOf('@')<1) return json({ ok:false, reason:'no-email' });
+      if(!email || email.indexOf('@')<1){ await logAuthEvent(requestId,'session_upgrade_failed',false,'missing_email',rec.u.id); return json({ ok:false, reason:'no-email' }); }
       let au=await adminFindUserByEmail(email);
       if(au && au.id){ await adminSetPassword(au.id, body.password); }
       else { au=await adminCreateUser(email, body.password); }
       const session=await passwordGrant(email, body.password);
-      if(!session || !session.access_token) return json({ ok:false, reason:'session-failed' });
+      if(!session || !session.access_token){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_session_failed',rec.u.id); return json({ ok:false, reason:'session-failed' }); }
       await rlClear('login', body.identifier);
+      await logAuthEvent(requestId,'session_upgrade_succeeded',true,null,rec.u.id);
       return json({ ok:true, session, user:sanitize(rec.u) });
     }
 
@@ -238,6 +280,7 @@ Deno.serve(async (req)=>{
     }
     if(action==='forgot'){
       await rlBump('forgot', body.identifier, RL_FORGOT_WINDOW_MS);
+      await logAuthEvent(requestId,'password_recovery_requested',true,null,body.identifier);
       const lookup=uniqueByLogin(body.identifier);
       // Keep recovery enumeration-safe while refusing to rotate the password of
       // an ambiguous historical identity. Owners see the conflict in Users QA.

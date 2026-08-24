@@ -1,5 +1,5 @@
 // Magnet OS — shared helpers for the backup/restore tooling.
-// Dependency-free (Node 18+): node:crypto, node:fs, global fetch.
+// Dependency-free (Node 22+): node:crypto, node:fs, global fetch.
 'use strict';
 const crypto = require('node:crypto');
 const fs = require('node:fs');

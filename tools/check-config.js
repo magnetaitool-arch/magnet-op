@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Magnet OS — configuration & connectivity check. Read-only; safe to run anytime.
-// Verifies env vars, pings Supabase, checks the accounts Edge Function, and warns
-// if _accounts is still anon-readable (the password-hash exposure risk).
+// Verifies env vars, pings Supabase, checks the accounts Edge Function, and fails
+// if known private account/business rows are visible to the publishable key.
 //
 //   node tools/check-config.js        (or: npm run check:config)
 'use strict';
@@ -39,6 +39,29 @@ const lib = require('./_lib');
     } else if (r.status === 401 || r.status === 403) ok('_accounts blocked for anon (' + r.status + ') — lockdown is applied. Good.');
     else w('_accounts anon SELECT returned ' + r.status);
   } catch (e) { w('_accounts check errored: ' + (e.message || e)); }
+
+  console.log('\n[security: accounts_safe view exposure]');
+  try {
+    const r = await fetch(url + '/rest/v1/accounts_safe?select=id&limit=1', { headers: lib.restHeaders(anon) });
+    const rows = await r.json().catch(() => []);
+    if (r.ok && Array.isArray(rows) && rows.length) f('accounts_safe is ANON-READABLE — account roster metadata is exposed. Apply the harden_accounts_safe_view migration.');
+    else if (r.status === 401 || r.status === 403 || (Array.isArray(rows) && rows.length === 0)) ok('accounts_safe returns no rows to anon.');
+    else w('accounts_safe probe returned ' + r.status);
+  } catch (e) { w('accounts_safe check errored: ' + (e.message || e)); }
+
+  console.log('\n[security: private business-data exposure]');
+  try {
+    const privateCollections = ['clients', 'employees', 'invoices'];
+    const exposed = [];
+    for (const coll of privateCollections) {
+      const r = await fetch(url + '/rest/v1/records?select=id&coll=eq.' + encodeURIComponent(coll) + '&limit=1', { headers: lib.restHeaders(anon) });
+      const rows = await r.json().catch(() => []);
+      if (r.ok && Array.isArray(rows) && rows.length) exposed.push(coll);
+    }
+    exposed.length
+      ? f('publishable key can read private collection(s): ' + exposed.join(', ') + '. Mandatory JWT + tenant RLS rollout is incomplete.')
+      : ok('sampled private collections return no rows to anon.');
+  } catch (e) { w('private-data exposure check errored: ' + (e.message || e)); }
 
   console.log('\n[accounts edge function]');
   try {

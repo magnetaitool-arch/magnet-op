@@ -1,7 +1,10 @@
 -- ============================================================================
--- Magnet OS — ALL migrations 001→004 in one file. Paste into Supabase SQL Editor
--- and Run. Additive + idempotent: safe to run once or repeatedly. Nothing is
--- dropped or deleted. Take a backup first (npm run backup:supabase).
+-- RETIRED BUNDLE — historical migrations 001→004 only.
+--
+-- DO NOT use this file to provision or upgrade Magnet OS. It omits later repair,
+-- privacy, and SaaS foundation migrations and can create dangerous schema drift.
+-- Use the Supabase CLI migration workflow against supabase/migrations/ after a
+-- verified backup and staging restore. This bundle remains only as history.
 -- ============================================================================
 
 

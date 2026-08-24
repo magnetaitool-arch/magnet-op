@@ -20,7 +20,8 @@ const exists = (p) => fs.existsSync(path.join(ROOT, p));
 console.log('[1] node --check on server JS');
 for (const file of ['api/send-email.js', 'api/intake.js', 'netlify/functions/intake.js', 'netlify/functions/send-email.js',
   'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
-  'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js']) {
+  'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
+  'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, file)], { stdio: 'pipe' }); ok(file); }
   catch (e) { bad(file + ' — ' + String(e.stderr || e).split('\n')[0]); }
 }
@@ -53,9 +54,15 @@ const acct = read('supabase/functions/accounts/index.ts');
 /action==='me'/.test(acct) && /refreshCurrentUser/.test(read('index.html')) && /setInterval\(refreshIdentity,60000\)/.test(read('index.html'))
   ? ok('open sessions revalidate live role/status/access and cannot stay on a stale employee role')
   : bad('open sessions can keep a stale role after an account repair or downgrade');
-/version:11/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
-  ? ok('accounts v11 fails closed on an ambiguous login instead of selecting an arbitrary role')
+/version:13/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
+  ? ok('accounts v13 fails closed on an ambiguous login instead of selecting an arbitrary role')
   : bad('accounts service can still select an arbitrary duplicate login identity');
+/per_page=1000/.test(acct) && /last_page/.test(acct)
+  ? ok('Supabase Auth reconciliation paginates beyond the first 200 identities')
+  : bad('Supabase Auth reconciliation only scans an initial user page');
+/logAuthEvent/.test(acct) && /subject_ref/.test(acct) && /login_succeeded/.test(acct) && /login_failed/.test(acct)
+  ? ok('auth success/failure events are structured and pseudonymized')
+  : bad('authentication failures are not safely observable');
 /duplicate-email/.test(acct) && /duplicate-username/.test(acct) && /last-owner/.test(acct)
   ? ok('duplicate logins and last-owner lockout are blocked server-side')
   : bad('account identity/last-owner guards are missing');
@@ -122,12 +129,25 @@ console.log('\n[5] dangerous-pattern scan');
 /needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /hasCloudAccounts/.test(html)
   ? ok('fresh browsers distinguish existing accounts from first-owner setup without exposing the roster')
   : bad('fresh browsers can show first-owner setup when accounts already exist');
+/required:false/.test(html) && /AUTH_V2\.required/.test(html) && /authenticated-session-required/.test(html)
+  && /await loadAuthV2Flag\(cfg\.current\);\s*const res = await authLogin/.test(html)
+  ? ok('mandatory Supabase Auth rollout loads its flag before login and cannot fall back to anon without a JWT')
+  : bad('Auth v2 required mode can still authenticate or load private data as anon');
+/authV2:await dbAuthConfig\(\)/.test(acct) && /JSON\.stringify\(\{action:'health'\}\)/.test(html)
+  && !/records\?id=eq\._cfg-authv2&select=data/.test(html)
+  ? ok('Auth rollout configuration comes from the server instead of an anon-readable database row')
+  : bad('Auth rollout still depends on exposing server configuration through anon PostgREST');
+/AUTH_V2_REQUIRED_ENV/.test(acct) && /authV2:await dbAuthConfig\(\)/.test(acct)
+  && /applyAuthV2Contract\(res\.authV2\)/.test(html) && /authV2:r\.authV2/.test(html)
+  ? ok('a successful login carries the server cutover contract and mandatory mode has an environment safety belt')
+  : bad('login can race the Auth cutover flag or silently downgrade mandatory mode');
 !/Spark Marketing/.test(html) && !/<option[^>]*value=["']TIA["']/.test(html) && !/@tia\.com/.test(html)
   && /const BRANDS = \['Magnet'\]/.test(html) && !/setBrand\(/.test(html)
   ? ok('workspace branding is Magnet-only with no legacy brand selector')
   : bad('legacy TIA/Spark branding or multi-brand selector has returned');
 ((html.match(/if\(!authReady \|\| !authUser \|\| !cfgComplete\(cfg\.current\)\) return;/g)||[]).length>=2)
-  && /if\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)/.test(html)
+  && (/if\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)/.test(html)
+    || /if\(!\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)\) return/.test(html))
   ? ok('anonymous visitors cannot start full, delta, or realtime business-data sync')
   : bad('login page still downloads private business data or consumes database egress');
 
@@ -142,8 +162,9 @@ for (const [, attrs, source] of scripts) {
 parsed ? ok(parsed + ' inline script blocks parse') : bad('no inline scripts were parsed');
 
 console.log('\n[7] required deliverables present');
-for (const f of ['AUDIT_REPORT.md', '.env.example', 'api/intake.js', 'supabase/migrations',
-  'tools/backup-supabase-records.js', 'tools/restore-supabase-records.js', 'tools/security-test.js']) {
+for (const f of ['AUDIT_REPORT.md', 'AGENTS.md', 'docs/SAAS_READINESS_AUDIT.md', 'docs/AUTH_ARCHITECTURE.md',
+  '.env.example', 'api/intake.js', 'supabase/migrations', 'tools/backup-supabase-records.js',
+  'tools/restore-supabase-records.js', 'tools/security-test.js', 'tools/saas-foundation-test.js']) {
   exists(f) ? ok(f) : bad('missing ' + f);
 }
 
