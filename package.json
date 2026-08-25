@@ -20,9 +20,12 @@
     "test:security": "node tools/security-test.js",
     "test:foundation": "node tools/saas-foundation-test.js",
     "test:identity": "node tools/identity-foundation-test.js",
+    "test:tenant": "node tools/tenant-foundation-test.js",
     "test:identity:staging": "node tools/test-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
     "test:login:staging": "node tools/test-staging-app-login.js --project-ref=xqqgbvigfojfydzfguan",
-    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js",
+    "test:tenant:staging": "node tools/test-staging-tenant-rls.js --project-ref=xqqgbvigfojfydzfguan",
+    "test:public-forms:staging": "node tools/test-staging-public-forms.js --project-ref=xqqgbvigfojfydzfguan",
+    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js",
     "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {

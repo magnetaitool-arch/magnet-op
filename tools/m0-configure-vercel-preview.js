@@ -33,7 +33,11 @@ function safeError(value) {
 }
 
 function run(node, entry, args, options = {}) {
-  const result = spawnSync(node, [entry, ...args], {
+  const directExecutable = path.basename(entry) === 'supabase';
+  const pnpmSupabase = path.basename(entry) === 'pnpm';
+  const command = pnpmSupabase ? entry : (directExecutable ? entry : node);
+  const commandArgs = pnpmSupabase ? ['dlx', 'supabase@latest', ...args] : (directExecutable ? args : [entry, ...args]);
+  const result = spawnSync(command, commandArgs, {
     cwd: process.cwd(),
     encoding: 'utf8',
     input: options.input,
@@ -90,6 +94,7 @@ if (!staging || staging.name !== expectedStagingName || staging.status !== 'ACTI
   console.error('REFUSED: Supabase Staging project identity/name/health check failed.');
   process.exit(2);
 }
+console.log('Verified Supabase Staging project identity and health.');
 
 const apiKeys = jsonFrom(run(process.execPath, supabaseCli, [
   'projects', 'api-keys', '--project-ref', stagingRef, '--output', 'json',
@@ -100,15 +105,23 @@ if (!stagingAnonKey || (!String(stagingAnonKey).startsWith('sb_publishable_') &&
   console.error('ERROR: Staging publishable key could not be resolved securely.');
   process.exit(2);
 }
+const service = apiKeys.find((key) => key.name === 'service_role') || apiKeys.find((key) => key.type === 'secret');
+const stagingServiceKey = service && service.api_key;
+if (!stagingServiceKey) {
+  console.error('ERROR: Staging service-role key could not be resolved securely.');
+  process.exit(2);
+}
+console.log('Resolved Staging API key classes without printing values.');
 
 const stagingUrl = `https://${stagingRef}.supabase.co`;
-const target = 'preview,development';
 const variables = [
-  ['SUPABASE_URL', stagingUrl],
-  ['SUPABASE_ANON_KEY', stagingAnonKey],
-  // api/intake.js reads SUPABASE_KEY. Use the publishable Staging key for the
-  // current public-intake RLS baseline; never expose a service-role key.
-  ['SUPABASE_KEY', stagingAnonKey],
+  { name: 'SUPABASE_URL', value: stagingUrl, target: 'preview,development', sensitive: false },
+  { name: 'SUPABASE_ANON_KEY', value: stagingAnonKey, target: 'preview,development', sensitive: false },
+  { name: 'SUPABASE_KEY', value: stagingAnonKey, target: 'preview,development', sensitive: false },
+  // Public-form server routes need privileged writes after anon RLS is closed.
+  // Scope this secret to Preview only; never materialize it into local Development.
+  { name: 'SUPABASE_SERVICE_ROLE_KEY', value: stagingServiceKey, target: 'preview', sensitive: true },
+  { name: 'SUPABASE_ORGANIZATION_SLUG', value: 'magnet', target: 'preview,development', sensitive: false },
 ];
 
 const envInventory = jsonFrom(run(process.execPath, vercelCli, ['env', 'ls', '--json']));
@@ -117,8 +130,9 @@ const targetsOf = (entry) => {
   const raw = entry && (entry.target || entry.targets);
   return Array.isArray(raw) ? raw.map(String) : (raw ? [String(raw)] : []);
 };
+console.log('Audited existing Vercel environment-variable scopes.');
 
-for (const [name] of variables) {
+for (const { name } of variables) {
   const existing = envEntries.filter((entry) => entry && entry.name === name);
   if (existing.some((entry) => targetsOf(entry).includes('production'))) {
     console.error(`REFUSED: ${name} is shared with Production; split it manually in the Vercel dashboard first.`);
@@ -126,9 +140,10 @@ for (const [name] of variables) {
   }
 }
 
-for (const [name, value] of variables) {
+for (const { name, value, target, sensitive } of variables) {
+  console.log(`Configuring ${name} for ${target}.`);
   run(process.execPath, vercelCli, [
-    'env', 'add', name, target, '--force', '--yes', '--no-sensitive',
+    'env', 'add', name, target, '--force', '--yes', sensitive ? '--sensitive' : '--no-sensitive',
   ], { input: `${value}\n` });
 }
 
@@ -147,7 +162,7 @@ if (leakedEmailScopes.length) {
 }
 
 console.log(`Verified Vercel project: ${expectedVercelProjectName}`);
-console.log(`Preview/Development Supabase variables configured: ${variables.map(([name]) => name).join(', ')}`);
+console.log(`Preview/Development Supabase variables configured: ${variables.map(({ name }) => name).join(', ')}`);
 console.log(`Production Supabase environment changed: false`);
 console.log('Preview/Development production-email scope audit: isolated');
 console.log('No environment values were printed or written to disk.');

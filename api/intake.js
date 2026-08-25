@@ -13,16 +13,15 @@
 //
 // SETUP (Vercel -> Project -> Settings -> Environment Variables):
 //   SUPABASE_URL   = https://jdylrthffifbhyrrhuqd.supabase.co
-//   SUPABASE_KEY   = <service_role key>   (server-side only — NEVER in the browser)
+//   SUPABASE_SERVICE_ROLE_KEY = <service role key> (server-side only)
+//   SUPABASE_ORGANIZATION_SLUG = magnet
 //   (optional email notify, reuses Resend like api/send-email.js)
 //   RESEND_API_KEY = <resend key>
 //   FROM_EMAIL     = Magnet OS <onboarding@resend.dev>
 //   HR_EMAIL       = hr@yourdomain.com      (candidate alerts)
 //   SALES_EMAIL    = sales@yourdomain.com   (lead alerts)
 //
-// A service_role SUPABASE_KEY is strongly recommended once the _accounts lockdown
-// (supabase/migrations/002_records_rls_hardening.sql) is applied so this endpoint
-// keeps working regardless of anon policy. Node 18+ on Vercel provides global fetch.
+// A service-role key is required. Public/anon database writes stay disabled.
 
 // Only these collections may ever be written by this public endpoint.
 const ALLOWED = { candidate: 'candidates', lead: 'leads' };
@@ -32,7 +31,8 @@ const nowISO = () => new Date().toISOString();
 const clip = (v, n) => (v == null ? '' : String(v).slice(0, n));
 
 const CANDIDATE_FIELDS = ['fullName','age','mobile','otherPhones','email','area','maritalStatus','position','specialization','experience','availableFrom','currentSalary','expectedSalary','workplaces','courses','gameScore','cvLink','notes'];
-const LEAD_FIELDS = ['name','company','email','phone','brand','source','serviceInterest','value','budget','notes','message'];
+const LEAD_FIELDS = ['name','company','email','phone','brand','source','serviceInterest','value','budget','notes','message','campaignId','campaignName'];
+let organizationCache = null;
 
 function pick(body, fields) {
   const out = {};
@@ -53,11 +53,10 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 200, {});
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
 
-  // Defaults let the form work with zero setup (the publishable key is already
-  // public in the CRM, and this endpoint only ever writes candidates/leads, which
-  // anon INSERT is allowed for). Override with a service_role key in Vercel env.
-  const URL = process.env.SUPABASE_URL || 'https://jdylrthffifbhyrrhuqd.supabase.co';
-  const KEY = process.env.SUPABASE_KEY || 'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz';
+  const URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
+  const KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '');
+  if (!/^https:\/\/[a-z]{20}\.supabase\.co$/.test(URL) || !KEY) return send(res, 503, { error: 'Service not configured' });
+  if (Number(req.headers['content-length'] || 0) > 150000) return send(res, 413, { error: 'Payload too large' });
 
   let b = req.body || {};
   if (typeof b === 'string') { try { b = JSON.parse(b || '{}'); } catch (e) { return send(res, 400, { error: 'Invalid JSON body' }); } }
@@ -86,19 +85,28 @@ module.exports = async (req, res) => {
       entityType: 'leads', entityId: rec.id, read: false, createdAt: nowISO() };
   }
 
-  const headers = { apikey: KEY, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
-  if (/^eyJ/.test(KEY)) headers.Authorization = 'Bearer ' + KEY; // JWT keys (service_role/anon) also go in Authorization
+  const headers = { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
   try {
-    const r = await fetch(URL.replace(/\/$/, '') + '/rest/v1/records?on_conflict=id', {
+    if (!organizationCache) {
+      const slug = String(process.env.SUPABASE_ORGANIZATION_SLUG || 'magnet').trim();
+      const orgResponse = await fetch(URL + '/rest/v1/organizations?slug=eq.' + encodeURIComponent(slug) + '&status=eq.ACTIVE&deleted_at=is.null&select=id&limit=1', { headers });
+      const organizations = orgResponse.ok ? await orgResponse.json() : [];
+      organizationCache = organizations[0] && organizations[0].id;
+      if (!organizationCache) return send(res, 503, { error: 'Organization unavailable' });
+    }
+    const rows = [
+      { id: rec.id, coll, data: rec, organization_id: organizationCache },
+      { id: notif.id, coll: 'notifications', data: notif, organization_id: organizationCache },
+    ];
+    const r = await fetch(URL + '/rest/v1/records?on_conflict=id', {
       method: 'POST', headers,
-      body: JSON.stringify([{ id: rec.id, coll, data: rec }, { id: notif.id, coll: 'notifications', data: notif }]),
+      body: JSON.stringify(rows),
     });
     if (!r.ok) {
-      const detail = await r.text().catch(() => '');
-      return send(res, r.status, { error: 'Database write failed (' + r.status + ')', detail });
+      return send(res, 502, { error: 'Database write failed' });
     }
   } catch (e) {
-    return send(res, 500, { error: String((e && e.message) || e) });
+    return send(res, 503, { error: 'Service unavailable' });
   }
 
   // Optional email alert (best-effort; never blocks the submission).

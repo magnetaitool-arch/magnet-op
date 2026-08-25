@@ -116,6 +116,9 @@ async function main() {
   }
 
   try {
+    const organizations = await serviceRows('organizations?slug=eq.magnet&select=id&limit=1');
+    const organizationId = organizations[0] && organizations[0].id;
+    check(organizationId, 'Magnet organization exists');
     const account = {
       id: accountId,
       name: 'V2 Login Canary',
@@ -131,7 +134,7 @@ async function main() {
     };
     await serviceRows('records', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ id: recordId, coll: '_accounts', data: account }),
+      body: JSON.stringify({ id: recordId, coll: '_accounts', data: account, organization_id: organizationId }),
     });
     createdRecord = true;
 
@@ -149,8 +152,6 @@ async function main() {
     authUserId = String(authUser.body && authUser.body.id || '');
     check(authUser.response.status === 200 && /^[0-9a-f-]{36}$/i.test(authUserId), 'Supabase JWT resolves an immutable user id');
 
-    const organizations = await serviceRows('organizations?slug=eq.magnet&select=id&limit=1');
-    const organizationId = organizations[0] && organizations[0].id;
     const roles = await serviceRows(`organization_roles?organization_id=eq.${organizationId}&key=in.(owner,sales,content_creator)&select=id,key`);
     const roleByKey = new Map(roles.map((role) => [role.key, role.id]));
     check(organizationId && roleByKey.has('owner') && roleByKey.has('sales') && roleByKey.has('content_creator'), 'Magnet canonical test roles exist');

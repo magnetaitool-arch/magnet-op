@@ -75,7 +75,7 @@ async function reconcileLegacyIdentity(authUserId:string,legacyAccountRowId:stri
   if(!result||result.ok!==true) throw new Error('identity reconciliation incomplete');
   return result;
 }
-async function dbUpsert(rows:any[]){ const r=await fetch(REST+'?on_conflict=id', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify(rows) }); if(!r.ok) throw new Error('db write '+r.status+' '+await r.text()); }
+async function dbUpsert(rows:any[]){ const organizationId=await legacyOrganizationId(); const scoped=rows.map(row=>Object.assign({},row,{organization_id:row.organization_id||organizationId})); const r=await fetch(REST+'?on_conflict=id', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify(scoped) }); if(!r.ok) throw new Error('db write '+r.status+' '+await r.text()); }
 async function dbDelete(id:string){ const r=await fetch(REST+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db del '+r.status); }
 const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.verifyToken; return c; };
 

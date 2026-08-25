@@ -3956,6 +3956,26 @@ function _headers(cfg, extra){
   return Object.assign(h, extra||{});
 }
 function _rest(cfg, path){ return cfg.url.replace(/\/$/,'') + '/rest/v1/' + path; }
+function activeOrganizationId(){
+  try{
+    const value=String(store.get('magnet_active_organization_id')||'').trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)?value:'';
+  }catch(e){ return ''; }
+}
+function tenantOrganizationId(){
+  const id=activeOrganizationId();
+  if(AUTH_V2 && AUTH_V2.required && !id) throw new Error('active-organization-required');
+  return id;
+}
+function tenantQuery(path){
+  const id=tenantOrganizationId();
+  if(!id) return path;
+  return path+(path.indexOf('?')>=0?'&':'?')+'organization_id=eq.'+encodeURIComponent(id);
+}
+function tenantRecord(row){
+  const id=tenantOrganizationId();
+  return id?Object.assign({},row,{organization_id:id}):row;
+}
 /* ---- AUTH_V2 (additive, flag-gated) — JWT session layer. `enabled` supports a
    migration cohort; `required` makes private access fail closed without a JWT.
    Instant pre-RLS rollback = clear required/disable the flag (no redeploy). ---- */
@@ -4099,7 +4119,7 @@ try{ window.__magnetIdentity={api:identityApi,load:loadCanonicalIdentity,merge:m
 
 async function cloudPing(cfg){
   if(!cfgComplete(cfg)) throw new Error('Supabase URL and anon key required');
-  const res = await fetch(_rest(cfg,'records?select=id&limit=1'), { headers:_headers(cfg) });
+  const res = await fetch(_rest(cfg,tenantQuery('records?select=id&limit=1')), { headers:_headers(cfg) });
   if(!res.ok) throw new Error('Connection failed ('+res.status+'). Did you run the SQL setup?');
   return true;
 }
@@ -4110,12 +4130,12 @@ async function cloudLoadAll(cfg){
   await sbEnsureFresh(cfg); // AUTH_V2: proactively refresh a near-expiry token before loading (no-op if flag off)
   const rows=[]; let start=0;
   for(;;){
-    let res = await fetch(_rest(cfg,'records?select=*&order=id.asc'),
+    let res = await fetch(_rest(cfg,tenantQuery('records?select=*&deleted_at=is.null&order=id.asc')),
       { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
     if(res.status===401 && AUTH_V2 && AUTH_V2.enabled){ // revoked/expired JWT -> refresh once, then retry
       const _rf=await sbRefresh(cfg);
       if(_rf && _rf.invalid) throw new Error('Load failed (session expired)');
-      res = await fetch(_rest(cfg,'records?select=*&order=id.asc'),
+      res = await fetch(_rest(cfg,tenantQuery('records?select=*&deleted_at=is.null&order=id.asc')),
         { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
     }
     if(!res.ok) throw new Error('Load failed ('+res.status+')');
@@ -4139,7 +4159,7 @@ async function cloudLoadDelta(cfg, since){
   if(!cfgComplete(cfg)||!since) return {rows:[],cursor:since||''};
   const rows=[]; let start=0;
   for(;;){
-    const q='records?select=id,coll,data,updated_at&updated_at=gt.'+encodeURIComponent(since)+'&order=updated_at.asc,id.asc';
+    const q=tenantQuery('records?select=id,coll,data,deleted_at,updated_at&updated_at=gt.'+encodeURIComponent(since)+'&order=updated_at.asc,id.asc');
     const res=await fetch(_rest(cfg,q),{headers:_headers(cfg,{Range:start+'-'+(start+999),'Range-Unit':'items'})});
     if(!res.ok) throw new Error('Delta load failed ('+res.status+')');
     const chunk=await res.json(); rows.push.apply(rows,chunk);
@@ -4154,7 +4174,7 @@ function applyCloudDelta(prev, rows){
   rows.forEach(r=>{ const coll=r.coll;if(!coll||coll==='_accounts'||coll==='_ratelimit')return;
     if(!touched.has(coll)){next[coll]=(prev[coll]||[]).slice();touched.add(coll);}
     const rec=Object.assign({id:r.id},r.data||{}), i=next[coll].findIndex(x=>x.id===rec.id);
-    if(rec._del){if(i>=0)next[coll].splice(i,1);return;}
+    if(r.deleted_at||rec._del){if(i>=0)next[coll].splice(i,1);return;}
     if(i>=0)next[coll][i]=rec;else next[coll].push(rec);
   });
   return touched.size?next:prev;
@@ -4179,7 +4199,7 @@ async function cloudLoadColl(cfg, coll){
   // Paginated like cloudLoadAll — a single response is capped at 1000 rows.
   const rows=[]; let start=0;
   for(;;){
-    const res = await fetch(_rest(cfg,'records?select=id,data&coll=eq.'+encodeURIComponent(coll)+'&order=id.asc'),
+    const res = await fetch(_rest(cfg,tenantQuery('records?select=id,data&deleted_at=is.null&coll=eq.'+encodeURIComponent(coll)+'&order=id.asc')),
       { headers:_headers(cfg,{ Range:start+'-'+(start+999), 'Range-Unit':'items' }) });
     if(!res.ok) return start===0 ? null : rows.map(r=>Object.assign({id:r.id}, r.data||{}));
     const chunk = await res.json();
@@ -4333,7 +4353,7 @@ async function cloudUpsert(cfg, coll, rec){
   try {
     const res = await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
-        body: JSON.stringify([{ id:rec.id, coll, data:rec }]) });
+        body: JSON.stringify([tenantRecord({ id:rec.id, coll, data:rec })]) });
     if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueLoad().length); }  // server rejected -> retry later
     else moSaveStatus('saved');
   } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueLoad().length); }      // offline -> durable queue, retry later
@@ -4342,14 +4362,17 @@ async function cloudDelete(cfg, id){
   if(!cfgComplete(cfg) || !id) return;
   moSaveStatus('saving');
   try {
-    const res = await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent(id)), { method:'DELETE', headers:_headers(cfg) });
+    const res = await fetch(_rest(cfg,'rpc/soft_delete_record'), {
+      method:'POST', headers:_headers(cfg,{'Content-Type':'application/json'}),
+      body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_record_id:id})
+    });
     if(!res.ok){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueLoad().length); }
     else moSaveStatus('saved');
   } catch(e){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueLoad().length); }
 }
 async function cloudPushAll(cfg, db){
   if(!cfgComplete(cfg)) return;
-  const rows=[]; COLLECTIONS.forEach(coll=>(db[coll]||[]).forEach(r=>r&&r.id&&rows.push({id:r.id,coll,data:r})));
+  const rows=[]; COLLECTIONS.forEach(coll=>(db[coll]||[]).forEach(r=>r&&r.id&&rows.push(tenantRecord({id:r.id,coll,data:r}))));
   // chunk to keep payloads reasonable; count failures so a broken bulk upload
   // is VISIBLE instead of silently reporting success
   let failed=0;
@@ -4397,10 +4420,13 @@ async function syncQueueDrain(){
         if(item.type==='upsert' && item.rec && item.rec.id){
           const res=await fetch(_rest(cfg,'records?on_conflict=id'),
             { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
-              body: JSON.stringify([{ id:item.rec.id, coll:item.coll, data:item.rec }]) });
+              body: JSON.stringify([tenantRecord({ id:item.rec.id, coll:item.coll, data:item.rec })]) });
           ok=res.ok;
         } else if(item.type==='delete' && item.id){
-          const res=await fetch(_rest(cfg,'records?id=eq.'+encodeURIComponent(item.id)), { method:'DELETE', headers:_headers(cfg) });
+          const res=await fetch(_rest(cfg,'rpc/soft_delete_record'), {
+            method:'POST', headers:_headers(cfg,{'Content-Type':'application/json'}),
+            body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_record_id:item.id})
+          });
           ok=res.ok;
         } else { ok=true; } // unknown/corrupt item -> drop rather than retry forever
       } catch(e){ ok=false; }
@@ -5579,6 +5605,12 @@ const getVerifyTok = ()=>{ try { return new URLSearchParams(location.search).get
 const getBriefTok = ()=>{ try { return new URLSearchParams(location.search).get('brief')||''; } catch(e){ return ''; } };
 const sbBase = (cfg)=> ((cfg&&cfg.url)||'https://jdylrthffifbhyrrhuqd.supabase.co').replace(/\/$/,'');
 const sbKey  = (cfg)=> (cfg&&cfg.key)||'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz';
+async function publicFormApi(action,payload){
+  const response=await fetch('/api/public-form',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},payload||{}))});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.ok) throw new Error(data.error||('public-form-'+response.status));
+  return data;
+}
 const campaignLink = (slug)=>{ try { return location.origin+location.pathname+'?form='+encodeURIComponent(slug); } catch(e){ return '?form='+slug; } };
 const campaignEmbed = (slug)=> '<iframe src="'+campaignLink(slug)+'" style="width:100%;max-width:520px;height:660px;border:0;border-radius:16px" title="Magnet form"></iframe>';
 
@@ -5589,9 +5621,8 @@ function PublicForm({ slug, cfg }){
   const [hp,setHp] = useState('');
   const [busy,setBusy] = useState(false);
   useEffect(()=>{
-    fetch(sbBase(cfg)+'/rest/v1/records?coll=eq.campaigns&data->>slug=eq.'+encodeURIComponent(slug)+'&select=id,data', {headers:{apikey:sbKey(cfg)}})
-      .then(r=>r.ok?r.json():Promise.reject()).then(rows=>{
-        const c = rows&&rows[0]&&rows[0].data;
+    publicFormApi('campaign.get',{slug}).then(result=>{
+        const c = result&&result.campaign;
         if(c && (c.status==='Active'||!c.status)){ setCamp(c); setState('ready'); } else setState('notfound');
       }).catch(()=>setState('error'));
   },[slug]);
@@ -5607,7 +5638,7 @@ function PublicForm({ slug, cfg }){
     CAMPAIGN_FIELD_CATALOG.forEach(f=>{ const v=vals[f.key]; if(v!=null&&String(v).trim()!=='') lead[f.lead]=v; });
     const notif={ id:'nt-'+Math.random().toString(36).slice(2,10), userId:null, role:'Sales', title:'New campaign lead', message:(lead.name||'Someone')+(camp.name?(' · '+camp.name):''), entityType:'leads', entityId:id, read:false, createdAt:now };
     try {
-      const res=await fetch(sbBase(cfg)+'/rest/v1/records?on_conflict=id', {method:'POST', headers:{apikey:sbKey(cfg),'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify([{id,coll:'leads',data:lead},{id:notif.id,coll:'notifications',data:notif}])});
+      const res=await fetch('/api/intake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({type:'lead'},lead))});
       if(!res.ok) throw new Error('write failed');
       setState('done');
     } catch(err){ setBusy(false); alert('حصلت مشكلة، جرّب تاني. | Something went wrong. Please try again.'); }
@@ -5807,16 +5838,14 @@ function PublicBrief({ token, cfg }){
   const [err,setErr]=useState('');
   useEffect(()=>{ (async()=>{
     try{
-      const res=await fetch(sbBase(cfg)+'/rest/v1/records?coll=eq.briefs&data->>token=eq.'+encodeURIComponent(token)+'&select=id,data',{headers:{apikey:sbKey(cfg)}});
-      if(!res.ok) throw new Error(); const rows=await res.json(); const row=rows&&rows[0];
+      const result=await publicFormApi('brief.get',{token}); const row=result&&result.brief;
       if(!row){ setState('notfound'); return; }
       setRec(row); const b=row.data||{};
       let draft={}; try{ draft=JSON.parse(localStorage.getItem('magnet_brief_'+token)||'{}')||{}; }catch(_){}
       setVals(Object.assign({}, b.answers||{}, draft));
       if(b.status==='submitted'){ setState('submitted'); return; }
       setState('ready');
-      if(b.status==='pending'){ const upd=Object.assign({},b,{status:'opened',openedAt:new Date().toISOString()});
-        fetch(sbBase(cfg)+'/rest/v1/records?on_conflict=id',{method:'POST',headers:{apikey:sbKey(cfg),'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([{id:row.id,coll:'briefs',data:upd}])}).catch(()=>{}); }
+      if(b.status==='pending') publicFormApi('brief.open',{token}).catch(()=>{});
     }catch(e){ setState('error'); }
   })(); },[token]);
   const onChange=(k,v)=>{ setVals(p=>{ const n={...p,[k]:v}; try{ localStorage.setItem('magnet_brief_'+token, JSON.stringify(n)); }catch(_){} return n; }); };
@@ -5832,8 +5861,8 @@ function PublicBrief({ token, cfg }){
       clientName:vals.contactName||b.clientName, company:vals.company||b.company, contactPhone:vals.whatsapp||b.contactPhone, contactEmail:vals.email||b.contactEmail,
       projectType:(Array.isArray(vals.projectType)?vals.projectType.join(', '):vals.projectType)||b.projectType, updatedAt:now });
     const notif={ id:'nt-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), userId:null, role:'Sales', title:'New client brief submitted', message:(upd.company||upd.clientName||'A client')+' completed the brief', entityType:'briefs', entityId:rec.id, read:false, createdAt:now };
-    try{ const res=await fetch(sbBase(cfg)+'/rest/v1/records?on_conflict=id',{method:'POST',headers:{apikey:sbKey(cfg),'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([{id:rec.id,coll:'briefs',data:upd},{id:notif.id,coll:'notifications',data:notif}])});
-      if(!res.ok) throw new Error(); try{ localStorage.removeItem('magnet_brief_'+token); }catch(_){} setState('done');
+    try{ await publicFormApi('brief.submit',{token,answers:vals});
+      try{ localStorage.removeItem('magnet_brief_'+token); }catch(_){} setState('done');
     }catch(e){ setBusy(false); setErr('حصل خطأ، حاول تاني.'); }
   };
   const msg=(t,s)=>html`<div class="brf-wrap" dir="rtl"><div class="brf-card brf-msgcard"><img class="pf-logo" src="magnet-logo.png" onError=${e=>{e.target.style.display='none';}}/><div class="pf-msg"><h2>${t}</h2><p>${s}</p></div></div></div>`;
@@ -6288,15 +6317,11 @@ function App(){
     try { if(Date.now()-(+localStorage.getItem(KEY)||0) < 86400000) return; } catch(e){}
     const prune=async(coll,keep)=>{
       try {
-        const res=await fetch(_rest(cfg.current,'records?select=id&coll=eq.'+coll+'&order=data->>createdAt.desc.nullslast'),
-          { headers:_headers(cfg.current,{ Range:keep+'-'+(keep+999), 'Range-Unit':'items' }) });
-        if(!res.ok) return;
-        const olds=await res.json(); if(!Array.isArray(olds)||!olds.length) return;
-        for(let i=0;i<olds.length;i+=100){
-          const ids=olds.slice(i,i+100).map(r=>r.id).join(',');
-          await fetch(_rest(cfg.current,'records?coll=eq.'+coll+'&id=in.('+encodeURIComponent(ids)+')'),
-            { method:'DELETE', headers:_headers(cfg.current) });
-        }
+        const res=await fetch(_rest(cfg.current,'rpc/prune_ephemeral_records'),{
+          method:'POST',headers:_headers(cfg.current,{'Content-Type':'application/json'}),
+          body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_collection:coll,p_keep:keep})
+        });
+        if(!res.ok) throw new Error('retention prune failed ('+res.status+')');
       } catch(e){}
     };
     (async()=>{ await prune('activityLogs',500); await prune('notifications',300); try{ localStorage.setItem(KEY,String(Date.now())); }catch(e){} })();
@@ -6348,11 +6373,13 @@ function App(){
         const mod = await import('https://esm.sh/@supabase/supabase-js@2');
         if(!alive) return;
         client = mod.createClient(cfg.current.url, cfg.current.key, { auth:{ persistSession:false }, realtime:{ params:{ eventsPerSecond:10 } } });
+        const tenantId=tenantOrganizationId();
         channel = client.channel('records-live')
-          .on('postgres_changes', { event:'*', schema:'public', table:'records' }, (p)=>{
+          .on('postgres_changes', Object.assign({ event:'*', schema:'public', table:'records' },tenantId?{filter:'organization_id=eq.'+tenantId}:{}), (p)=>{
             try {
               if(p.eventType==='DELETE'){ const o=p.old||{}; removeRow(o.coll, o.id); return; }
-              const n=p.new||{}; if(n.coll==='_accounts'||n.coll==='_ratelimit') return; applyRow(n.coll, Object.assign({id:n.id}, n.data||{}));
+              const n=p.new||{}; if(n.coll==='_accounts'||n.coll==='_ratelimit') return;
+              const rec=Object.assign({id:n.id},n.data||{}); if(n.deleted_at||rec._del){removeRow(n.coll,n.id);return;} applyRow(n.coll,rec);
             } catch(e){}
           })
           .subscribe();
