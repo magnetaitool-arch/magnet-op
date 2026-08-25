@@ -1184,6 +1184,68 @@ body.theme-light .tbl thead th{background:#fff}
 .step-prog{height:3px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;margin:0 0 2px}
 .step-prog i{display:block;height:100%;background:var(--lime);border-radius:3px;transition:width .3s var(--ease)}
 
+/* Recruitment V2 — dense, profile-first applicant workspace */
+.rec-shell{display:flex;flex-direction:column;gap:14px}
+.rec-stages{display:grid;grid-template-columns:repeat(8,minmax(105px,1fr));gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.rec-stage-tab{min-width:105px;border:1px solid var(--line);background:var(--panel);color:var(--ink-3);border-radius:12px;padding:10px 11px;text-align:start;cursor:pointer;transition:.15s var(--ease)}
+.rec-stage-tab:hover{border-color:var(--line-strong);color:var(--ink)}
+.rec-stage-tab.on{border-color:rgba(200,243,30,.55);background:var(--lime-glow);color:var(--ink);box-shadow:inset 0 0 0 1px rgba(200,243,30,.08)}
+.rec-stage-tab b{display:block;font:700 19px/1 var(--display);color:var(--ink);margin-bottom:5px}
+.rec-stage-tab span{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.rec-toolbar{display:grid;grid-template-columns:minmax(230px,1fr) 160px 180px auto;gap:8px;align-items:center}
+.rec-search{position:relative;min-width:0}
+.rec-search svg{position:absolute;inset-inline-start:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-4)}
+.rec-search input{width:100%;height:39px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:0 12px 0 36px;outline:none}
+[dir="rtl"] .rec-search input{padding:0 36px 0 12px}
+.rec-search input:focus{border-color:rgba(200,243,30,.55);box-shadow:0 0 0 3px rgba(200,243,30,.08)}
+.rec-view-toggle{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--panel);justify-self:end}
+.rec-view-toggle button{width:32px;height:31px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:var(--ink-4);cursor:pointer}
+.rec-view-toggle button.on{background:var(--panel-hi);color:var(--lime)}
+.rec-view-toggle svg{width:15px;height:15px}
+.rec-list{border:1px solid var(--line);border-radius:15px;overflow:hidden;background:var(--panel)}
+.rec-list-head,.rec-row{display:grid;grid-template-columns:minmax(220px,1.6fr) minmax(130px,.9fr) 112px 110px 122px 74px;gap:14px;align-items:center;padding:11px 14px}
+.rec-list-head{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);background:var(--panel-hi);font-weight:700}
+.rec-row{border-top:1px solid var(--line);cursor:pointer;transition:.14s var(--ease);min-height:67px}
+.rec-row:hover,.rec-row:focus-visible{background:rgba(255,255,255,.035);outline:none}
+.rec-person{display:flex;align-items:center;gap:10px;min-width:0}
+.rec-avatar{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;background:linear-gradient(145deg,rgba(200,243,30,.18),rgba(63,215,255,.08));border:1px solid rgba(200,243,30,.2);font:700 12px var(--display);color:var(--lime)}
+.rec-person-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rec-person-copy b,.rec-truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-person-copy b{font-size:13.5px}.rec-person-copy span{font-size:11px;color:var(--ink-3)}
+.rec-cell{font-size:12px;color:var(--ink-2);min-width:0}.rec-cell small{display:block;color:var(--ink-4);margin-top:3px}
+.rec-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 8px;font-size:10.5px;font-weight:700;width:max-content;max-width:100%}
+.rec-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.rec-badge.new{color:#72a7ff}.rec-badge.screening{color:#b48cff}.rec-badge.interview{color:#ffc24b}.rec-badge.offer{color:#3fd7ff}.rec-badge.hired{color:#55df8b}.rec-badge.rejected{color:#ff6f74}.rec-badge.archived{color:#8e969f}
+.rec-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rec-card{border:1px solid var(--line);border-radius:15px;padding:14px;background:var(--panel);cursor:pointer;transition:.15s var(--ease);min-width:0}
+.rec-card:hover,.rec-card:focus-visible{transform:translateY(-2px);border-color:var(--line-strong);box-shadow:0 14px 32px -24px #000;outline:none}
+.rec-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.rec-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}
+.rec-card-meta span{font-size:10px;color:var(--ink-4)}.rec-card-meta b{display:block;color:var(--ink-2);font-size:11.5px;margin-top:3px;font-weight:600}
+.rec-empty{min-height:220px;display:grid;place-items:center;text-align:center;border:1px dashed var(--line-strong);border-radius:15px;background:rgba(255,255,255,.015);color:var(--ink-3);padding:28px}
+.rec-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--ink-3);font-size:11px}
+.rec-profile-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.rec-profile-title{display:flex;gap:12px;align-items:center;min-width:0}.rec-profile-title .rec-avatar{width:48px;height:48px;border-radius:14px;font-size:14px}
+.rec-profile-title h2{font:700 22px/1.1 var(--display);margin:0;color:var(--ink)}.rec-profile-title p{margin:5px 0 0;color:var(--ink-3);font-size:12px}
+.rec-profile-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.rec-profile-actions select{height:34px;max-width:145px}
+.rec-tabs{display:flex;gap:4px;overflow-x:auto;padding:14px 0 9px;scrollbar-width:thin;position:sticky;top:0;background:var(--bg-2);z-index:2}
+.rec-tabs button{white-space:nowrap;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--ink-3);font-size:11.5px;padding:7px 10px;cursor:pointer}
+.rec-tabs button:hover{color:var(--ink)}.rec-tabs button.on{background:var(--panel-hi);border-color:var(--line);color:var(--lime)}
+.rec-section{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:15px;margin-top:8px}
+.rec-section h4{margin:0 0 12px;font:700 13px var(--display);color:var(--ink)}
+.rec-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rec-fact{background:var(--panel);padding:12px;min-width:0}.rec-fact span{display:block;color:var(--ink-4);font-size:10px;text-transform:uppercase;letter-spacing:.06em}.rec-fact b{display:block;color:var(--ink-2);font-size:12px;margin-top:5px;overflow-wrap:anywhere}
+.rec-answer-list{display:grid;grid-template-columns:1fr 1fr;gap:8px}.rec-answer{border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}.rec-answer span{font-size:10px;color:var(--ink-4)}.rec-answer p{font-size:12px;color:var(--ink-2);margin:5px 0 0;overflow-wrap:anywhere}
+.rec-note-form,.rec-interview-form{display:grid;gap:8px}.rec-interview-form{grid-template-columns:1.2fr .7fr 1fr}.rec-interview-form .full{grid-column:1/-1}
+.rec-note{border-inline-start:2px solid var(--lime);padding:8px 11px;margin-top:8px;background:rgba(255,255,255,.02);border-radius:0 9px 9px 0}.rec-note p{margin:0;color:var(--ink-2);font-size:12px;white-space:pre-wrap}.rec-note small{display:block;margin-top:6px;color:var(--ink-4)}
+[dir="rtl"] .rec-note{border-inline-start:2px solid var(--lime);border-radius:9px 0 0 9px}
+.rec-timeline{display:flex;flex-direction:column;gap:0}.rec-time{display:grid;grid-template-columns:12px 1fr;gap:10px;padding-bottom:14px}.rec-time i{width:8px;height:8px;border-radius:50%;margin-top:4px;background:var(--lime);box-shadow:0 0 0 4px rgba(200,243,30,.09)}.rec-time:not(:last-child) i::after{content:"";display:block;width:1px;height:35px;background:var(--line);margin:8px auto 0}.rec-time b{font-size:12px}.rec-time span{display:block;color:var(--ink-4);font-size:10.5px;margin-top:4px}
+.rec-link-card{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:12px;padding:13px;color:var(--ink-2);text-decoration:none}.rec-link-card:hover{border-color:rgba(200,243,30,.45);color:var(--lime)}
+.rec-error{border:1px solid rgba(255,111,116,.35);background:rgba(255,111,116,.07);color:#ff9498;border-radius:12px;padding:11px 13px;font-size:12px}
+@media(max-width:1050px){.rec-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-list-head,.rec-row{grid-template-columns:minmax(200px,1.4fr) minmax(120px,.8fr) 110px 112px 70px}.rec-list-head>:nth-child(5),.rec-row>:nth-child(5){display:none}.rec-toolbar{grid-template-columns:minmax(220px,1fr) 145px 165px auto}}
+@media(max-width:767px){.rec-toolbar{grid-template-columns:1fr 1fr}.rec-search{grid-column:1/-1}.rec-view-toggle{justify-self:stretch}.rec-view-toggle button{flex:1}.rec-list-head{display:none}.rec-row{grid-template-columns:1fr auto;padding:13px;gap:9px}.rec-row>:nth-child(2),.rec-row>:nth-child(4),.rec-row>:nth-child(5){display:none}.rec-row>:nth-child(3){grid-column:2;grid-row:1}.rec-row>:nth-child(6){grid-column:2;grid-row:2}.rec-cards{grid-template-columns:1fr}.rec-profile-head{flex-direction:column}.rec-profile-actions{justify-content:flex-start}.rec-facts,.rec-answer-list{grid-template-columns:1fr 1fr}.rec-interview-form{grid-template-columns:1fr}.rec-pagination{align-items:flex-start;flex-direction:column}}
+@media(max-width:430px){.rec-facts,.rec-answer-list{grid-template-columns:1fr}.rec-toolbar{grid-template-columns:1fr}.rec-toolbar>*{grid-column:1}.rec-view-toggle{justify-self:stretch}}
+
 </style></head>
 <body>
 <style>
@@ -1318,11 +1380,13 @@ body.theme-light .tbl thead th{background:#fff}
       // missing or invalid. Never reuse a cached Production config in Preview.
       localStorage.removeItem(__CFG_KEY);
       window.__MAGNET_RUNTIME_CONFIG_ERROR__=true;
-    } else if(!__ex || !__ex.url || !__ex.key){
-      localStorage.setItem(__CFG_KEY, JSON.stringify({
-        url:"https://jdylrthffifbhyrrhuqd.supabase.co",
-        key:"sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz"
-      }));
+    } else {
+      // file:// is intentionally offline unless a config was explicitly saved
+      // on this device. Never seed a local preview with Production credentials.
+      if(!__ex || !__ex.url || !__ex.key){
+        localStorage.removeItem(__CFG_KEY);
+        window.__MAGNET_RUNTIME_CONFIG_ERROR__=true;
+      }
     }
     // Start in Focused mode (lean menu). Owner can change it in Settings -> Modules.
     var __ASK='tia_agency_os_appsettings';
@@ -2519,7 +2583,7 @@ function filterRecordsByRole(coll, records, role, user, db){
 /* ============================ STATUS OPTIONS ============================ */
 const ST = {
   leadStage:['New Lead','Contacted','Qualified','Meeting Booked','Meeting Done','Proposal Needed','Proposal Sent','Quotation Sent','Negotiation','Won','Lost','Follow-up Later'],
-  candidateStage:['New','Screening','Interview','Offer','Hired','Rejected'],
+  candidateStage:['New','Screening','Interview','Offer','Hired','Rejected','Archived'],
   client:['Lead','Onboarding','Active','Paused','At Risk','Completed','Renewal Needed','Churned','Archived'],
   project:['Not Started','Brief Needed','Brief Received','Planning','In Progress','Internal Review','Client Review','Revisions','Approved','Delivered','Completed','Paused','Cancelled','Archived'],
   task:['Backlog','To Do','In Progress','Waiting for Client','Internal Review','Client Review','Revisions','Approved','Scheduled','Delivered','Done','Blocked','Cancelled'],
@@ -4189,6 +4253,26 @@ async function cloudUpdateOrganizationSettings(cfg,patch,expectedVersion){
 }
 try{ window.__magnetSettings={load:cloudLoadOrganizationSettings,update:cloudUpdateOrganizationSettings,local:getAppSettings}; }catch(e){}
 
+/* Recruitment V2 commands are server-authorized against the selected tenant.
+   The browser never writes the canonical recruitment tables directly. */
+async function recruitmentRpc(cfg,name,payload){
+  if(!cfgComplete(cfg)) throw new Error('cloud-configuration-required');
+  await sbEnsureFresh(cfg);
+  if(!sbAccessToken()) throw new Error('authenticated-session-required');
+  const res=await fetch(_rest(cfg,'rpc/'+name),{
+    method:'POST',
+    headers:_headers(cfg,{'Content-Type':'application/json'}),
+    body:JSON.stringify(payload||{})
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){
+    const message=String(data&&data.message||data&&data.error||('recruitment-'+res.status));
+    const error=new Error(message); error.status=res.status; throw error;
+  }
+  return data;
+}
+try{ window.__magnetRecruitment={rpc:recruitmentRpc}; }catch(e){}
+
 function currentIdentityHasCapability(capability){ try{ const user=getSessionUser(); return !!(user&&Array.isArray(user.capabilities)&&user.capabilities.includes(capability)); }catch(e){ return false; } }
 async function cloudLoadEmployeeDirectory(cfg,since){
   // HR/Finance/Owner already receive full employee rows through RLS; loading a
@@ -5708,8 +5792,8 @@ const slugify = (s)=> String(s||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'
 const getFormSlug = ()=>{ try { const p=new URLSearchParams(location.search); return p.get('form')||''; } catch(e){ return ''; } };
 const getVerifyTok = ()=>{ try { return new URLSearchParams(location.search).get('verify')||''; } catch(e){ return ''; } };
 const getBriefTok = ()=>{ try { return new URLSearchParams(location.search).get('brief')||''; } catch(e){ return ''; } };
-const sbBase = (cfg)=> ((cfg&&cfg.url)||'https://jdylrthffifbhyrrhuqd.supabase.co').replace(/\/$/,'');
-const sbKey  = (cfg)=> (cfg&&cfg.key)||'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz';
+const sbBase = (cfg)=> ((cfg&&cfg.url)||'').replace(/\/$/,'');
+const sbKey  = (cfg)=> (cfg&&cfg.key)||'';
 async function publicFormApi(action,payload){
   const response=await fetch('/api/public-form',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},payload||{}))});
   const data=await response.json().catch(()=>({}));
@@ -7560,6 +7644,198 @@ const FORM_SCHEMAS = {
 };
 window.FORM_SCHEMAS = FORM_SCHEMAS;
 
+/* ============================ RECRUITMENT V2 ============================ */
+const REC_STAGES=['New','Screening','Interview','Offer','Hired','Rejected','Archived'];
+const REC_TABS=['Overview','Application Answers','CV','Portfolio','Experience','Salary Expectation','Interview','Internal Notes','Attachments','Timeline'];
+const recInitials=(name)=>String(name||'?').trim().split(/\s+/).slice(0,2).map(part=>part[0]||'').join('').toUpperCase();
+const recValue=(value)=>{
+  if(value===null||value===undefined||value==='') return '—';
+  if(Array.isArray(value)) return value.length?value.join(', '):'—';
+  if(typeof value==='object') return JSON.stringify(value);
+  return String(value);
+};
+function RecBadge({stage}){
+  const value=REC_STAGES.includes(stage)?stage:'New';
+  return html`<span class="rec-badge ${value.toLowerCase()}">${value}</span>`;
+}
+function RecFact({label,value}){
+  return html`<div class="rec-fact"><span>${label}</span><b>${recValue(value)}</b></div>`;
+}
+function ApplicantProfileModal({ctx,detail,canEdit,busy,error,onClose,onStage,onNote,onInterview,onEdit,onHire}){
+  const ar=ctx.lang==='ar';
+  const L=(en,ara)=>ar?ara:en;
+  const [tab,setTab]=useState('Overview');
+  const [note,setNote]=useState('');
+  const [interviewAt,setInterviewAt]=useState('');
+  const [interviewMode,setInterviewMode]=useState('Online');
+  const [interviewLink,setInterviewLink]=useState('');
+  const [interviewNotes,setInterviewNotes]=useState('');
+  const profile=detail&&detail.applicant;
+  if(!profile) return html`<${Modal} wide title=${L('Applicant profile','ملف المتقدم')} onClose=${onClose}><div class="rec-empty">${L('Loading applicant profile…','جاري تحميل ملف المتقدم…')}</div><//>`;
+  const answers=Object.entries(profile.applicationAnswers||{}).filter(([key])=>!['_del','attachments','notes','stage','status'].includes(key));
+  const attachments=Array.isArray(profile.attachments)?profile.attachments:[];
+  const whatsapp=String(profile.phone||'').replace(/\D/g,'');
+  const submitNote=async(e)=>{ e.preventDefault(); if(!note.trim())return; await onNote(note.trim()); setNote(''); };
+  const submitInterview=async(e)=>{
+    e.preventDefault();
+    if(!interviewAt)return;
+    await onInterview({scheduledAt:new Date(interviewAt).toISOString(),mode:interviewMode,locationOrLink:interviewLink.trim(),notes:interviewNotes.trim()});
+    setInterviewAt(''); setInterviewLink(''); setInterviewNotes(''); setTab('Interview');
+  };
+  const tabLabel=(name)=>({
+    'Overview':'نظرة عامة','Application Answers':'إجابات التقديم','CV':'السيرة الذاتية','Portfolio':'الأعمال',
+    'Experience':'الخبرة','Salary Expectation':'الراتب المتوقع','Interview':'المقابلة','Internal Notes':'ملاحظات داخلية',
+    'Attachments':'المرفقات','Timeline':'السجل الزمني'
+  })[name]||name;
+  return html`<${Modal} wide title=${L('Applicant profile','ملف المتقدم')} onClose=${onClose}>
+    <div class="rec-profile-head">
+      <div class="rec-profile-title"><div class="rec-avatar">${recInitials(profile.fullName)}</div><div>
+        <h2>${profile.fullName}</h2><p>${profile.position||L('Position not specified','الوظيفة غير محددة')} · ${L('Applied','تاريخ التقديم')} ${fmtDate(profile.appliedAt)}</p>
+        <div class="flex gap8" style=${{marginTop:8,flexWrap:'wrap'}}><${RecBadge} stage=${profile.stage}/><span class="rec-badge">${profile.source||'Manual'}</span></div>
+      </div></div>
+      <div class="rec-profile-actions">
+        ${profile.email&&html`<a class="mini" href=${'mailto:'+profile.email}>${React.createElement(Icon.mail)} ${L('Email','إيميل')}</a>`}
+        ${whatsapp&&html`<a class="mini" href=${'https://wa.me/'+whatsapp} target="_blank" rel="noopener">${React.createElement(Icon.link)} WhatsApp</a>`}
+        ${canEdit&&html`<button class="mini" onClick=${onEdit}>${L('Edit','تعديل')}</button>`}
+        ${canEdit&&html`<select class="sel" value=${profile.stage} disabled=${busy} onChange=${e=>onStage(e.target.value)} aria-label=${L('Move applicant stage','نقل مرحلة المتقدم')}>
+          ${REC_STAGES.map(stage=>html`<option key=${stage} value=${stage}>${stage}</option>`)}</select>`}
+      </div>
+    </div>
+    ${error&&html`<div class="rec-error" style=${{marginTop:12}}>${error}</div>`}
+    <div class="rec-tabs" role="tablist">${REC_TABS.map(name=>html`<button key=${name} class=${tab===name?'on':''} onClick=${()=>setTab(name)}>${ar?tabLabel(name):name}</button>`)}</div>
+
+    ${tab==='Overview'&&html`<div class="rec-section"><h4>${L('Applicant details','بيانات المتقدم')}</h4><div class="rec-facts">
+      <${RecFact} label=${L('Email','الإيميل')} value=${profile.email}/><${RecFact} label=${L('Phone','الموبايل')} value=${profile.phone}/><${RecFact} label=${L('Area','المنطقة')} value=${profile.area}/>
+      <${RecFact} label=${L('Position','الوظيفة')} value=${profile.position}/><${RecFact} label=${L('Specialization','التخصص')} value=${profile.specialization}/><${RecFact} label=${L('Available from','متاح من')} value=${fmtDate(profile.availableFrom)}/>
+      <${RecFact} label=${L('Source','المصدر')} value=${profile.source}/><${RecFact} label=${L('Rating','التقييم')} value=${profile.rating}/><${RecFact} label=${L('Game score','نتيجة الاختبار')} value=${profile.gameScore}/>
+    </div>${canEdit&&html`<div class="flex gap8" style=${{marginTop:13,flexWrap:'wrap'}}>
+      ${profile.stage==='New'&&html`<button class="btn btn-pri" disabled=${busy} onClick=${()=>onStage('Screening')}>${L('Shortlist','قائمة مختصرة')}</button>`}
+      ${!['Hired','Rejected','Archived'].includes(profile.stage)&&html`<button class="btn" disabled=${busy} onClick=${()=>{setTab('Interview');}}>${React.createElement(Icon.calendar)} ${L('Schedule interview','تحديد مقابلة')}</button>`}
+      ${profile.stage!=='Rejected'&&profile.stage!=='Hired'&&html`<button class="btn" disabled=${busy} onClick=${()=>onStage('Rejected')}>${L('Reject','رفض')}</button>`}
+      ${profile.stage!=='Hired'&&html`<button class="btn btn-pri" disabled=${busy} onClick=${onHire}>${React.createElement(Icon.check)} ${L('Hire & create employee','تعيين وإنشاء موظف')}</button>`}
+    </div>`}</div>`}
+
+    ${tab==='Application Answers'&&html`<div class="rec-section"><h4>${L('Submitted answers','إجابات نموذج التقديم')}</h4>
+      ${answers.length?html`<div class="rec-answer-list">${answers.map(([key,value])=>html`<div class="rec-answer" key=${key}><span>${key.replace(/([A-Z])/g,' $1')}</span><p>${recValue(value)}</p></div>`)}</div>`:html`<div class="muted">${L('No application answers were recorded.','لا توجد إجابات مسجلة.')}</div>`}
+    </div>`}
+    ${tab==='CV'&&html`<div class="rec-section"><h4>CV</h4>${profile.cvLink?html`<a class="rec-link-card" href=${profile.cvLink} target="_blank" rel="noopener"><span>${React.createElement(Icon.fileText)} ${L('Open CV','فتح السيرة الذاتية')}</span>${React.createElement(Icon.arrowRight)}</a>`:html`<div class="muted">${L('No CV link was submitted.','لم يتم إضافة رابط للسيرة الذاتية.')}</div>`}</div>`}
+    ${tab==='Portfolio'&&html`<div class="rec-section"><h4>${L('Portfolio','ملف الأعمال')}</h4>${profile.portfolioLink?html`<a class="rec-link-card" href=${profile.portfolioLink} target="_blank" rel="noopener"><span>${React.createElement(Icon.link)} ${L('Open portfolio','فتح ملف الأعمال')}</span>${React.createElement(Icon.arrowRight)}</a>`:html`<div class="muted">${L('No portfolio link was submitted.','لم يتم إضافة رابط للأعمال.')}</div>`}</div>`}
+    ${tab==='Experience'&&html`<div class="rec-section"><h4>${L('Experience and qualifications','الخبرة والمؤهلات')}</h4><div class="rec-facts"><${RecFact} label=${L('Experience','سنوات الخبرة')} value=${profile.experience}/><${RecFact} label=${L('Previous workplaces','أماكن العمل السابقة')} value=${profile.workplaces}/><${RecFact} label=${L('Courses / certifications','الكورسات والشهادات')} value=${profile.courses}/></div></div>`}
+    ${tab==='Salary Expectation'&&html`<div class="rec-section"><h4>${L('Salary expectation','توقعات الراتب')}</h4><div class="rec-facts"><${RecFact} label=${L('Current salary','الراتب الحالي')} value=${profile.currentSalary==null?'—':money(profile.currentSalary)}/><${RecFact} label=${L('Expected salary','الراتب المتوقع')} value=${profile.expectedSalary==null?'—':money(profile.expectedSalary)}/><${RecFact} label=${L('Available from','متاح من')} value=${fmtDate(profile.availableFrom)}/></div></div>`}
+    ${tab==='Interview'&&html`<div class="rec-section"><h4>${L('Schedule interview','تحديد مقابلة')}</h4>
+      ${canEdit&&html`<form class="rec-interview-form" onSubmit=${submitInterview}>
+        <label class="fld"><span>${L('Date and time','التاريخ والوقت')}</span><input type="datetime-local" required value=${interviewAt} onChange=${e=>setInterviewAt(e.target.value)}/></label>
+        <label class="fld"><span>${L('Mode','النوع')}</span><select value=${interviewMode} onChange=${e=>setInterviewMode(e.target.value)}><option>Online</option><option>Office</option><option>Phone</option></select></label>
+        <label class="fld"><span>${L('Link / location','الرابط / المكان')}</span><input value=${interviewLink} onChange=${e=>setInterviewLink(e.target.value)}/></label>
+        <label class="fld full"><span>${L('Interview notes','ملاحظات المقابلة')}</span><textarea rows="2" value=${interviewNotes} onChange=${e=>setInterviewNotes(e.target.value)}></textarea></label>
+        <div class="full"><button class="btn btn-pri" disabled=${busy} type="submit">${busy?L('Saving…','جاري الحفظ…'):L('Schedule interview','تأكيد المقابلة')}</button></div>
+      </form>`}
+      ${(detail.interviews||[]).map(interview=>html`<div class="rec-note" key=${interview.id}><p><b>${fmtDateTime(interview.scheduledAt)}</b> · ${interview.mode} · ${interview.durationMinutes||45} min${interview.locationOrLink?' · '+interview.locationOrLink:''}</p>${interview.notes&&html`<small>${interview.notes}</small>`}</div>`)}
+      ${!(detail.interviews||[]).length&&html`<div class="muted" style=${{marginTop:10}}>${L('No interviews scheduled yet.','لا توجد مقابلات محددة حتى الآن.')}</div>`}
+    </div>`}
+    ${tab==='Internal Notes'&&html`<div class="rec-section"><h4>${L('Private HR notes','ملاحظات HR الداخلية')}</h4>
+      ${canEdit&&html`<form class="rec-note-form" onSubmit=${submitNote}><textarea rows="3" placeholder=${L('Write an internal note…','اكتب ملاحظة داخلية…')} value=${note} onChange=${e=>setNote(e.target.value)}></textarea><div><button class="btn btn-pri" disabled=${busy||!note.trim()} type="submit">${L('Add note','إضافة ملاحظة')}</button></div></form>`}
+      ${(detail.notes||[]).map(item=>html`<div class="rec-note" key=${item.id}><p>${item.note}</p><small>${fmtDateTime(item.createdAt)}</small></div>`)}
+      ${!(detail.notes||[]).length&&html`<div class="muted" style=${{marginTop:10}}>${L('No internal notes.','لا توجد ملاحظات داخلية.')}</div>`}
+    </div>`}
+    ${tab==='Attachments'&&html`<div class="rec-section"><h4>${L('Attachments','المرفقات')}</h4>${attachments.length?attachments.map((item,index)=>{const link=typeof item==='string'?item:item.url||item.link;const label=typeof item==='string'?L('Attachment ','مرفق ')+(index+1):item.name||L('Attachment ','مرفق ')+(index+1);return link?html`<a class="rec-link-card" style=${{marginTop:8}} href=${link} target="_blank" rel="noopener" key=${index}><span>${React.createElement(Icon.fileText)} ${label}</span>${React.createElement(Icon.arrowRight)}</a>`:html`<div class="rec-note" key=${index}><p>${label}</p></div>`;}):html`<div class="muted">${L('No attachments.','لا توجد مرفقات.')}</div>`}</div>`}
+    ${tab==='Timeline'&&html`<div class="rec-section"><h4>${L('Applicant timeline','السجل الزمني للمتقدم')}</h4><div class="rec-timeline">${(detail.timeline||[]).map(item=>html`<div class="rec-time" key=${item.id}><i></i><div><b>${item.fromStage?item.fromStage+' → ':''}${item.toStage}</b>${item.note&&html`<span>${item.note}</span>`}<span>${fmtDateTime(item.occurredAt)}</span></div></div>`)}</div>${!(detail.timeline||[]).length&&html`<div class="muted">${L('No timeline events.','لا توجد أحداث مسجلة.')}</div>`}</div>`}
+  <//>`;
+}
+
+function RecruitmentView({ctx,candidates,canEdit}){
+  const ar=ctx.lang==='ar';
+  const L=(en,ara)=>ar?ara:en;
+  const [stage,setStage]=useState('');
+  const [search,setSearch]=useState('');
+  const [query,setQuery]=useState('');
+  const [source,setSource]=useState('');
+  const [sort,setSort]=useState('applied_desc');
+  const [view,setView]=useState(()=>{try{return store.get('magnet_recruitment_view')||'list';}catch(e){return 'list';}});
+  const [page,setPage]=useState(1);
+  const [result,setResult]=useState({items:[],counts:{},total:0,page:1,pages:1});
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState('');
+  const [profile,setProfile]=useState(null);
+  const [profileBusy,setProfileBusy]=useState(false);
+  const [profileError,setProfileError]=useState('');
+  const deepLinkDone=useRef(false);
+  const organizationId=ctx.user&&ctx.user.organizationId||activeOrganizationId();
+
+  useEffect(()=>{const timer=setTimeout(()=>{setPage(1);setQuery(search.trim());},260);return()=>clearTimeout(timer);},[search]);
+  const load=async()=>{
+    if(!organizationId){setError(L('Choose an active organization first.','اختر المؤسسة النشطة أولًا.'));setLoading(false);return;}
+    setLoading(true); setError('');
+    try{
+      const data=await recruitmentRpc(ctx.cfg,'list_applicants',{p_organization_id:organizationId,p_stage:stage||null,p_search:query||null,p_source:source||null,p_sort:sort,p_page:page,p_page_size:20});
+      setResult(Object.assign({items:[],counts:{},total:0,page:1,pages:1},data||{}));
+    }catch(e){setError(L('Recruitment data could not be loaded: ','تعذر تحميل بيانات التوظيف: ')+String(e.message||e));}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[organizationId,stage,query,source,sort,page]);
+  const openApplicant=async(legacyRecordId)=>{
+    if(!legacyRecordId||!organizationId)return;
+    setProfile({}); setProfileBusy(true); setProfileError('');
+    try{const data=await recruitmentRpc(ctx.cfg,'get_applicant_profile',{p_organization_id:organizationId,p_legacy_record_id:legacyRecordId});if(!data||!data.ok)throw new Error('applicant-not-found');setProfile(data);}catch(e){setProfile(null);setError(L('Applicant profile could not be opened: ','تعذر فتح ملف المتقدم: ')+String(e.message||e));}
+    setProfileBusy(false);
+  };
+  useEffect(()=>{
+    if(deepLinkDone.current)return;
+    try{const params=new URLSearchParams(location.search);const open=params.get('open');const id=params.get('id');if(open==='candidates'&&id){deepLinkDone.current=true;openApplicant(id);}}catch(e){}
+  },[organizationId]);
+  const closeProfile=()=>{setProfile(null);setProfileError('');try{const url=new URL(location.href);url.searchParams.delete('open');url.searchParams.delete('id');history.replaceState({},'',url.pathname+(url.search?'?'+url.searchParams.toString():'')+url.hash);}catch(e){}};
+  const runProfileCommand=async(name,payload)=>{
+    if(!profile||!profile.applicant)return null;
+    setProfileBusy(true);setProfileError('');
+    try{const data=await recruitmentRpc(ctx.cfg,name,Object.assign({p_organization_id:organizationId,p_legacy_record_id:profile.applicant.legacyRecordId},payload||{}));setProfile(data);await load();return data;}catch(e){setProfileError(String(e.message||e));return null;}finally{setProfileBusy(false);}
+  };
+  const stageApplicant=(next)=>runProfileCommand('change_applicant_stage',{p_stage:next,p_note:null});
+  const addNote=(note)=>runProfileCommand('add_applicant_note',{p_note:note});
+  const scheduleInterview=(values)=>runProfileCommand('schedule_applicant_interview',{p_scheduled_at:values.scheduledAt,p_duration_minutes:45,p_mode:values.mode,p_location_or_link:values.locationOrLink||null,p_notes:values.notes||null});
+  const editApplicant=()=>{if(!profile||!profile.applicant)return;const legacy=(candidates||[]).find(item=>item.id===profile.applicant.legacyRecordId)||Object.assign({id:profile.applicant.legacyRecordId},profile.applicant,{mobile:profile.applicant.phone});ctx.openModal('candidates',legacy);closeProfile();};
+  const hireApplicant=async()=>{
+    if(!profile||!profile.applicant)return;
+    const legacy=(candidates||[]).find(item=>item.id===profile.applicant.legacyRecordId);
+    const updated=await runProfileCommand('change_applicant_stage',{p_stage:'Hired',p_note:L('Hired from Recruitment V2','تم التعيين من Recruitment V2')});
+    if(updated&&legacy&&!legacy.convertedEmployeeId)ctx.convertCandidate(Object.assign({},legacy,{stage:'Hired'}));
+  };
+  const chooseView=(next)=>{setView(next);try{store.set('magnet_recruitment_view',next);}catch(e){}};
+  const items=Array.isArray(result.items)?result.items:[];
+  const counts=result.counts||{};
+  const totalAll=REC_STAGES.reduce((sum,name)=>sum+(Number(counts[name])||0),0);
+  const sources=['Website','Referral','LinkedIn','Manual','Other'];
+  return html`<div class="view rec-shell">
+    <${Head} eyebrow="HR / TALENT" title=${L('Recruitment','التوظيف')} desc=${L('One verified pipeline from application to employee, with complete history.','مسار موحّد من التقديم للتعيين مع سجل كامل لكل خطوة.')}>
+      ${canEdit&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('candidates',{stage:'New',source:'Manual'})}>${React.createElement(Icon.plus)} ${L('New applicant','متقدم جديد')}</button>`}
+    <//>
+    <div class="rec-stages">
+      <button class="rec-stage-tab ${stage===''?'on':''}" onClick=${()=>{setStage('');setPage(1);}}><b>${totalAll}</b><span>${L('All applicants','كل المتقدمين')}</span></button>
+      ${REC_STAGES.map(name=>html`<button key=${name} class="rec-stage-tab ${stage===name?'on':''}" onClick=${()=>{setStage(name);setPage(1);}}><b>${Number(counts[name])||0}</b><span>${name}</span></button>`)}
+    </div>
+    <div class="rec-toolbar">
+      <div class="rec-search">${React.createElement(Icon.search)}<input value=${search} onChange=${e=>setSearch(e.target.value)} placeholder=${L('Search name, email, phone, position…','ابحث بالاسم أو الإيميل أو الموبايل أو الوظيفة…')}/></div>
+      <select class="sel" value=${source} onChange=${e=>{setSource(e.target.value);setPage(1);}}><option value="">${L('All sources','كل المصادر')}</option>${sources.map(item=>html`<option key=${item}>${item}</option>`)}</select>
+      <select class="sel" value=${sort} onChange=${e=>{setSort(e.target.value);setPage(1);}}><option value="applied_desc">${L('Newest applications','الأحدث تقديمًا')}</option><option value="applied_asc">${L('Oldest applications','الأقدم تقديمًا')}</option><option value="name_asc">${L('Name A–Z','الاسم أ–ي')}</option><option value="rating_desc">${L('Highest rating','الأعلى تقييمًا')}</option></select>
+      <div class="rec-view-toggle"><button class=${view==='list'?'on':''} onClick=${()=>chooseView('list')} title=${L('List view','عرض قائمة')}>${React.createElement(Icon.menu)}</button><button class=${view==='cards'?'on':''} onClick=${()=>chooseView('cards')} title=${L('Card view','عرض بطاقات')}>${React.createElement(Icon.grid)}</button></div>
+    </div>
+    ${error&&html`<div class="rec-error">${error} <button class="mini" style=${{marginInlineStart:8}} onClick=${load}>${L('Retry','إعادة المحاولة')}</button></div>`}
+    ${loading&&html`<div class="rec-list"><span class="sk" style=${{height:260,borderRadius:15}}></span></div>`}
+    ${!loading&&!items.length&&html`<div class="rec-empty"><div><b>${L('No applicants found','لا يوجد متقدمون')}</b><p>${L('Change the filters or add a new applicant.','غيّر الفلاتر أو أضف متقدمًا جديدًا.')}</p></div></div>`}
+    ${!loading&&items.length>0&&view==='list'&&html`<div class="rec-list"><div class="rec-list-head"><span>${L('Applicant','المتقدم')}</span><span>${L('Position','الوظيفة')}</span><span>${L('Stage','المرحلة')}</span><span>${L('Source','المصدر')}</span><span>${L('Applied','تاريخ التقديم')}</span><span></span></div>
+      ${items.map(item=>html`<div class="rec-row" key=${item.id} role="button" tabIndex="0" onClick=${()=>openApplicant(item.legacyRecordId)} onKeyDown=${e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openApplicant(item.legacyRecordId);}}}>
+        <div class="rec-person"><div class="rec-avatar">${recInitials(item.fullName)}</div><div class="rec-person-copy"><b>${item.fullName}</b><span class="rec-truncate">${item.email||item.phone||'—'}</span></div></div>
+        <div class="rec-cell rec-truncate">${item.position||'—'}<small>${item.experience||item.area||''}</small></div><div><${RecBadge} stage=${item.stage}/></div><div class="rec-cell">${item.source||'Manual'}</div><div class="rec-cell">${fmtDate(item.appliedAt)}</div>
+        <button class="mini" onClick=${e=>{e.stopPropagation();openApplicant(item.legacyRecordId);}}>${L('Open','فتح')}</button>
+      </div>`)}</div>`}
+    ${!loading&&items.length>0&&view==='cards'&&html`<div class="rec-cards">${items.map(item=>html`<div class="rec-card" key=${item.id} role="button" tabIndex="0" onClick=${()=>openApplicant(item.legacyRecordId)} onKeyDown=${e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openApplicant(item.legacyRecordId);}}}>
+      <div class="rec-card-top"><div class="rec-person"><div class="rec-avatar">${recInitials(item.fullName)}</div><div class="rec-person-copy"><b>${item.fullName}</b><span>${item.position||L('No position','بدون وظيفة')}</span></div></div><${RecBadge} stage=${item.stage}/></div>
+      <div class="rec-card-meta"><div><span>${L('Source','المصدر')}</span><b>${item.source||'Manual'}</b></div><div><span>${L('Applied','تاريخ التقديم')}</span><b>${fmtDate(item.appliedAt)}</b></div><div><span>${L('Area','المنطقة')}</span><b>${item.area||'—'}</b></div><div><span>${L('Rating','التقييم')}</span><b>${item.rating||0} / 5</b></div></div>
+    </div>`)}</div>`}
+    ${!loading&&Number(result.pages||1)>1&&html`<div class="rec-pagination"><span>${L('Showing','عرض')} ${(page-1)*20+1}–${Math.min(page*20,Number(result.total)||0)} ${L('of','من')} ${Number(result.total)||0}</span><div class="flex gap8"><button class="mini" disabled=${page<=1} onClick=${()=>setPage(Math.max(1,page-1))}>${L('Previous','السابق')}</button><span class="mono">${page} / ${result.pages}</span><button class="mini" disabled=${page>=result.pages} onClick=${()=>setPage(Math.min(result.pages,page+1))}>${L('Next','التالي')}</button></div></div>`}
+    ${profile&&html`<${ApplicantProfileModal} ctx=${ctx} detail=${profile} canEdit=${canEdit} busy=${profileBusy} error=${profileError} onClose=${closeProfile} onStage=${stageApplicant} onNote=${addNote} onInterview=${scheduleInterview} onEdit=${editApplicant} onHire=${hireApplicant}/>`}
+  </div>`;
+}
+
 /* ---------- comments thread (reusable) ---------- */
 function CommentThread({ ctx, entityType, entityId }){
   const [text,setText] = useState('');
@@ -7609,23 +7885,7 @@ function renderRoute(route, ctx, x){
             ${ctx.canDelete('leads')&&html`<button class="mini danger" onClick=${()=>ctx.delRec('leads',l.id,l.company||l.name)}>Delete</button>`}
           </div></div>`}/></div>`;
 
-    case 'candidates': return html`<div class="view">
-      <${Head} eyebrow="HR" title="Recruitment" desc="Applicants from the website hiring form. Drag across stages; convert Hired to an employee.">
-        ${ce('candidates')&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('candidates',{stage:'New',source:'Manual'})}>${React.createElement(Icon.plus)} New candidate</button>`}
-      <//>
-      ${!ce('candidates')&&html`<div class="board-ro" style=${{display:'flex',alignItems:'center',gap:6}}>${React.createElement(Icon.lock)} Read-only — you don't have permission to edit this board.</div>`}
-      <${Kanban} items=${x.visible('candidates')} columns=${ST.candidateStage} field="stage"
-        canMove=${ce('candidates')} onUpdate=${(id,patch)=>ctx.updateRecord('candidates',id,patch)}
-        onMove=${(id,s)=>ctx.updateRecord('candidates',id,{stage:s})}
-        render=${c=>html`<div>
-          <div class="flex between center"><b style=${{fontSize:13}}>${c.fullName}</b>${c.gameScore?html`<span class="mono lime" style=${{fontSize:11}}>${c.gameScore}</span>`:''}</div>
-          <div class="muted" style=${{fontSize:11.5,marginTop:4}}>${c.position||''}${c.experience?' · '+c.experience:''}</div>
-          <div class="muted" style=${{fontSize:11,marginTop:6}}>${c.area||''}${c.source?' · '+c.source:''}</div>
-          <div class="flex gap8" style=${{marginTop:10}}>
-            ${ce('candidates')&&html`<button class="mini" onClick=${()=>ctx.openModal('candidates',c)}>Edit</button>`}
-            ${c.stage==='Hired'&&ce('employees')&&!c.convertedEmployeeId&&html`<button class="mini pri" onClick=${()=>ctx.convertCandidate(c)}>→ Employee</button>`}
-            ${ctx.canDelete('candidates')&&html`<button class="mini danger" onClick=${()=>ctx.delRec('candidates',c.id,c.fullName)}>Delete</button>`}
-          </div></div>`}/></div>`;
+    case 'candidates': return html`<${RecruitmentView} ctx=${ctx} candidates=${x.visible('candidates')} canEdit=${ce('candidates')}/>`;
 
     case 'clients': return html`<${ClientsView} ctx=${ctx} visible=${x.visible} ce=${ce('clients')}/>`;
     case 'projects': return html`<${ProjectsView} ctx=${ctx} visible=${x.visible} ce=${ce('projects')}/>`;
