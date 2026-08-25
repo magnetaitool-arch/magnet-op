@@ -27,6 +27,7 @@
     "test:delivery-outbox": "node tools/delivery-outbox-test.js",
     "test:recruitment-v2": "node tools/recruitment-v2-test.js",
     "test:sales-client-v2": "node tools/sales-client-workspace-v2-test.js",
+    "test:finance-v2": "node tools/finance-v2-test.js",
     "test:identity:staging": "node tools/test-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
     "test:login:staging": "node tools/test-staging-app-login.js --project-ref=xqqgbvigfojfydzfguan",
     "test:tenant:staging": "node tools/test-staging-tenant-rls.js --project-ref=xqqgbvigfojfydzfguan",
@@ -37,7 +38,8 @@
     "test:delivery-outbox:staging": "node tools/test-staging-delivery-outbox.js --project-ref=xqqgbvigfojfydzfguan",
     "test:recruitment-v2:staging": "node tools/test-staging-recruitment-v2.js --project-ref=xqqgbvigfojfydzfguan",
     "test:sales-client-v2:staging": "node tools/test-staging-sales-client-workspace-v2.js --project-ref=xqqgbvigfojfydzfguan",
-    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js && node tools/recruitment-v2-test.js && node tools/sales-client-workspace-v2-test.js",
+    "test:finance-v2:staging": "node tools/test-staging-finance-v2.js --project-ref=xqqgbvigfojfydzfguan",
+    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js && node tools/recruitment-v2-test.js && node tools/sales-client-workspace-v2-test.js && node tools/finance-v2-test.js",
     "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {
