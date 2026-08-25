@@ -6,7 +6,60 @@
 // hashes instead of names/emails and never includes credentials or row payloads.
 
 const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const lib = require('./_lib');
+
+const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
+const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
+
+function parseArgs(argv) {
+  const result = {};
+  for (const raw of argv.slice(2)) {
+    if (!raw.startsWith('--')) continue;
+    const separator = raw.indexOf('=');
+    result[raw.slice(2, separator < 0 ? undefined : separator)] = separator < 0 ? true : raw.slice(separator + 1);
+  }
+  return result;
+}
+
+function safeError(value) {
+  return String(value || '')
+    .replace(/sbp_[A-Za-z0-9_-]+/g, '[REDACTED_TOKEN]')
+    .replace(/eyJ[A-Za-z0-9_.-]+/g, '[REDACTED_JWT]')
+    .replace(/(password|token|secret)=([^\s&]+)/gi, '$1=[REDACTED]')
+    .slice(-4000);
+}
+
+function commandJson(args) {
+  const command = spawnSync('pnpm', ['dlx', 'supabase@latest', ...args], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: '1' },
+  });
+  if (command.status !== 0) throw new Error(safeError(command.stderr || command.stdout));
+  const output = String(command.stdout || '');
+  const arrayAt = output.indexOf('[');
+  const objectAt = output.indexOf('{');
+  const start = arrayAt >= 0 && (objectAt < 0 || arrayAt < objectAt) ? arrayAt : objectAt;
+  if (start < 0) throw new Error('Supabase CLI returned no JSON payload.');
+  return JSON.parse(output.slice(start));
+}
+
+function stagingConfig(projectRef) {
+  if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) {
+    throw new Error('Refused: --project-ref must identify a non-Production Supabase project.');
+  }
+  const projects = commandJson(['projects', 'list', '--output', 'json']);
+  const project = projects.find((candidate) => candidate.ref === projectRef);
+  if (!project || project.name !== EXPECTED_STAGING_NAME || project.status !== 'ACTIVE_HEALTHY') {
+    throw new Error('Refused: target is not the healthy MAGNET OS STAGING project.');
+  }
+  const keys = commandJson(['projects', 'api-keys', '--project-ref', projectRef, '--output', 'json']);
+  const serviceKey = keys.find((candidate) => candidate.name === 'service_role') ||
+    keys.find((candidate) => candidate.type === 'secret');
+  if (!serviceKey || !serviceKey.api_key) throw new Error('Staging service-role access is unavailable.');
+  return { url: `https://${projectRef}.supabase.co`, key: serviceKey.api_key, keyKind: 'service_role' };
+}
 
 function normalized(value) {
   return String(value || '').trim().toLowerCase();
@@ -30,6 +83,14 @@ async function listAuthUsers(cfg) {
     if (batch.length < perPage || (body.last_page && page >= body.last_page)) break;
   }
   return users;
+}
+
+function listAuthUsersViaDatabase(projectRef) {
+  const payload = commandJson([
+    'db', 'query', '--linked', '--project-ref', projectRef, '--output', 'json',
+    'select id,email from auth.users order by id',
+  ]);
+  return Array.isArray(payload.rows) ? payload.rows : [];
 }
 
 async function readTable(cfg, table, select) {
@@ -56,10 +117,16 @@ function duplicateIssues(rows, getter, field) {
 }
 
 async function main() {
-  lib.loadDotEnv();
-  const cfg = lib.getConfig();
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || cfg.keyKind !== 'service_role') {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required. Nothing was queried or changed.');
+  const args = parseArgs(process.argv);
+  let cfg;
+  if (args['project-ref']) {
+    cfg = stagingConfig(String(args['project-ref']));
+  } else {
+    lib.loadDotEnv();
+    cfg = lib.getConfig();
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY || cfg.keyKind !== 'service_role') {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is required. Nothing was queried or changed.');
+    }
   }
 
   const records = await lib.fetchAllRecords(cfg);
@@ -67,9 +134,11 @@ async function main() {
   const employeeRows = records.filter((row) => row.coll === 'employees');
   const accounts = accountRows.map((row) => ({ rowId: row.id, ...(row.data || {}) }));
   const employees = employeeRows.map((row) => ({ rowId: row.id, ...(row.data || {}) }));
-  const authUsers = await listAuthUsers(cfg);
+  const authUsers = args['project-ref']
+    ? listAuthUsersViaDatabase(String(args['project-ref']))
+    : await listAuthUsers(cfg);
   const [profilesResult, membershipsResult, organizationsResult, invitationsResult] = await Promise.all([
-    readTable(cfg, 'profiles', 'user_id,email_normalized,status'),
+    readTable(cfg, 'profiles', 'id,email_normalized,identity_status'),
     readTable(cfg, 'organization_members', 'id,organization_id,user_id,role_id,status'),
     readTable(cfg, 'organizations', 'id,status'),
     readTable(cfg, 'organization_invitations', 'id,organization_id,email_normalized,status,accepted_by,accepted_at'),
@@ -116,7 +185,7 @@ async function main() {
 
   if (profilesResult.exists) {
     const profiles = profilesResult.rows;
-    const profileByUser = new Map(profiles.map((row) => [row.user_id, row]));
+    const profileByUser = new Map(profiles.map((row) => [row.id, row]));
     const authById = new Map(authUsers.map((row) => [row.id, row]));
     const membershipByUser = new Map();
     for (const membership of membershipsResult.rows) {
@@ -130,10 +199,10 @@ async function main() {
       if (!profileByUser.has(user.id)) issues.push({ type: 'auth_identity_missing_profile', subject: ref('auth_user', user.id) });
     }
     for (const profile of profiles) {
-      const subject = ref('profile', profile.user_id);
-      if (!authById.has(profile.user_id)) issues.push({ type: 'profile_missing_auth_identity', subject });
-      const memberships = membershipByUser.get(profile.user_id) || [];
-      if (profile.status === 'ACTIVE' && !memberships.some((row) => row.status === 'ACTIVE')) {
+      const subject = ref('profile', profile.id);
+      if (!authById.has(profile.id)) issues.push({ type: 'profile_missing_auth_identity', subject });
+      const memberships = membershipByUser.get(profile.id) || [];
+      if (profile.identity_status === 'ACTIVE' && !memberships.some((row) => row.status === 'ACTIVE')) {
         issues.push({ type: 'active_profile_missing_active_membership', subject });
       }
       for (const membership of memberships) {

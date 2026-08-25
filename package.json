@@ -13,10 +13,16 @@
     "check:config": "node tools/check-config.js",
     "audit:saas": "node tools/audit-saas-readiness.js",
     "diagnose:auth": "node tools/diagnose-auth.js",
+    "diagnose:auth:staging": "node tools/diagnose-auth.js --project-ref=xqqgbvigfojfydzfguan",
+    "reconcile:identity:staging": "node tools/reconcile-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
+    "reconcile:identity:staging:apply": "node tools/reconcile-staging-identity.js --project-ref=xqqgbvigfojfydzfguan --apply",
     "smoke": "node tools/smoke-test.js",
     "test:security": "node tools/security-test.js",
     "test:foundation": "node tools/saas-foundation-test.js",
-    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js",
+    "test:identity": "node tools/identity-foundation-test.js",
+    "test:identity:staging": "node tools/test-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
+    "test:login:staging": "node tools/test-staging-app-login.js --project-ref=xqqgbvigfojfydzfguan",
+    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js",
     "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {

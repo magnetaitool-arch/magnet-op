@@ -34,7 +34,7 @@ const lib = require('./_lib');
     const r = await fetch(url + '/rest/v1/records?select=id&coll=eq._accounts&limit=1', { headers: lib.restHeaders(anon) });
     if (r.status === 200) {
       const rows = await r.json().catch(() => []);
-      if (Array.isArray(rows) && rows.length) f('_accounts is ANON-READABLE — password hashes are exposed. Apply supabase/migrations/002_records_rls_hardening.sql NOW.');
+      if (Array.isArray(rows) && rows.length) f('_accounts is ANON-READABLE — password hashes are exposed. Use the reviewed timestamped RLS migrations; do not run legacy migration files directly.');
       else ok('_accounts returns no rows to anon — RLS filtering is active.');
     } else if (r.status === 401 || r.status === 403) ok('_accounts blocked for anon (' + r.status + ') — lockdown is applied. Good.');
     else w('_accounts anon SELECT returned ' + r.status);

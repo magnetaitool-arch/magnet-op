@@ -56,6 +56,25 @@ async function dbAuthConfig(){
     };
   }catch{ return fallback; }
 }
+let legacyOrganizationIdCache='';
+async function legacyOrganizationId(){
+  if(legacyOrganizationIdCache) return legacyOrganizationIdCache;
+  const response=await fetch(URL.replace(/\/$/,'')+'/rest/v1/organizations?slug=eq.magnet&status=eq.ACTIVE&select=id&limit=1',{headers:{apikey:KEY,Authorization:'Bearer '+KEY}});
+  if(!response.ok) throw new Error('identity organization unavailable');
+  const rows=await response.json();
+  const id=String(rows&&rows[0]&&rows[0].id||'');
+  if(!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('identity organization missing');
+  legacyOrganizationIdCache=id;
+  return id;
+}
+async function reconcileLegacyIdentity(authUserId:string,legacyAccountRowId:string){
+  const organizationId=await legacyOrganizationId();
+  const response=await fetch(URL.replace(/\/$/,'')+'/rest/v1/rpc/reconcile_legacy_login_identity',{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify({p_auth_user_id:authUserId,p_legacy_account_row_id:legacyAccountRowId,p_organization_id:organizationId,p_request_id:crypto.randomUUID()})});
+  if(!response.ok) throw new Error('identity reconciliation failed');
+  const result=await response.json().catch(()=>null);
+  if(!result||result.ok!==true) throw new Error('identity reconciliation incomplete');
+  return result;
+}
 async function dbUpsert(rows:any[]){ const r=await fetch(REST+'?on_conflict=id', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify(rows) }); if(!r.ok) throw new Error('db write '+r.status+' '+await r.text()); }
 async function dbDelete(id:string){ const r=await fetch(REST+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db del '+r.status); }
 const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.verifyToken; return c; };
@@ -81,6 +100,9 @@ async function adminSetPassword(uid:string, password:string){
 }
 async function adminCreateUser(email:string, password:string){
   try{ const r=await fetch(AUTHB+'/admin/users', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' }, body:JSON.stringify({ email, password, email_confirm:true }) }); if(!r.ok) return null; return await r.json(); }catch{ return null; }
+}
+async function adminDeleteUser(uid:string){
+  try{ const r=await fetch(AUTHB+'/admin/users/'+uid, { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); return r.ok; }catch{ return false; }
 }
 async function passwordGrant(email:string, password:string){
   try{ const r=await fetch(AUTHB+'/token?grant_type=password', { method:'POST', headers:{ apikey:KEY, 'Content-Type':'application/json' }, body:JSON.stringify({ email, password }) }); if(!r.ok) return null; return await r.json(); }catch{ return null; }
@@ -202,9 +224,17 @@ Deno.serve(async (req)=>{
       if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); await logAuthEvent(requestId,'session_upgrade_failed',false,'invalid_credentials',rec.u.id); return json({ ok:false, reason:'invalid' }); }
       const email=String(rec.u.email||'').toLowerCase().trim();
       if(!email || email.indexOf('@')<1){ await logAuthEvent(requestId,'session_upgrade_failed',false,'missing_email',rec.u.id); return json({ ok:false, reason:'no-email' }); }
-      let au=await adminFindUserByEmail(email);
-      if(au && au.id){ await adminSetPassword(au.id, body.password); }
-      else { au=await adminCreateUser(email, body.password); }
+      let au=await adminFindUserByEmail(email), createdAuthUser=false;
+      if(au && au.id){
+        try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
+        catch{ await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
+        if(!(await adminSetPassword(au.id, body.password))){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_password_update_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
+      } else {
+        au=await adminCreateUser(email, body.password); createdAuthUser=!!(au&&au.id);
+        if(!createdAuthUser){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_user_create_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
+        try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
+        catch{ await adminDeleteUser(au.id); await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
+      }
       const session=await passwordGrant(email, body.password);
       if(!session || !session.access_token){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_session_failed',rec.u.id); return json({ ok:false, reason:'session-failed' }); }
       await rlClear('login', body.identifier);

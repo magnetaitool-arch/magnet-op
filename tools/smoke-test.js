@@ -22,6 +22,9 @@ for (const file of ['api/send-email.js', 'api/intake.js', 'api/runtime-config.js
   'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
   'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
   'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js',
+  'tools/identity-foundation-test.js', 'tools/preflight-staging-migration.js',
+  'tools/reconcile-staging-identity.js', 'tools/test-staging-identity.js',
+  'tools/test-staging-app-login.js',
   'tools/m0-logical-backup.js', 'tools/m0-restore-staging.js', 'tools/m0-validate-staging.js',
   'tools/m0-security-baseline.js', 'tools/m0-configure-vercel-preview.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, file)], { stdio: 'pipe' }); ok(file); }
@@ -68,8 +71,8 @@ const acct = read('supabase/functions/accounts/index.ts');
 /duplicate-email/.test(acct) && /duplicate-username/.test(acct) && /last-owner/.test(acct)
   ? ok('duplicate logins and last-owner lockout are blocked server-side')
   : bad('account identity/last-owner guards are missing');
-/records_accounts_email_unique/.test(read('supabase/migrations/006_canonicalize_duplicate_logins.sql'))
-  && /records_accounts_username_unique/.test(read('supabase/migrations/006_canonicalize_duplicate_logins.sql'))
+/records_accounts_email_unique/.test(read('supabase/legacy-migrations/006_canonicalize_duplicate_logins.sql'))
+  && /records_accounts_username_unique/.test(read('supabase/legacy-migrations/006_canonicalize_duplicate_logins.sql'))
   ? ok('database unique indexes make duplicate email/username identities impossible')
   : bad('database does not enforce unique login identities');
 
@@ -166,7 +169,8 @@ parsed ? ok(parsed + ' inline script blocks parse') : bad('no inline scripts wer
 console.log('\n[7] required deliverables present');
 for (const f of ['AUDIT_REPORT.md', 'AGENTS.md', 'docs/SAAS_READINESS_AUDIT.md', 'docs/AUTH_ARCHITECTURE.md',
   '.env.example', 'api/intake.js', 'supabase/migrations', 'tools/backup-supabase-records.js',
-  'tools/restore-supabase-records.js', 'tools/security-test.js', 'tools/saas-foundation-test.js']) {
+  'tools/restore-supabase-records.js', 'tools/security-test.js', 'tools/saas-foundation-test.js',
+  'tools/identity-foundation-test.js', 'supabase/functions/identity/index.ts']) {
   exists(f) ? ok(f) : bad('missing ' + f);
 }
 

@@ -43,16 +43,18 @@ check(!/\b(drop|delete|truncate)\s+(table\s+)?public\.records\b/i.test(viewSql),
 console.log('\n[3] additive identity and tenancy foundation');
 const foundation = read(foundationMigration);
 for (const table of [
-  'organizations', 'profiles', 'roles', 'capabilities', 'role_capabilities',
+  'organizations', 'organization_roles', 'capabilities', 'role_capabilities',
   'organization_members', 'organization_invitations', 'auth_events', 'audit_events',
   'idempotency_keys', 'outbox_messages', 'jobs', 'legacy_record_tenant_map',
   'legacy_identity_links',
 ]) check(new RegExp(`create table if not exists public\\.${table}\\b`, 'i').test(foundation), `creates ${table}`);
 
-check(/profiles[\s\S]*references auth\.users\(id\)/i.test(foundation), 'profiles explicitly reference Supabase Auth identities');
+check(/alter table public\.profiles add column if not exists identity_status/i.test(foundation), 'legacy profiles are upgraded in place');
+check(/user_id uuid not null references public\.profiles\(id\)/i.test(foundation), 'memberships reference canonical Supabase Auth profile IDs');
 check(/unique \(organization_id, user_id\)/i.test(foundation), 'membership is unique per user and organization');
-check(/foreign key \(role_id, organization_id\)[\s\S]*references public\.roles\(id, organization_id\)/i.test(foundation), 'membership/invite roles are tenant-scoped by composite foreign key');
-check(/email_normalized text generated always as \(lower\(btrim\(email\)\)\) stored/i.test(foundation), 'emails are normalized structurally');
+check(/foreign key \(role_id, organization_id\)[\s\S]*references public\.organization_roles\(id, organization_id\)/i.test(foundation), 'membership/invite roles are tenant-scoped by composite foreign key');
+check(/email_normalized text[\s\S]*generated always as \(lower\(btrim\(email\)\)\) stored/i.test(foundation), 'emails are normalized structurally');
+check(!/create table if not exists public\.roles\b/i.test(foundation), 'canonical RBAC does not collide with the legacy roles table');
 check(/prevent_event_mutation/i.test(foundation) && /append-only/i.test(foundation), 'auth and audit events are append-only');
 check(/alter table public\.%I enable row level security/i.test(foundation), 'new tables enable RLS');
 check(/revoke all privileges on public\.%I from anon/i.test(foundation), 'new tables fail closed for anon');

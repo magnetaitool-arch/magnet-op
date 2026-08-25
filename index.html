@@ -4022,6 +4022,81 @@ async function acctApi(cfg, action, payload){
   return data;
 }
 
+/* ---- MAGNET OS V2 canonical identity. A Supabase session is resolved into the
+   current profile + active organization membership + live role/capabilities.
+   Legacy account ids stay on the UI object temporarily so task/employee links do
+   not break during migration; authUserId is the immutable Supabase identity. ---- */
+function _identityUrl(cfg){ return (cfg.url||'').replace(/\/$/,'') + '/functions/v1/identity'; }
+async function identityApi(cfg, action, payload){
+  const token=sbAccessToken();
+  if(!cfgComplete(cfg)||!token) return {ok:false,error:'authenticated_session_required',status:401};
+  try{
+    const res=await fetch(_identityUrl(cfg),{method:'POST',headers:{apikey:cfg.key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},payload||{}))});
+    const data=await res.json().catch(()=>({}));
+    data.status=res.status;
+    if(!res.ok&&data.ok!==false)data.ok=false;
+    return data;
+  }catch(e){ return {ok:false,error:'identity_unavailable',status:0}; }
+}
+function canonicalRoleName(membership){
+  const key=String(membership&&membership.roleKey||'').toLowerCase();
+  const names={owner:'Owner',admin:'Admin',manager:'Manager',sales:'Sales',content_creator:'Content Creator',designer:'Designer',account_manager:'Account Manager',hr:'HR',finance:'Finance',client:'Client'};
+  return names[key] || String(membership&&membership.roleName||'Viewer');
+}
+function canonicalRoleKey(role){
+  const key=String(role||'').trim().toLowerCase().replace(/[\s-]+/g,'_');
+  const aliases={owner:'owner',admin:'admin',manager:'manager',project_manager:'manager',account_manager:'account_manager',sales:'sales',hr:'hr',finance:'finance',accountant:'finance',designer:'designer',graphic_designer:'designer',content:'content_creator',content_creator:'content_creator',video_editor:'content_creator',production:'content_creator',client:'client',viewer:'client'};
+  return aliases[key]||'';
+}
+function mergeCanonicalRoster(legacyUsers,members){
+  const byLegacy=new Map((members||[]).filter(m=>m&&m.legacyUserId).map(m=>[String(m.legacyUserId),m]));
+  return (legacyUsers||[]).map(user=>{
+    const member=byLegacy.get(String(user&&user.id||''));
+    if(!member)return user;
+    return Object.assign({},user,{
+      authUserId:member.userId,
+      organizationId:member.organizationId,
+      membershipId:member.membershipId,
+      membershipStatus:member.membershipStatus,
+      identityStatus:member.identityStatus,
+      onboardingStatus:member.onboardingStatus,
+      sessionEpoch:Number(member.sessionEpoch)||0,
+      role:canonicalRoleName({roleKey:member.roleKey,roleName:member.roleName}),
+      canonicalRoleKey:member.roleKey,
+      employeeId:member.employeeRecordId||user.employeeId||'',
+    });
+  });
+}
+function mergeCanonicalIdentity(legacyUser,context){
+  if(!context) return legacyUser;
+  const active=(context.memberships||[]).filter(m=>m&&m.membershipStatus==='ACTIVE'&&m.organizationStatus==='ACTIVE');
+  let membership=null;
+  try{ const preferred=store.get('magnet_active_organization_id'); membership=active.find(m=>m.organizationId===preferred)||null; }catch(e){}
+  if(!membership && active.length===1) membership=active[0];
+  if(!membership) return null; // zero memberships or an unresolved multi-org choice: fail closed
+  try{ store.set('magnet_active_organization_id',membership.organizationId); }catch(e){}
+  return Object.assign({},legacyUser||{}, {
+    authUserId:context.userId,
+    fullName:context.displayName || (legacyUser&&legacyUser.fullName) || '',
+    email:context.email || (legacyUser&&legacyUser.email) || '',
+    role:canonicalRoleName(membership),
+    canonicalRoleKey:membership.roleKey,
+    organizationId:membership.organizationId,
+    membershipId:membership.membershipId,
+    capabilities:Array.isArray(membership.capabilities)?membership.capabilities:[],
+    identityStatus:context.status,
+    membershipStatus:membership.membershipStatus,
+    sessionEpoch:Number(context.sessionEpoch)||0,
+  });
+}
+async function loadCanonicalIdentity(cfg,legacyUser){
+  const result=await identityApi(cfg,'context',{});
+  if(!result.ok) return result;
+  const user=mergeCanonicalIdentity(legacyUser,result.context);
+  return user?{ok:true,user,context:result.context}:{ok:false,error:'organization_selection_required',status:409};
+}
+try{ window.__magnetIdentity={api:identityApi,load:loadCanonicalIdentity,merge:mergeCanonicalIdentity,mergeRoster:mergeCanonicalRoster,roleKey:canonicalRoleKey}; }catch(e){}
+
 async function cloudPing(cfg){
   if(!cfgComplete(cfg)) throw new Error('Supabase URL and anon key required');
   const res = await fetch(_rest(cfg,'records?select=id&limit=1'), { headers:_headers(cfg) });
@@ -6028,7 +6103,7 @@ function App(){
     // AUTH_V2 (flag-gated): additionally obtain a real Supabase session so data requests
     // carry the user's JWT. During an optional cohort rollout failure keeps legacy
     // behavior; after `required:true`, failure must block private app entry.
-    let authV2Ready=false;
+    let authV2Ready=false, loginUser=res.user;
     try {
       if(authV2AppliesTo(res.user)){
         // Race the JWT fetch against a timeout so a slow/unreachable server can NEVER stall login.
@@ -6045,9 +6120,22 @@ function App(){
         ? 'تعذّر إنشاء جلسة آمنة للحساب. لم يتم فتح البيانات. تواصل مع المسؤول أو جرّب مرة أخرى.'
         : 'A secure account session could not be created. No private data was opened. Contact an administrator or try again.';
     }
+    if(authV2Ready){
+      const canonical=await Promise.race([
+        loadCanonicalIdentity(cfg.current,res.user),
+        new Promise(r=>setTimeout(()=>r({ok:false,error:'identity_timeout',status:0}),7000))
+      ]);
+      if(!canonical||!canonical.ok){
+        setAcctToken(null); setSbSession(null); clearSessionUser();
+        return lang==='ar'
+          ? 'الحساب صحيح، لكن عضوية المؤسسة أو الدور غير مكتملين. لم يتم فتح أي بيانات — اطلب من المسؤول مراجعة حسابك.'
+          : 'Your credentials are valid, but the organization membership or role is incomplete. No private data was opened; ask an administrator to review your account.';
+      }
+      loginUser=canonical.user;
+    }
     try { AUTH.syncUsersFromCloud().catch(()=>{}); } catch(e){} // pull full team roster now that we have a token
-    setSessionUser(res.user, remember); setAuthUser(res.user); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
-    try { recordLogin(res.user); } catch(e){}
+    setSessionUser(loginUser, remember); setAuthUser(loginUser); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
+    try { recordLogin(loginUser); } catch(e){}
     return null;
   };
   const doInitialSetup = async (details)=>{
@@ -6073,6 +6161,26 @@ function App(){
       if(stopped||busy||document.hidden) return;
       busy=true;
       try{
+        await sbEnsureFresh(cfg.current);
+        if(sbAccessToken()){
+          const canonical=await loadCanonicalIdentity(cfg.current,authUser);
+          if(stopped) return;
+          if(canonical&&canonical.ok&&canonical.user){
+            setAuthUser(prev=>{
+              if(!prev) return canonical.user;
+              const a=JSON.stringify([prev.role,prev.organizationId,prev.membershipStatus,prev.sessionEpoch,prev.capabilities||[]]);
+              const b=JSON.stringify([canonical.user.role,canonical.user.organizationId,canonical.user.membershipStatus,canonical.user.sessionEpoch,canonical.user.capabilities||[]]);
+              if(a===b) return prev;
+              setSessionUser(canonical.user,!!store.get(AUTH_KEYS.current));
+              return canonical.user;
+            });
+            setRoleOverride(null);
+          } else if(canonical&&[401,403,409].includes(Number(canonical.status))){
+            clearSessionUser(); setAcctToken(null); setSbSession(null);
+            setAuthUser(null); setShowLogin(true); setRoleOverride(null);
+          }
+          return; // a canonical session must never be overwritten by a legacy role snapshot
+        }
         const r=await AUTH.refreshCurrentUser();
         if(stopped) return;
         if(r&&r.ok&&r.user){
@@ -10703,12 +10811,23 @@ function AccessDrawer({ user, ar, onClose, onSave }){
 function UsersView({ ctx }){
   const ar=ctx.lang==='ar';
   const [users,setUsers]=useState(AUTH.loadUsers());
+  const [canonicalMembers,setCanonicalMembers]=useState([]);
+  const [canonicalError,setCanonicalError]=useState('');
   const [edit,setEdit]=useState(null); // user being edited (or {} for new)
   const [reset,setReset]=useState(null); // user being password-reset
   const [access,setAccess]=useState(null); // user whose per-module access is being edited
   const [bulkResult,setBulkResult]=useState(null); // result sheet after a team-wide password reset
   const [op,setOp]=useState('');
-  const refresh=()=>setUsers(AUTH.loadUsers());
+  const organizationId=String(ctx.user&&ctx.user.account&&ctx.user.account.organizationId||'');
+  const refresh=()=>setUsers(mergeCanonicalRoster(AUTH.loadUsers(),canonicalMembers));
+  const reloadCanonical=async()=>{
+    const legacy=await AUTH.syncUsersFromCloud().catch(()=>AUTH.loadUsers());
+    if(!organizationId||!sbAccessToken()){ setCanonicalError('identity-session-missing'); setUsers(legacy); return legacy; }
+    const result=await identityApi(ctx.cfg,'members',{organizationId});
+    if(!result||!result.ok||!Array.isArray(result.members)){ setCanonicalError((result&&result.error)||'identity-directory-unavailable'); setUsers(legacy); return legacy; }
+    setCanonicalError(''); setCanonicalMembers(result.members);
+    const merged=mergeCanonicalRoster(legacy,result.members); setUsers(merged); return merged;
+  };
   const linkedEmployee=(u)=>{ const es=ctx.db.employees||[], n=s=>String(s||'').trim().toLowerCase(), em=n(u&&u.email); return es.find(e=>e.id===(u&&u.employeeId)||e.userId===(u&&u.id)||(em&&(n(e.loginEmail)===em||n(e.email)===em)))||null; };
   const accountErr=(e)=>{ const c=String((e&&e.code)||(e&&e.message)||''); const map={
     'duplicate-email':ar?'فيه حساب تاني بنفس البريد. لازم كل حساب يكون له بريد مختلف.':'Another account already uses this email.',
@@ -10719,7 +10838,7 @@ function UsersView({ ctx }){
   const saveAccess=async(acc)=>{ const list=AUTH.loadUsers(); const tu=list.find(x=>x.id===access.id); if(!tu)return; const updated=Object.assign({},tu,{access:acc}); setOp('access-'+tu.id); try{ await AUTH.saveUserConfirmed(updated); ctx.addActivity('users',tu.id,'access updated',tu.fullName); refresh(); setAccess(null); showProPopup('savedNotes', ar?'تم حفظ الصلاحيات على السيرفر':'Access saved on the server'); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
   // Pull the full team roster from the cloud on open (token-gated Edge Function),
   // so ALL users show immediately without a manual refresh.
-  useEffect(()=>{ let alive=true; AUTH.syncUsersFromCloud().then(()=>{ if(alive) setUsers(AUTH.loadUsers()); }).catch(()=>{}); return ()=>{ alive=false; }; }, []); // eslint-disable-line
+  useEffect(()=>{ let alive=true; reloadCanonical().catch(()=>{if(alive)setCanonicalError('identity-directory-unavailable');}); return ()=>{ alive=false; }; }, [organizationId]); // eslint-disable-line
   const anyDefault=users.some(u=>u.isDefaultPassword);
   const verifyLink=(tok)=>{ try { return location.origin+location.pathname+'?verify='+encodeURIComponent(tok); } catch(e){ return '?verify='+tok; } };
   const sendVerify=async(u, silent)=>{
@@ -10731,14 +10850,22 @@ function UsersView({ ctx }){
     catch(e){ if(!silent){ try{ navigator.clipboard.writeText(link); }catch(_){ } alert((ar?'خدمة الإيميل غير مفعّلة على هذا الرابط. تم نسخ رابط التأكيد — ابعته يدويًا:\n\n':'Email service not active on this host. Verification link copied — send it manually:\n\n')+link); } }
   };
   const requireVer = !!ctx.appSettings.requireVerification;
+  const updateCanonicalMembership=async(user,nextRole,nextStatus)=>{
+    if(!user||!user.authUserId)return false;
+    const roleKey=canonicalRoleKey(nextRole);
+    if(!roleKey){ const e=new Error('unsupported-canonical-role'); e.code=e.message; throw e; }
+    const result=await identityApi(ctx.cfg,'update_membership',{organizationId:user.organizationId||organizationId,userId:user.authUserId,roleKey,status:nextStatus==='Active'?'ACTIVE':'DISABLED'});
+    if(!result||!result.ok){ const e=new Error((result&&result.error)||'identity-update-failed'); e.code=e.message; throw e; }
+    return true;
+  };
   const save=async(form)=>{
     const list=AUTH.loadUsers();
     const v=AUTH.validatePassword(form._pw||'x'.repeat(6), form._pw2!=null?form._pw2:(form._pw||'x'.repeat(6)));
     const linked=(ctx.db.employees||[]).find(e=>e.id===form.employeeId)||linkedEmployee(form);
     const employeeId=(linked&&linked.id)||form.employeeId||'';
-    let next,u;
+    let next,u,old=null;
     if(form.id){ // edit existing (no password here)
-      const old=list.find(x=>x.id===form.id); if(!old)return;
+      old=list.find(x=>x.id===form.id); if(!old)return;
       u=Object.assign({},old,{ fullName:form.fullName,username:form.username,email:form.email,phone:form.phone,jobTitle:form.jobTitle,role:form.role,status:form.status,employeeId,
         // Role-specific exceptions must never leak into a different job role.
         access:old.role!==form.role?{}:(old.access||{}) });
@@ -10756,11 +10883,13 @@ function UsersView({ ctx }){
     if(next.some(x=>x.id!==u.id&&String(x.username||'').trim().toLowerCase()===un)){ alert(accountErr({code:'duplicate-username'})); return; }
     setOp('save-'+(u.id||'new'));
     try{
+      if(form.id&&canonicalError){ const e=new Error('identity-directory-unavailable'); e.code=e.message; throw e; }
+      if(form.id&&old&&old.authUserId) await updateCanonicalMembership(old,u.role,u.status);
       await AUTH.saveUserConfirmed(u);
       if(linked){ ctx.updateRecord('employees',linked.id,{appRole:u.role,loginEmail:u.email,userId:u.id,accountStatus:u.status==='Active'?'Active':'Disabled'}); }
       ctx.addActivity('users',u.id,form.id?'user updated':'user created',u.fullName);
       if(!form.id){ try { await sendVerify(u, true); } catch(e){} }
-      refresh(); setEdit(null); showProPopup('taskCreated', ar?'تم حفظ المستخدم على السيرفر':'User saved on the server');
+      await reloadCanonical(); setEdit(null); showProPopup('taskCreated', ar?'تم حفظ المستخدم والعضوية على السيرفر':'User and membership saved on the server');
     }catch(e){ alert(accountErr(e)); }
     finally{ setOp(''); }
   };
@@ -10790,11 +10919,13 @@ function UsersView({ ctx }){
       skipped:skipped.map(u=>({ fullName:u.fullName, username:u.username, email:u.email, role:u.role })) });
   };
   const toggleStatus=async(u)=>{ const list=AUTH.loadUsers();
+    if(canonicalError){ alert(ar?'تعديلات الحالة متوقفة لحد ما دليل الهوية الآمن يرجع متصل.':'Status changes are paused until the canonical identity directory reconnects.'); return; }
     if(u.role==='Owner'&&u.status==='Active'&&AUTH.activeOwners(list).length<=1){ alert(ar?'لا يمكن إيقاف آخر مالك نشط.':'Cannot deactivate the last active Owner.'); return; }
     const t=Object.assign({},list.find(x=>x.id===u.id)); t.status=t.status==='Active'?'Inactive':'Active'; setOp('status-'+t.id);
-    try{ await AUTH.saveUserConfirmed(t); if(t.employeeId)ctx.updateRecord('employees',t.employeeId,{accountStatus:t.status==='Active'?'Active':'Disabled'}); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); refresh(); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
+    try{ if(u.authUserId)await updateCanonicalMembership(u,u.role,t.status); await AUTH.saveUserConfirmed(t); if(t.employeeId)ctx.updateRecord('employees',t.employeeId,{accountStatus:t.status==='Active'?'Active':'Disabled'}); ctx.addActivity('users',t.id,'status → '+t.status,t.fullName); await reloadCanonical(); }catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
   const unlock=async(u)=>{ setOp('unlock-'+u.id); try{ await AUTH.unlockUserConfirmed(u.id); ctx.addActivity('users',u.id,'login unlocked',u.fullName); showProPopup('savedNotes',ar?'تم فتح تسجيل الدخول للحساب':'Login lock cleared'); }catch(e){ alert(accountErr(e)); } finally{setOp('');} };
   const del=async(u)=>{ const list=AUTH.loadUsers();
+    if(u.authUserId){ alert(ar?'الحساب المرتبط بالهوية الآمنة لا يُحذف نهائيًا. استخدم إيقاف الحساب للحفاظ على السجل والتاسكات والتقارير.':'Canonical identities are not hard-deleted. Deactivate the account to preserve audit history, tasks, and reports.'); return; }
     if(u.role==='Owner'&&list.filter(x=>x.role==='Owner').length<=1){ alert(ar?'لا يمكن حذف آخر مالك.':'Cannot delete the last Owner.'); return; }
     if(!confirm(ar?'حذف هذا المستخدم؟':'Delete this user? This cannot be undone.')) return;
     setOp('delete-'+u.id); try{ await AUTH.deleteUserConfirmed(u.id); if(u.employeeId)ctx.updateRecord('employees',u.employeeId,{accountStatus:'Disabled',userId:''}); ctx.addActivity('users',u.id,'user deleted',u.fullName); refresh(); }catch(e){ alert(accountErr(e)); } finally{setOp('');} };
@@ -10802,6 +10933,7 @@ function UsersView({ ctx }){
     const seen={}; users.forEach(u=>{ const k=n(u.email); if(k){seen[k]=(seen[k]||0)+1;if(seen[k]===2)duplicates++;} const e=linkedEmployee(u); if(e){linked++;used.add(e.id);if((e.appRole||e.role)&&u.role!==(e.appRole||e.role))mismatch++;} });
     return {linked,mismatch,duplicates,unlinked:users.length-linked,withoutAccount:emps.filter(e=>!used.has(e.id)&&e.status!=='Inactive').length}; };
   const repairLinks=async()=>{ const list=AUTH.loadUsers(), emps=ctx.db.employees||[], changes=[]; const claimed=new Set();
+    if(canonicalError){ alert(ar?'الإصلاح متوقف لحد ما دليل الهوية الآمن يرجع متصل.':'Repair is paused until the canonical identity directory reconnects.'); return; }
     for(const u of list){ const e=linkedEmployee(u); if(!e||claimed.has(e.id)||u.role==='Owner') continue; claimed.add(e.id); const desired=e.appRole||e.role||u.role;
       // The login account owns its login identity. Copying an employee-profile
       // email over it caused duplicate-email errors when the HR record had a typo.
@@ -10811,7 +10943,7 @@ function UsersView({ ctx }){
     if(!changes.length){ alert(ar?'كل الحسابات المرتبطة سليمة بالفعل.':'All linked accounts are already consistent.'); return; }
     const details=changes.slice(0,12).map(x=>'• '+(x.u.fullName||x.u.username)+': '+x.u.role+' → '+x.nu.role).join('\n');
     if(!confirm((ar?'سيتم ربط الحسابات بالموظفين واعتماد App role الموجود في ملف الموظف كدور الدخول:\n\n':'Accounts will be linked to employees, and each employee App role will become the login role:\n\n')+details+(changes.length>12?'\n…':'')))return;
-    setOp('repair'); try{ for(const x of changes) await AUTH.saveUserConfirmed(x.nu); changes.forEach(x=>ctx.updateRecord('employees',x.e.id,{userId:x.nu.id,loginEmail:x.nu.email,accountStatus:x.nu.status==='Active'?'Active':'Disabled'})); ctx.addActivity('users','repair','account links and roles repaired',changes.length+' accounts'); refresh(); showProPopup('savedNotes',(ar?'تم إصلاح ':'Repaired ')+changes.length+(ar?' حساب على السيرفر':' server account(s)')); }catch(e){alert(accountErr(e));}finally{setOp('');}
+    setOp('repair'); try{ for(const x of changes){ if(x.u.authUserId)await updateCanonicalMembership(x.u,x.nu.role,x.nu.status); await AUTH.saveUserConfirmed(x.nu); } changes.forEach(x=>ctx.updateRecord('employees',x.e.id,{userId:x.nu.id,loginEmail:x.nu.email,accountStatus:x.nu.status==='Active'?'Active':'Disabled'})); ctx.addActivity('users','repair','account links and roles repaired',changes.length+' accounts'); await reloadCanonical(); showProPopup('savedNotes',(ar?'تم إصلاح ':'Repaired ')+changes.length+(ar?' حساب على السيرفر':' server account(s)')); }catch(e){alert(accountErr(e));}finally{setOp('');}
   };
   const qa=audit();
 
@@ -10828,6 +10960,7 @@ function UsersView({ ctx }){
       <${KPI} label=${ar?'موظفون بلا حساب':'Employees without login'} value=${qa.withoutAccount} icon="user"/>
     </div>
     ${(qa.mismatch||qa.unlinked||qa.duplicates)&&html`<div class="warn-note">${ar?('مراجعة مطلوبة: '+qa.mismatch+' اختلاف رول · '+qa.unlinked+' حساب غير مرتبط · '+qa.duplicates+' بريد مكرر. زر الإصلاح لا يحذف أي بيانات.'):(qa.mismatch+' role mismatch(es) · '+qa.unlinked+' unlinked account(s) · '+qa.duplicates+' duplicate email(s). Repair never deletes business data.')}</div>`}
+    ${canonicalError&&html`<div class="login-err" style=${{marginBottom:12}}>${ar?'تعذّر تحميل دليل الهوية الآمن. تم إيقاف تعديلات الأدوار الحساسة لحين عودة الاتصال.':'The canonical identity directory is unavailable. Sensitive role changes are paused until it reconnects.'}</div>`}
     ${anyDefault&&html`<div class="warn-note">${ar?'يجب تغيير كلمة المرور الافتراضية قبل الاستخدام الفعلي للفريق.':'Default password should be changed before real team usage.'}</div>`}
     <label class="ver-toggle"><input type="checkbox" checked=${requireVer} onChange=${e=>ctx.applyAppSettings({requireVerification:e.target.checked})}/> ${ar?'اشترط تأكيد البريد قبل تسجيل الدخول (عدا المالك)':'Require email verification before login (except Owner)'}</label>
     <${Panel} pad=${false}><div class="tbl-wrap"><table class="tbl"><thead><tr>
@@ -10848,7 +10981,7 @@ function UsersView({ ctx }){
         ${u.role!=='Owner'&&html`<button class="mini" onClick=${()=>setAccess(u)}>${ar?'الصلاحيات':'Access'}</button>`}
         ${u.role!=='Owner'&&!u.verified&&html`<button class="mini" onClick=${()=>sendVerify(u)}>${ar?'إرسال تأكيد':'Verify email'}</button>`}
         <button class="mini" onClick=${()=>toggleStatus(u)}>${u.status==='Active'?(ar?'إيقاف':'Deactivate'):(ar?'تفعيل':'Activate')}</button>
-        <button class="mini" onClick=${()=>del(u)}>${ar?'حذف':'Delete'}</button>
+        ${u.authUserId?html`<span class="muted" style=${{fontSize:10.5}}>${ar?'الحذف النهائي مقفول':'hard delete locked'}</span>`:html`<button class="mini" onClick=${()=>del(u)}>${ar?'حذف':'Delete'}</button>`}
       </td></tr>`)}</tbody></table></div><//>
     <div class="muted" style=${{fontSize:11.5,marginTop:12}}>${ar?'أي تعديل حساس هنا لا يظهر كناجح إلا بعد تأكيده من خادم الحسابات. إعادة كلمة المرور تفتح قفل المحاولات تلقائيًا.':'Sensitive changes show success only after the accounts server confirms them. Resetting a password also clears its login lock.'}</div>
 
@@ -10888,7 +11021,7 @@ function UserForm({ user, employees, ar, busy, onClose, onSave }){
       <label class="fld"><span>${ar?'البريد':'Email'}</span><input type="email" value=${f.email||''} onChange=${e=>set('email',e.target.value)}/></label>
       <label class="fld"><span>${ar?'الهاتف':'Phone'}</span><input value=${f.phone||''} onChange=${e=>set('phone',e.target.value)}/></label>
       <label class="fld"><span>${ar?'المسمى الوظيفي':'Job title'}</span><input value=${f.jobTitle||''} onChange=${e=>set('jobTitle',e.target.value)}/></label>
-      <label class="fld"><span>${ar?'الدور':'Role'}</span><select value=${f.role||'Creative'} onChange=${e=>set('role',e.target.value)}>${roleOptions(f.role).map(r=>html`<option key=${r} value=${r}>${r}</option>`)}</select></label>
+      <label class="fld"><span>${ar?'الدور':'Role'}</span><select value=${f.role||'Designer'} onChange=${e=>set('role',e.target.value)}>${(user.authUserId?['Owner','Admin','Manager','Account Manager','Sales','HR','Finance','Designer','Content Creator','Client']:roleOptions(f.role)).map(r=>html`<option key=${r} value=${r}>${r}</option>`)}</select></label>
       <label class="fld"><span>${ar?'الحالة':'Status'}</span><select value=${f.status||'Active'} onChange=${e=>set('status',e.target.value)}><option>Active</option><option>Inactive</option></select></label>
       ${isNew&&html`<label class="fld"><span>${ar?'كلمة المرور':'Password'}</span><input type="password" value=${f._pw||''} onChange=${e=>set('_pw',e.target.value)}/></label>`}
       ${isNew&&html`<label class="fld"><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" value=${f._pw2||''} onChange=${e=>set('_pw2',e.target.value)}/></label>`}

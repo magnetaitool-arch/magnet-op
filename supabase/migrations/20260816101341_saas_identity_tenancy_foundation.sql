@@ -31,29 +31,88 @@ create index if not exists organizations_active_idx
   on public.organizations (status, created_at desc)
   where deleted_at is null;
 
-create table if not exists public.profiles (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  email text not null check (char_length(btrim(email)) between 3 and 320),
-  email_normalized text generated always as (lower(btrim(email))) stored,
-  display_name text not null check (char_length(btrim(display_name)) between 1 and 160),
-  phone text,
-  avatar_url text,
-  status text not null default 'PENDING_SETUP'
-    check (status in ('INVITED','PENDING_VERIFICATION','PENDING_SETUP','ACTIVE','SUSPENDED','DISABLED','ARCHIVED')),
-  onboarding_status text not null default 'PENDING'
-    check (onboarding_status in ('PENDING','IN_PROGRESS','COMPLETED','SKIPPED')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  archived_at timestamptz,
-  check ((status = 'ARCHIVED') = (archived_at is not null))
-);
+-- The legacy database already has public.profiles(id) and public.roles(role).
+-- Upgrade profiles in place and use a separate canonical role table so this
+-- migration is safe on both a restored legacy database and a fresh database.
+do $$
+begin
+  if to_regclass('public.profiles') is null then
+    raise exception 'public.profiles is missing; restore the legacy baseline before applying M1';
+  end if;
+end $$;
+
+alter table public.profiles add column if not exists display_name text;
+alter table public.profiles add column if not exists email_normalized text
+  generated always as (lower(btrim(email))) stored;
+alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists identity_status text;
+alter table public.profiles add column if not exists onboarding_status text;
+alter table public.profiles add column if not exists updated_at timestamptz;
+alter table public.profiles add column if not exists archived_at timestamptz;
+alter table public.profiles add column if not exists session_epoch integer;
+
+update public.profiles
+set
+  display_name = coalesce(nullif(btrim(display_name), ''), nullif(btrim(full_name), ''), nullif(btrim(email), ''), id::text),
+  identity_status = coalesce(
+    identity_status,
+    case
+      when upper(status::text) = 'ACTIVE' then 'ACTIVE'
+      when upper(status::text) in ('INACTIVE', 'DISABLED') then 'DISABLED'
+      else 'PENDING_SETUP'
+    end
+  ),
+  onboarding_status = coalesce(onboarding_status, case when upper(status::text) = 'ACTIVE' then 'COMPLETED' else 'PENDING' end),
+  updated_at = coalesce(updated_at, created_at, now()),
+  session_epoch = coalesce(session_epoch, 0);
+
+alter table public.profiles alter column display_name set not null;
+alter table public.profiles alter column identity_status set default 'PENDING_SETUP';
+alter table public.profiles alter column identity_status set not null;
+alter table public.profiles alter column onboarding_status set default 'PENDING';
+alter table public.profiles alter column onboarding_status set not null;
+alter table public.profiles alter column updated_at set default now();
+alter table public.profiles alter column updated_at set not null;
+alter table public.profiles alter column session_epoch set default 0;
+alter table public.profiles alter column session_epoch set not null;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_display_name_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles add constraint profiles_display_name_check
+      check (char_length(btrim(display_name)) between 1 and 160) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'profiles_identity_status_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles add constraint profiles_identity_status_check
+      check (identity_status in ('INVITED','PENDING_VERIFICATION','PENDING_SETUP','ACTIVE','SUSPENDED','DISABLED','ARCHIVED')) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'profiles_onboarding_status_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles add constraint profiles_onboarding_status_check
+      check (onboarding_status in ('PENDING','IN_PROGRESS','COMPLETED','SKIPPED')) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'profiles_archived_at_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles add constraint profiles_archived_at_check
+      check ((identity_status = 'ARCHIVED') = (archived_at is not null)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'profiles_session_epoch_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles add constraint profiles_session_epoch_check
+      check (session_epoch >= 0) not valid;
+  end if;
+end $$;
+
+alter table public.profiles validate constraint profiles_display_name_check;
+alter table public.profiles validate constraint profiles_identity_status_check;
+alter table public.profiles validate constraint profiles_onboarding_status_check;
+alter table public.profiles validate constraint profiles_archived_at_check;
+alter table public.profiles validate constraint profiles_session_epoch_check;
 
 create unique index if not exists profiles_email_normalized_unique
-  on public.profiles (email_normalized);
-create index if not exists profiles_status_idx
-  on public.profiles (status, updated_at desc);
+  on public.profiles (email_normalized)
+  where email_normalized is not null;
+create index if not exists profiles_identity_status_idx
+  on public.profiles (identity_status, updated_at desc);
 
-create table if not exists public.roles (
+create table if not exists public.organization_roles (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references public.organizations(id) on delete cascade,
   key text not null check (key = lower(btrim(key)) and key ~ '^[a-z0-9_]+$'),
@@ -66,11 +125,11 @@ create table if not exists public.roles (
   check ((is_system and organization_id is null) or (not is_system and organization_id is not null))
 );
 
-create unique index if not exists roles_organization_key_unique
-  on public.roles (organization_id, key)
+create unique index if not exists organization_roles_organization_key_unique
+  on public.organization_roles (organization_id, key)
   where organization_id is not null;
-create unique index if not exists roles_system_key_unique
-  on public.roles (key)
+create unique index if not exists organization_roles_system_key_unique
+  on public.organization_roles (key)
   where organization_id is null;
 
 create table if not exists public.capabilities (
@@ -81,7 +140,7 @@ create table if not exists public.capabilities (
 );
 
 create table if not exists public.role_capabilities (
-  role_id uuid not null references public.roles(id) on delete cascade,
+  role_id uuid not null references public.organization_roles(id) on delete cascade,
   capability_id uuid not null references public.capabilities(id) on delete restrict,
   created_at timestamptz not null default now(),
   primary key (role_id, capability_id)
@@ -92,7 +151,7 @@ create index if not exists role_capabilities_capability_idx
 create table if not exists public.organization_members (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
-  user_id uuid not null references public.profiles(user_id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
   role_id uuid not null,
   status text not null default 'ACTIVE'
     check (status in ('INVITED','PENDING_SETUP','ACTIVE','SUSPENDED','DISABLED','ARCHIVED')),
@@ -102,7 +161,7 @@ create table if not exists public.organization_members (
   archived_at timestamptz,
   unique (organization_id, user_id),
   foreign key (role_id, organization_id)
-    references public.roles(id, organization_id) on delete restrict,
+    references public.organization_roles(id, organization_id) on delete restrict,
   check ((status = 'ARCHIVED') = (archived_at is not null)),
   check (status <> 'ACTIVE' or joined_at is not null)
 );
@@ -121,8 +180,8 @@ create table if not exists public.organization_invitations (
   token_hash text not null unique check (char_length(token_hash) >= 43),
   status text not null default 'PENDING'
     check (status in ('PENDING','SENT','ACCEPTED','EXPIRED','REVOKED')),
-  invited_by uuid references public.profiles(user_id) on delete set null,
-  accepted_by uuid references public.profiles(user_id) on delete set null,
+  invited_by uuid references public.profiles(id) on delete set null,
+  accepted_by uuid references public.profiles(id) on delete set null,
   expires_at timestamptz not null,
   sent_at timestamptz,
   accepted_at timestamptz,
@@ -131,7 +190,7 @@ create table if not exists public.organization_invitations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (role_id, organization_id)
-    references public.roles(id, organization_id) on delete restrict,
+    references public.organization_roles(id, organization_id) on delete restrict,
   unique (organization_id, idempotency_key),
   check (expires_at > created_at),
   check ((status = 'ACCEPTED') = (accepted_at is not null)),
@@ -150,7 +209,7 @@ create table if not exists public.auth_events (
   event_type text not null check (char_length(btrim(event_type)) between 1 and 100),
   success boolean not null,
   error_category text,
-  user_id uuid references public.profiles(user_id) on delete set null,
+  user_id uuid references public.profiles(id) on delete set null,
   organization_id uuid references public.organizations(id) on delete set null,
   safe_context jsonb not null default '{}'::jsonb,
   occurred_at timestamptz not null default now()
@@ -169,7 +228,7 @@ create table if not exists public.audit_events (
   id bigint generated always as identity primary key,
   request_id uuid not null default gen_random_uuid(),
   organization_id uuid references public.organizations(id) on delete restrict,
-  actor_user_id uuid references public.profiles(user_id) on delete set null,
+  actor_user_id uuid references public.profiles(id) on delete set null,
   action text not null check (char_length(btrim(action)) between 1 and 120),
   entity_type text not null check (char_length(btrim(entity_type)) between 1 and 100),
   entity_id text,
@@ -212,7 +271,7 @@ create trigger audit_events_append_only
 create table if not exists public.idempotency_keys (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references public.organizations(id) on delete cascade,
-  actor_user_id uuid references public.profiles(user_id) on delete set null,
+  actor_user_id uuid references public.profiles(id) on delete set null,
   scope text not null check (char_length(btrim(scope)) between 1 and 100),
   key text not null check (char_length(btrim(key)) between 8 and 200),
   request_hash text not null check (char_length(request_hash) >= 43),
@@ -306,7 +365,7 @@ create table if not exists public.legacy_identity_links (
   link_status text not null default 'PENDING'
     check (link_status in ('PENDING','CONFIRMED','CONFLICT','MISSING_AUTH','MISSING_PROFILE','IGNORED')),
   evidence jsonb not null default '{}'::jsonb,
-  reviewed_by uuid references public.profiles(user_id) on delete set null,
+  reviewed_by uuid references public.profiles(id) on delete set null,
   reviewed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -335,7 +394,7 @@ declare
   table_name text;
 begin
   foreach table_name in array array[
-    'organizations','profiles','roles','organization_members',
+    'organizations','profiles','organization_roles','organization_members',
     'organization_invitations','idempotency_keys','outbox_messages','jobs',
     'legacy_record_tenant_map','legacy_identity_links'
   ] loop
@@ -352,7 +411,7 @@ declare
   table_name text;
 begin
   foreach table_name in array array[
-    'organizations','profiles','roles','capabilities','role_capabilities',
+    'organizations','organization_roles','capabilities','role_capabilities',
     'organization_members','organization_invitations','auth_events','audit_events',
     'idempotency_keys','outbox_messages','jobs','legacy_record_tenant_map',
     'legacy_identity_links'
