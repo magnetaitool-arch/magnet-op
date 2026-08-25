@@ -2957,10 +2957,10 @@ async function emailPayslip(p, emp, onResult){
   }
   const nm=(emp&&(emp.fullName||emp.name))||'';
   try{
-    const sent=await sendEmail({ to, subject:'Magnet — Payslip '+(p.month||''), html:payslipHTML(p, emp),
+    const sent=await sendEmail({ purpose:'PAYSLIP', to, subject:'Magnet — Payslip '+(p.month||''), html:payslipHTML(p, emp),
       idempotencyKey:'payslip/'+String(p.id||emp.id||'employee')+'/'+String(p.month||'period')+(p.payslipEmailId?('/retry-'+Date.now()):'') });
     showProPopup('syncSuccess', (ar?'اتقبلت للإرسال إلى ':'Accepted for delivery to ')+to);
-    try{ if(onResult) onResult({ok:true,id:sent&&sent.id,to,status:'Accepted',at:nowISO()}); }catch(_){}
+    try{ if(onResult) onResult({ok:true,id:sent&&sent.id,to,status:(sent&&sent.status)||'Queued',at:nowISO(),error:(sent&&sent.error)||''}); }catch(_){}
     return sent;
   }catch(err){
     const message=String((err&&err.message)||err||'Email failed');
@@ -3067,9 +3067,9 @@ async function emailEmployeeReport(report,emp,db,includeSalaryAllowed,onResult){
   const safe=Object.assign({},report,{includeSalary:!!report.includeSalary&&!!includeSalaryAllowed});
   try{
     const mailHTML=employeeReportHTML(safe,emp,db).replace(/<div class="noprint">[\s\S]*?<\/div>/,'');
-    const sent=await sendEmail({to,subject:(ar?'تقرير الموظف — ':'Employee report — ')+(report.period||''),html:mailHTML,
+    const sent=await sendEmail({purpose:'EMPLOYEE_REPORT',to,subject:(ar?'تقرير الموظف — ':'Employee report — ')+(report.period||''),html:mailHTML,
       idempotencyKey:'employee-report/'+String(report.id||emp.id)+'/'+String(report.period||'period')+(report.emailProviderId?('/retry-'+Date.now()):'')});
-    const result={ok:true,status:'Accepted',id:sent&&sent.id,to,at:nowISO()};
+    const result={ok:true,status:(sent&&sent.status)||'Queued',id:sent&&sent.id,to,at:nowISO(),error:(sent&&sent.error)||''};
     showProPopup('syncSuccess',(ar?'اتقبل للإرسال إلى ':'Accepted for delivery to ')+to); if(onResult)onResult(result); return sent;
   }catch(err){ const message=String((err&&err.message)||err); if(onResult)onResult({ok:false,status:'Failed',to,error:message,at:nowISO()}); alert((ar?'الإرسال فشل: ':'Send failed: ')+message); }
 }
@@ -4330,12 +4330,14 @@ function collSame(a, b){
    kept as a fallback). The function holds the secret API key server-side; the
    browser only posts the message. Returns {ok,id} or throws a readable error. -- */
 async function sendEmail(payload){ // { to, subject, html?, text?, idempotencyKey? }
-  const body = JSON.stringify(payload||{});
+  const body = JSON.stringify(Object.assign({},payload||{},{organizationId:tenantOrganizationId()}));
   const endpoints = ['/api/send-email', '/.netlify/functions/send-email'];
+  const token=sbAccessToken();
+  if(!token) throw new Error(getLang()==='ar'?'جلسة الدخول انتهت — سجّل دخول تاني قبل الإرسال.':'Your session expired — sign in again before sending email.');
   let lastErr = 'Email failed';
   for(const ep of endpoints){
     let res;
-    try { res = await fetch(ep, { method:'POST', headers:{'Content-Type':'application/json'}, body }); }
+    try { res = await fetch(ep, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body }); }
     catch(e){ lastErr = String((e&&e.message)||e); continue; }
     // 404 means this host doesn't expose that endpoint (e.g. /api on Netlify or
     // /.netlify on Vercel) — try the next one rather than failing.
@@ -4349,9 +4351,11 @@ async function sendEmail(payload){ // { to, subject, html?, text?, idempotencyKe
 async function emailAPIGet(query){
   const suffix=query?('?'+query):'';
   const endpoints = ['/api/send-email'+suffix, '/.netlify/functions/send-email'+suffix];
+  const token=sbAccessToken();
+  if(!token) throw new Error(getLang()==='ar'?'جلسة الدخول انتهت.':'Your session expired.');
   let lastErr='Email status failed';
   for(const ep of endpoints){
-    let res; try{ res=await fetch(ep,{method:'GET'}); }
+    let res; try{ res=await fetch(ep,{method:'GET',headers:{'Authorization':'Bearer '+token}}); }
     catch(e){ lastErr=String((e&&e.message)||e); continue; }
     if(res.status===404){ lastErr='Email endpoint not found ('+ep+')'; continue; }
     let data={}; try{data=await res.json();}catch(e){}
@@ -4362,6 +4366,9 @@ async function emailAPIGet(query){
 }
 function emailEventStatus(value){
   const v=String(value||'').toLowerCase();
+  if(v==='queued'||v==='pending') return 'Queued';
+  if(v==='processing') return 'Processing';
+  if(v==='accepted') return 'Accepted';
   if(v==='delivered') return 'Delivered';
   if(v==='bounced') return 'Bounced';
   if(v==='complained') return 'Complained';
@@ -4374,7 +4381,7 @@ function emailEventStatus(value){
 async function getEmailStatus(id){
   if(!id) throw new Error('Missing email provider id');
   const data=await emailAPIGet('id='+encodeURIComponent(id));
-  return Object.assign({},data,{status:emailEventStatus(data.last_event)});
+  return Object.assign({},data,{status:emailEventStatus(data.last_event||data.status)});
 }
 async function getEmailHealth(){ return emailAPIGet(''); }
 function taskAssignmentEmailHTML(task, emp, db){
@@ -6619,7 +6626,7 @@ function App(){
       try {
         const u=(AUTH.loadUsers()||[]).find(x=>x.id===userIdOrRole) || (db.employees||[]).find(e=>e.id===userIdOrRole) || {};
         const to=u.email||u.loginEmail;
-        if(to) sendEmail({ to, subject:'['+(brand||'Magnet OS')+'] '+title, text:title+'\n\n'+(message||'')+'\n\n'+location.origin }).catch(()=>{});
+        if(to) sendEmail({ purpose:'NOTIFICATION', to, subject:'['+(brand||'Magnet OS')+'] '+title, text:title+'\n\n'+(message||'')+'\n\n'+location.origin }).catch(()=>{});
       } catch(e){}
     }
   };
@@ -6766,8 +6773,8 @@ function App(){
     updateRecord('tasks',current.id,{assignmentEmailStatus:'Sending',assignmentEmailTo:to,assignmentEmailError:''});
     try{
       const key=(('task-assigned/'+current.id+'/'+String(current.assignedTo))+(force?('/retry-'+Date.now()):'')).replace(/[^A-Za-z0-9_./:-]/g,'-').slice(0,256);
-      const sent=await sendEmail({to,subject:'[Magnet OS] New task: '+(current.title||current.name||''),html:taskAssignmentEmailHTML(current,emp,db),idempotencyKey:key});
-      const result={ok:true,id:sent&&sent.id,to,status:'Accepted',at:nowISO()};
+      const sent=await sendEmail({purpose:'TASK_ASSIGNMENT',to,subject:'[Magnet OS] New task: '+(current.title||current.name||''),html:taskAssignmentEmailHTML(current,emp,db),idempotencyKey:key});
+      const result={ok:true,id:sent&&sent.id,to,status:(sent&&sent.status)||'Queued',at:nowISO(),error:(sent&&sent.error)||''};
       updateRecord('tasks',current.id,{assignmentEmailStatus:result.status,assignmentEmailId:result.id||'',assignmentEmailTo:to,assignmentEmailAt:result.at,assignmentEmailError:''});
       if(force) showProPopup('syncSuccess',(lang==='ar'?'الإيميل اتقبل للإرسال إلى ':'Email accepted for delivery to ')+to);
       return result;
@@ -6966,7 +6973,7 @@ function App(){
     if(!to){ alert(getLang()==='ar'?'مفيش إيميل للعميل. افتح ملف العميل وضيف إيميل الأول.':'No client email on file. Open the client and add a contact email first.'); return; }
     const num = rec.invoiceNumber||rec.proposalNumber||rec.quotationNumber||rec.contractNumber||rec.id;
     const subject = type.charAt(0).toUpperCase()+type.slice(1)+' '+num+' — '+(brand||'Magnet');
-    try { await sendEmail({ to, subject, html:_docHTML(type, rec, db) }); showProPopup('syncSuccess','Email sent to '+to); }
+    try { await sendEmail({ purpose:'DOCUMENT', to, subject, html:_docHTML(type, rec, db) }); showProPopup('syncSuccess','Email sent to '+to); }
     catch(e){ alert('Email failed: '+e.message+'\n\nMake sure RESEND_API_KEY is set in Vercel (see setup notes).'); }
   };
 
@@ -9536,7 +9543,7 @@ function SettingsView({ ctx, x }){
         <label class="fld" style=${{minWidth:240}}><span>${ctx.lang==='ar'?'إيميل لاختبار الإرسال':'Send a test email to'}</span>
           <input value=${email} placeholder="you@example.com" onChange=${e=>setEmail(e.target.value)}/></label>
         <button class="btn btn-ghost" onClick=${async()=>{ if(!email){alert('Enter an email first.');return;}
-          try{ await sendEmail({to:email,subject:'Magnet OS — test email',text:'This is a test from your Magnet OS deployment. If you got this, email is working.'}); showProPopup('syncSuccess','Test email sent to '+email); }
+          try{ await sendEmail({purpose:'SYSTEM_TEST',to:email,subject:'Magnet OS — test email',text:'This is a test from your Magnet OS deployment. If you got this, email is working.'}); showProPopup('syncSuccess','Test email sent to '+email); }
           catch(err){ alert('Test failed: '+err.message+'\n\nCheck that RESEND_API_KEY is set in Vercel and you redeployed.'); } }}>${ctx.lang==='ar'?'إرسال اختبار':'Send test'}</button>
       </div>
     <//>
@@ -10634,7 +10641,7 @@ function LoginScreen({ onLogin, lang, applyAppSettings }){
         const u=(AUTH.loadUsers()||[]).find(x=>(x.email||'').toLowerCase()===who.toLowerCase()||(x.username||'').toLowerCase()===who.toLowerCase());
         if(u && u.email){
           const temp=randToken(5);
-          await sendEmail({ to:u.email, subject:(ar?'كلمة مرور مؤقتة — Magnet OS':'Your temporary password — Magnet OS'),
+          await sendEmail({ purpose:'USER_ADMIN', to:u.email, subject:(ar?'كلمة مرور مؤقتة — Magnet OS':'Your temporary password — Magnet OS'),
             text:(ar?'كلمة المرور المؤقتة الخاصة بك هي: ':'Your temporary password is: ')+temp+'\n'+location.origin+'\n'+(ar?'يُرجى تغييرها بعد الدخول من الملف الشخصي.':'Please change it after signing in (Profile).') });
           u.passwordHash=await AUTH.hashPassword(temp); u.isDefaultPassword=true;
           AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
@@ -11076,7 +11083,7 @@ function UsersView({ ctx }){
     let tok=tu.verifyToken; if(!tok){ tok='vt-'+randToken(18); tu.verifyToken=tok; tu.verified=false; await AUTH.saveUserConfirmed(tu); refresh(); }
     const link=verifyLink(tok);
     const body='<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto"><h2 style="color:#0a0a0a">Verify your Magnet OS account</h2><p>Hi '+(tu.fullName||'')+', please confirm your email to activate your account.</p><p style="margin:22px 0"><a href="'+link+'" style="background:#C4FF3D;color:#0a0a0a;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Verify my email</a></p><p style="color:#666;font-size:13px">Or open this link:<br>'+link+'</p></div>';
-    try { await sendEmail({to:tu.email, subject:'Verify your Magnet OS account', html:body}); if(!silent) showProPopup('savedNotes', ar?'تم إرسال رابط التأكيد':'Verification email sent'); }
+    try { await sendEmail({purpose:'USER_ADMIN',to:tu.email, subject:'Verify your Magnet OS account', html:body}); if(!silent) showProPopup('savedNotes', ar?'تم إرسال رابط التأكيد':'Verification email sent'); }
     catch(e){ if(!silent){ try{ navigator.clipboard.writeText(link); }catch(_){ } alert((ar?'خدمة الإيميل غير مفعّلة على هذا الرابط. تم نسخ رابط التأكيد — ابعته يدويًا:\n\n':'Email service not active on this host. Verification link copied — send it manually:\n\n')+link); } }
   };
   const requireVer = !!ctx.appSettings.requireVerification;

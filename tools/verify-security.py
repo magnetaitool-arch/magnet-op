@@ -53,22 +53,26 @@ check("Production login has no local password fallback",
       and bool(re.search(r"if\(!isLegacyAuthFallbackAllowed\(\)\) return \{ ok:false, reason:'unavailable' \}", app)),
       "browser-side hash checking must never be the production auth path")
 
-# ---------------------------------------------------------------- email relay
+# ---------------------------------------------------------------- email relay / delivery outbox
+outbox = read("server/outbox.js") or ""
+check("Email: no wildcard *.vercel.app origin",
+      "vercel\\.app$" not in outbox and "(^|\\.)vercel" not in outbox,
+      "any other Vercel project could otherwise relay mail through this key")
+check("Email: origin-less browser requests are not auto-trusted",
+      "authenticated_session_required" in outbox and "worker_secret_required" in outbox)
+check("Email: payload is validated",
+      "validEmailPayload" in outbox and "emailArray" in outbox,
+      "recipient/subject/body validation blocks header injection and abuse")
+check("Email: subject rejects CR/LF (header injection)",
+      bool(re.search(r"\[\\r\\n\]", outbox)))
+check("Email: provider work is durable and server-side",
+      "claim_outbox_messages" in outbox and "finish_outbox_message" in outbox and "RESEND_API_KEY" in outbox)
 for label, rel in (("Vercel", "api/send-email.js"), ("Netlify", "netlify/functions/send-email.js")):
     src = read(rel)
     if src is None:
         warn(f"{label} email endpoint missing", rel)
         continue
-    check(f"{label}: no wildcard *.vercel.app origin",
-          "vercel\\.app$" not in src and "(^|\\.)vercel" not in src,
-          "any other Vercel project could otherwise relay mail through this key")
-    check(f"{label}: origin-less requests are not auto-trusted",
-          "if (!origin) return true" not in src and "if(!origin) return true" not in src)
-    check(f"{label}: payload is validated",
-          "validPayload" in src or "Invalid email payload" in src,
-          "recipient/subject/body validation blocks header injection and abuse")
-    check(f"{label}: subject rejects CR/LF (header injection)",
-          bool(re.search(r"\[\\r\\n\]", src)))
+    check(f"{label}: uses the shared authorized outbox", "handleOutbox" in src)
 
 # ---------------------------------------------------------------- secrets
 SECRET_PAT = re.compile(r"service_role|SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*['\"]|re_[A-Za-z0-9]{20,}|vcp_[A-Za-z0-9]{20,}")

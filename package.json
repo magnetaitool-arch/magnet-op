@@ -24,6 +24,7 @@
     "test:organization-settings": "node tools/organization-settings-test.js",
     "test:employee-privacy": "node tools/employee-privacy-test.js",
     "test:public-intake": "node tools/public-intake-test.js",
+    "test:delivery-outbox": "node tools/delivery-outbox-test.js",
     "test:identity:staging": "node tools/test-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
     "test:login:staging": "node tools/test-staging-app-login.js --project-ref=xqqgbvigfojfydzfguan",
     "test:tenant:staging": "node tools/test-staging-tenant-rls.js --project-ref=xqqgbvigfojfydzfguan",
@@ -31,7 +32,8 @@
     "test:employee-privacy:staging": "node tools/test-staging-employee-privacy.js --project-ref=xqqgbvigfojfydzfguan",
     "test:public-forms:staging": "node tools/test-staging-public-forms.js --project-ref=xqqgbvigfojfydzfguan",
     "test:public-intake:staging": "node tools/test-staging-public-intake.js --project-ref=xqqgbvigfojfydzfguan",
-    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js",
+    "test:delivery-outbox:staging": "node tools/test-staging-delivery-outbox.js --project-ref=xqqgbvigfojfydzfguan",
+    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js",
     "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {

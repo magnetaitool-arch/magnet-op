@@ -101,6 +101,32 @@ async function organizationId(base, key, env) {
   return id;
 }
 
+async function attemptQueuedDeliveries(base, key, env, organizationIdValue, entityId) {
+  if (!entityId) return 0;
+  const emailReady = !!(env.RESEND_API_KEY && (env.HR_EMAIL || env.SALES_EMAIL));
+  const whatsappReady = !!(env.WHATSAPP_PROVIDER === 'meta' && env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID && (env.HR_WHATSAPP || env.SALES_WHATSAPP));
+  if (!emailReady && !whatsappReady) return 0;
+  const query = new URLSearchParams({
+    organization_id: 'eq.' + organizationIdValue,
+    'payload->>entityId': 'eq.' + entityId,
+    status: 'eq.PENDING',
+    select: 'id',
+    limit: '4',
+  });
+  const queued = await jsonFetch(base + '/rest/v1/outbox_messages?' + query.toString(), {
+    headers: serviceHeaders(key),
+  });
+  if (!queued.response.ok || !Array.isArray(queued.payload) || !queued.payload.length) return 0;
+  const { processOutbox } = require('./outbox');
+  let attempted = 0;
+  for (const message of queued.payload) {
+    if (!message || !message.id) continue;
+    const result = await processOutbox({ base, key }, env, { limit: 1, messageId: message.id });
+    if (result.length) attempted += 1;
+  }
+  return attempted;
+}
+
 function requestFingerprint(headers, key) {
   const forwarded = clip(headers['x-vercel-forwarded-for'] || headers['x-forwarded-for'] || headers['client-ip'] || 'unknown', 256).split(',')[0];
   const agent = clip(headers['user-agent'] || 'unknown', 512);
@@ -168,10 +194,17 @@ async function handlePublicIntake(request, env = process.env) {
       const code = clip(result.payload && result.payload.message, 100);
       return { status: errorStatus(code), headers: cors, body: { error: ['rate_limited','idempotency_conflict','request_in_progress'].includes(code) ? code : 'intake_failed' } };
     }
-    return { status: 200, headers: cors, body: result.payload };
+    let deliveryAttempted = 0;
+    try {
+      deliveryAttempted = await attemptQueuedDeliveries(base, key, env, orgId, result.payload && result.payload.id);
+    } catch (error) {
+      // The canonical intake is already committed. A pending outbox row remains
+      // durable and can be retried by the worker without duplicating the intake.
+    }
+    return { status: 200, headers: cors, body: { ...result.payload, deliveryAttempted } };
   } catch (error) {
     return { status: 503, headers: cors, body: { error: 'service_unavailable' } };
   }
 }
 
-module.exports = { handlePublicIntake, _test: { allowedOrigins, sanitizePayload, stableStringify } };
+module.exports = { handlePublicIntake, _test: { allowedOrigins, sanitizePayload, stableStringify, attemptQueuedDeliveries } };

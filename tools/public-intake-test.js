@@ -20,10 +20,14 @@ const previous = {
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_ORGANIZATION_SLUG: process.env.SUPABASE_ORGANIZATION_SLUG,
   PUBLIC_FORM_ALLOWED_ORIGINS: process.env.PUBLIC_FORM_ALLOWED_ORIGINS,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  SALES_EMAIL: process.env.SALES_EMAIL,
 };
 process.env.SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'offline-service-key';
 process.env.SUPABASE_ORGANIZATION_SLUG = 'magnet';
+process.env.RESEND_API_KEY = 'offline-resend-key';
+process.env.SALES_EMAIL = 'sales@example.invalid';
 delete process.env.PUBLIC_FORM_ALLOWED_ORIGINS;
 
 let calls = [];
@@ -38,6 +42,9 @@ global.fetch = async (url, init = {}) => {
     if (rpcError) return { ok: false, status: 400, json: async () => ({ message: rpcError }) };
     const request = JSON.parse(init.body);
     return { ok: true, status: 200, json: async () => ({ ok: true, id: request.p_intake_kind === 'candidate' ? 'can-test' : 'lea-test', replayed: false, notificationsQueued: true }) };
+  }
+  if (String(url).includes('/outbox_messages?')) {
+    return { ok: true, status: 200, json: async () => [] };
   }
   throw new Error('unexpected fetch');
 };
@@ -81,7 +88,7 @@ function callVercel({ origin, body, headers = {}, method = 'POST' }) {
   });
   same(accepted.statusCode, 200, 'valid lead is accepted');
   same(accepted.headers['access-control-allow-origin'], 'https://magnet-os-staging.vercel.app', 'returns exact-origin CORS');
-  same(calls.length, 2, 'loads tenant then executes one database command');
+  same(calls.length, 3, 'loads tenant, executes one database command, then checks its durable outbox');
   const rpcCall = calls.find((call) => call.url.includes('/rpc/submit_public_intake'));
   check(rpcCall && !calls.some((call) => call.url.includes('/rest/v1/records')), 'never writes records directly from the route');
   const rpcBody = JSON.parse(rpcCall.init.body);
