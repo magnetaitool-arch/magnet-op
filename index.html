@@ -1242,9 +1242,21 @@ body.theme-light .tbl thead th{background:#fff}
 .rec-timeline{display:flex;flex-direction:column;gap:0}.rec-time{display:grid;grid-template-columns:12px 1fr;gap:10px;padding-bottom:14px}.rec-time i{width:8px;height:8px;border-radius:50%;margin-top:4px;background:var(--lime);box-shadow:0 0 0 4px rgba(200,243,30,.09)}.rec-time:not(:last-child) i::after{content:"";display:block;width:1px;height:35px;background:var(--line);margin:8px auto 0}.rec-time b{font-size:12px}.rec-time span{display:block;color:var(--ink-4);font-size:10.5px;margin-top:4px}
 .rec-link-card{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:12px;padding:13px;color:var(--ink-2);text-decoration:none}.rec-link-card:hover{border-color:rgba(200,243,30,.45);color:var(--lime)}
 .rec-error{border:1px solid rgba(255,111,116,.35);background:rgba(255,111,116,.07);color:#ff9498;border-radius:12px;padding:11px 13px;font-size:12px}
+/* Sales CRM + Client Workspace V2 — relationship-first, compact, semantic */
+.crm-stages{display:grid;grid-template-columns:repeat(13,minmax(112px,1fr));gap:8px;overflow-x:auto;padding-bottom:3px;scrollbar-width:thin}
+.crm-v2-grid{grid-template-columns:minmax(220px,1.45fr) minmax(140px,1fr) 142px 100px 110px 68px}
+.client-v2-grid{grid-template-columns:minmax(230px,1.45fr) 108px minmax(145px,.9fr) 100px minmax(150px,1fr) 68px}
+.crm-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:999px;font-size:10.5px;font-weight:700;white-space:nowrap;color:var(--ink-3)}
+.crm-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.crm-badge.new-lead{color:#72a7ff}.crm-badge.contacted,.crm-badge.meeting-booked,.crm-badge.meeting-done{color:#3fd7ff}.crm-badge.qualified,.crm-badge.proposal-needed,.crm-badge.proposal-sent,.crm-badge.quotation-sent{color:#b48cff}.crm-badge.negotiation,.crm-badge.follow-up-later{color:#ffc24b}.crm-badge.won{color:#55df8b}.crm-badge.lost{color:#ff6f74}
+.crm-profile-modal{width:940px!important;max-width:97vw!important}.crm-action-strip{display:grid;grid-template-columns:minmax(180px,1.1fr) .7fr 1.2fr auto;gap:10px;align-items:end;margin:15px 0;padding:12px;border:1px solid var(--line);background:var(--panel);border-radius:13px}.crm-action-strip>div{min-width:0}.crm-action-strip span{display:block;color:var(--ink-4);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}.crm-action-strip b{display:block;color:var(--ink-2);font-size:12px;overflow-wrap:anywhere}.crm-message{margin-top:12px;border-inline-start:2px solid var(--info);padding:10px 12px;background:rgba(63,215,255,.04)}.crm-message span{font-size:10px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em}.crm-message p{white-space:pre-wrap;color:var(--ink-2);font-size:12.5px;line-height:1.7;margin:6px 0 0}.workspace-split{display:grid;grid-template-columns:1fr 1fr;gap:12px}.workspace-split h4{font:700 13px var(--display);margin:0 0 8px}
+.client-toolbar{grid-template-columns:minmax(260px,1fr) 170px auto}.client-count{justify-self:end}.client-workspace-modal{width:1080px!important;max-width:98vw!important}.client-workspace-body{max-height:88vh!important;overflow-y:auto!important}.client-workspace-head{position:relative}.workspace-hero-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;border:1px solid var(--line);background:var(--line);border-radius:13px;overflow:hidden;margin-top:15px}.workspace-hero-metrics>div{background:var(--panel);padding:12px;min-width:0}.workspace-hero-metrics span{display:block;font-size:10px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em}.workspace-hero-metrics b{display:block;margin-top:6px;font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.workspace-hero-metrics b.warn{color:var(--warn)}.workspace-tabs{top:-1px;padding-top:13px}.workspace-tab-body{min-height:250px;padding-bottom:4px}.workspace-loading{font-size:11px;color:var(--info);padding:7px 0}.workspace-table{overflow-x:auto;border:1px solid var(--line);border-radius:13px;background:var(--panel)}.workspace-table .tbl{min-width:650px}.workspace-empty{min-height:150px;display:grid;place-items:center;text-align:center;color:var(--ink-4);border:1px dashed var(--line-strong);border-radius:13px;padding:20px}.workspace-relations{display:flex;align-items:center;gap:8px;overflow-x:auto;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);scrollbar-width:thin}.workspace-relations span{white-space:nowrap;color:var(--ink-2);font-size:11.5px}.workspace-relations i{color:var(--lime);font-style:normal}.client-v2-shell,.crm-v2-shell{min-width:0}
 @media(max-width:1050px){.rec-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-list-head,.rec-row{grid-template-columns:minmax(200px,1.4fr) minmax(120px,.8fr) 110px 112px 70px}.rec-list-head>:nth-child(5),.rec-row>:nth-child(5){display:none}.rec-toolbar{grid-template-columns:minmax(220px,1fr) 145px 165px auto}}
 @media(max-width:767px){.rec-toolbar{grid-template-columns:1fr 1fr}.rec-search{grid-column:1/-1}.rec-view-toggle{justify-self:stretch}.rec-view-toggle button{flex:1}.rec-list-head{display:none}.rec-row{grid-template-columns:1fr auto;padding:13px;gap:9px}.rec-row>:nth-child(2),.rec-row>:nth-child(4),.rec-row>:nth-child(5){display:none}.rec-row>:nth-child(3){grid-column:2;grid-row:1}.rec-row>:nth-child(6){grid-column:2;grid-row:2}.rec-cards{grid-template-columns:1fr}.rec-profile-head{flex-direction:column}.rec-profile-actions{justify-content:flex-start}.rec-facts,.rec-answer-list{grid-template-columns:1fr 1fr}.rec-interview-form{grid-template-columns:1fr}.rec-pagination{align-items:flex-start;flex-direction:column}}
 @media(max-width:430px){.rec-facts,.rec-answer-list{grid-template-columns:1fr}.rec-toolbar{grid-template-columns:1fr}.rec-toolbar>*{grid-column:1}.rec-view-toggle{justify-self:stretch}}
+@media(max-width:1050px){.crm-v2-grid{grid-template-columns:minmax(210px,1.4fr) minmax(130px,1fr) 140px 90px 68px}.crm-v2-grid>:nth-child(5){display:none}.client-v2-grid{grid-template-columns:minmax(220px,1.4fr) 105px minmax(130px,.9fr) 120px 68px}.client-v2-grid>:nth-child(4){display:none}.workspace-hero-metrics{grid-template-columns:1fr 1fr}.crm-action-strip{grid-template-columns:1fr 1fr}.workspace-split{grid-template-columns:1fr}}
+@media(max-width:767px){.crm-v2-grid,.client-v2-grid{grid-template-columns:1fr auto}.crm-v2-grid>:nth-child(2),.crm-v2-grid>:nth-child(4),.crm-v2-grid>:nth-child(5),.client-v2-grid>:nth-child(2),.client-v2-grid>:nth-child(3),.client-v2-grid>:nth-child(4),.client-v2-grid>:nth-child(5){display:none}.crm-v2-grid>:nth-child(3){grid-column:2;grid-row:1}.crm-v2-grid>:nth-child(6),.client-v2-grid>:nth-child(6){grid-column:2;grid-row:2}.client-toolbar{grid-template-columns:1fr 1fr}.client-count{justify-self:end;align-self:center}.crm-action-strip{grid-template-columns:1fr}.workspace-hero-metrics{grid-template-columns:1fr 1fr}.client-workspace-modal{max-width:100vw!important;width:100vw!important;height:100dvh!important;border-radius:0!important}.client-workspace-body{max-height:100dvh!important}.workspace-table .tbl{min-width:580px}}
+@media(max-width:430px){.workspace-hero-metrics{grid-template-columns:1fr}.client-toolbar{grid-template-columns:1fr}.client-count{justify-self:start}.crm-profile-modal{width:100vw!important;max-width:100vw!important;height:100dvh!important;border-radius:0!important}}
 
 </style></head>
 <body>
@@ -4272,6 +4284,14 @@ async function recruitmentRpc(cfg,name,payload){
   return data;
 }
 try{ window.__magnetRecruitment={rpc:recruitmentRpc}; }catch(e){}
+
+/* Sales + Client Workspace V2 share the same authenticated, tenant-explicit
+   command transport. Keeping one transport prevents feature screens from
+   drifting back to direct browser writes or an implicit organization. */
+async function workspaceRpc(cfg,name,payload){
+  return recruitmentRpc(cfg,name,payload);
+}
+try{ window.__magnetWorkspace={rpc:workspaceRpc}; }catch(e){}
 
 function currentIdentityHasCapability(capability){ try{ const user=getSessionUser(); return !!(user&&Array.isArray(user.capabilities)&&user.capabilities.includes(capability)); }catch(e){ return false; } }
 async function cloudLoadEmployeeDirectory(cfg,since){
@@ -7836,6 +7856,58 @@ function RecruitmentView({ctx,candidates,canEdit}){
   </div>`;
 }
 
+/* ============================ SALES / CRM V2 ============================ */
+const CRM_STAGES=['New Lead','Contacted','Qualified','Meeting Booked','Meeting Done','Proposal Needed','Proposal Sent','Quotation Sent','Negotiation','Won','Lost','Follow-up Later'];
+function CrmBadge({stage}){const key=String(stage||'New Lead').toLowerCase().replace(/[^a-z]+/g,'-').replace(/^-|-$/g,'');return html`<span class="crm-badge ${key}">${stage||'New Lead'}</span>`;}
+function crmWhatsapp(phone){const digits=String(phone||'').replace(/\D/g,'');return digits?('https://wa.me/'+digits):'';}
+
+function LeadProfileModal({ctx,detail,canEdit,busy,error,onClose,onStage,onNote,onEdit,onConvert}){
+  const ar=ctx.lang==='ar';const L=(en,ara)=>ar?ara:en;const [tab,setTab]=useState('Overview');const [note,setNote]=useState('');
+  if(!detail||!detail.lead)return html`<div class="ovl"><div class="modal wide"><div class="modal-b"><span class="sk" style=${{height:320}}></span></div></div></div>`;
+  const lead=detail.lead,payload=lead.payload||{};const tabs=['Overview','Website Submission','Activities','Proposals','Internal Notes','Timeline'];
+  const labels={Overview:'نظرة عامة','Website Submission':'بيانات الموقع',Activities:'الأنشطة',Proposals:'العروض','Internal Notes':'ملاحظات داخلية',Timeline:'السجل الزمني'};
+  const submitNote=async e=>{e.preventDefault();if(!note.trim())return;await onNote(note.trim());setNote('');};
+  return html`<div class="ovl" onClick=${onClose}><div class="modal wide crm-profile-modal" onClick=${e=>e.stopPropagation()}><div class="modal-b">
+    <div class="rec-profile-head"><div class="rec-profile-title"><div class="rec-avatar">${recInitials(lead.name)}</div><div><div class="flex center gap8" style=${{flexWrap:'wrap'}}><h2>${lead.name}</h2><${CrmBadge} stage=${lead.stage}/></div><p>${lead.company||L('Individual lead','عميل فردي')} · ${lead.source||'Manual'} · ${fmtDateTime(lead.submittedAt)}</p></div></div>
+      <div class="rec-profile-actions">${lead.email&&html`<a class="mini" href=${'mailto:'+lead.email}>${React.createElement(Icon.mail)} ${L('Email','إيميل')}</a>`}${lead.phone&&html`<a class="mini" href=${'tel:'+lead.phone}>${L('Call','اتصال')}</a>`}${crmWhatsapp(lead.phone)&&html`<a class="mini" href=${crmWhatsapp(lead.phone)} target="_blank" rel="noopener">WhatsApp</a>`}${canEdit&&html`<button class="btn btn-ghost" onClick=${onEdit}>${L('Edit','تعديل')}</button>`}<button class="icon-btn" onClick=${onClose}><span style=${{fontSize:18}}>×</span></button></div>
+    </div>
+    <div class="crm-action-strip"><div><span>${L('Stage','المرحلة')}</span><select class="sel" disabled=${!canEdit||busy} value=${lead.stage} onChange=${e=>onStage(e.target.value)}>${CRM_STAGES.map(s=>html`<option key=${s}>${s}</option>`)}</select></div><div><span>${L('Estimated value','القيمة المتوقعة')}</span><b>${money(lead.value||0)}</b></div><div><span>${L('Requested service','الخدمة المطلوبة')}</span><b>${lead.serviceInterest||'—'}</b></div>${canEdit&&lead.stage==='Won'&&html`<button class="btn btn-pri" onClick=${onConvert}>${L('Create client','تحويل لعميل')}</button>`}</div>
+    ${error&&html`<div class="rec-error">${error}</div>`}
+    <div class="rec-tabs">${tabs.map(name=>html`<button key=${name} class=${tab===name?'on':''} onClick=${()=>setTab(name)}>${ar?labels[name]:name}</button>`)}</div>
+    ${tab==='Overview'&&html`<div class="rec-section"><h4>${L('Lead overview','ملخص العميل المحتمل')}</h4><div class="rec-facts"><${RecFact} label=${L('Name','الاسم')} value=${lead.name}/><${RecFact} label=${L('Company','الشركة')} value=${lead.company}/><${RecFact} label=${L('Phone','الموبايل')} value=${lead.phone}/><${RecFact} label=${L('Email','الإيميل')} value=${lead.email}/><${RecFact} label=${L('Service','الخدمة')} value=${lead.serviceInterest}/><${RecFact} label=${L('Submitted','وقت الإرسال')} value=${fmtDateTime(lead.submittedAt)}/></div>${lead.message&&html`<div class="crm-message"><span>${L('Message','الرسالة')}</span><p>${lead.message}</p></div>`}</div>`}
+    ${tab==='Website Submission'&&html`<div class="rec-section"><h4>${L('Original submission','بيانات الإرسال الأصلية')}</h4><div class="rec-answer-list">${Object.entries(payload).filter(([key])=>!['id','createdAt','updatedAt'].includes(key)).map(([key,value])=>html`<div class="rec-answer" key=${key}><span>${key}</span><p>${Array.isArray(value)?value.join(', '):typeof value==='object'?JSON.stringify(value):String(value||'—')}</p></div>`)}</div></div>`}
+    ${tab==='Activities'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.activities} empty=${L('No sales activities yet.','لا توجد أنشطة مبيعات حتى الآن.')} columns=${[{k:'title',label:L('Activity','النشاط')},{k:'type',label:L('Type','النوع')},{k:'outcome',label:L('Outcome','النتيجة')},{k:'activityDate',label:L('Date','التاريخ'),date:true}]}/>`}
+    ${tab==='Proposals'&&html`<div class="workspace-split"><div><h4>${L('Proposals','العروض')}</h4><${ClientWorkspaceTable} db=${ctx.db} rows=${detail.proposals} empty=${L('No proposals linked.','لا توجد عروض مرتبطة.')} columns=${[{k:'proposalNumber',label:'#'},{k:'title',label:L('Proposal','العرض')},{k:'status',label:L('Status','الحالة'),tag:true}]}/></div><div><h4>${L('Quotations','عروض الأسعار')}</h4><${ClientWorkspaceTable} db=${ctx.db} rows=${detail.quotations} empty=${L('No quotations linked.','لا توجد عروض أسعار مرتبطة.')} columns=${[{k:'quotationNumber',label:'#'},{k:'total',label:L('Total','الإجمالي'),render:r=>money(r.total||0)},{k:'status',label:L('Status','الحالة'),tag:true}]}/></div></div>`}
+    ${tab==='Internal Notes'&&html`<div class="rec-section"><h4>${L('Private sales notes','ملاحظات المبيعات الداخلية')}</h4>${canEdit&&html`<form class="rec-note-form" onSubmit=${submitNote}><textarea rows="3" value=${note} onChange=${e=>setNote(e.target.value)} placeholder=${L('Add a follow-up note…','أضف ملاحظة متابعة…')}></textarea><div><button class="btn btn-pri" disabled=${busy||!note.trim()} type="submit">${L('Add note','إضافة ملاحظة')}</button></div></form>`}${(detail.notes||[]).map(item=>html`<div class="rec-note" key=${item.id}><p>${item.note}</p><small>${fmtDateTime(item.createdAt)}</small></div>`)}${!(detail.notes||[]).length&&html`<div class="muted" style=${{marginTop:10}}>${L('No internal notes.','لا توجد ملاحظات داخلية.')}</div>`}</div>`}
+    ${tab==='Timeline'&&html`<div class="rec-section"><h4>${L('Lead timeline','السجل الزمني')}</h4><div class="rec-timeline">${(detail.timeline||[]).map(item=>html`<div class="rec-time" key=${item.id}><i></i><div><b>${item.fromStage?item.fromStage+' → ':''}${item.toStage}</b>${item.note&&html`<span>${item.note}</span>`}<span>${fmtDateTime(item.occurredAt)}</span></div></div>`)}</div></div>`}
+  </div></div></div>`;
+}
+
+function SalesPipelineView({ctx,leads,canEdit}){
+  const ar=ctx.lang==='ar';const L=(en,ara)=>ar?ara:en;const organizationId=ctx.user&&ctx.user.organizationId||activeOrganizationId();
+  const [stage,setStage]=useState('');const [search,setSearch]=useState('');const [query,setQuery]=useState('');const [source,setSource]=useState('');const [sort,setSort]=useState('submitted_desc');const [page,setPage]=useState(1);
+  const [result,setResult]=useState({items:[],counts:{},total:0,page:1,pages:1});const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [profile,setProfile]=useState(null);const [profileBusy,setProfileBusy]=useState(false);const [profileError,setProfileError]=useState('');const deepLinkDone=useRef(false);
+  useEffect(()=>{const timer=setTimeout(()=>{setPage(1);setQuery(search.trim());},260);return()=>clearTimeout(timer);},[search]);
+  const load=async()=>{if(!organizationId){setError(L('Choose an organization first.','اختر المؤسسة أولًا.'));setLoading(false);return;}setLoading(true);setError('');try{const data=await workspaceRpc(ctx.cfg,'list_crm_leads',{p_organization_id:organizationId,p_stage:stage||null,p_search:query||null,p_source:source||null,p_sort:sort,p_page:page,p_page_size:24});setResult(Object.assign({items:[],counts:{},total:0,page:1,pages:1},data||{}));}catch(e){setError(L('CRM could not be loaded: ','تعذر تحميل الـCRM: ')+String(e.message||e));}setLoading(false);};
+  useEffect(()=>{load();},[organizationId,stage,query,source,sort,page]);
+  const openLead=async id=>{if(!id)return;setProfile({});setProfileBusy(true);setProfileError('');try{const data=await workspaceRpc(ctx.cfg,'get_crm_lead_profile',{p_organization_id:organizationId,p_legacy_record_id:id});if(!data||!data.ok)throw new Error('lead-not-found');setProfile(data);}catch(e){setProfile(null);setError(L('Lead could not be opened: ','تعذر فتح العميل المحتمل: ')+String(e.message||e));}setProfileBusy(false);};
+  useEffect(()=>{if(deepLinkDone.current)return;try{const p=new URLSearchParams(location.search);if(p.get('open')==='leads'&&p.get('id')){deepLinkDone.current=true;openLead(p.get('id'));}}catch(e){}},[organizationId]);
+  const closeProfile=()=>{setProfile(null);setProfileError('');try{const url=new URL(location.href);url.searchParams.delete('open');url.searchParams.delete('id');history.replaceState({},'',url.pathname+(url.search?'?'+url.searchParams.toString():'')+url.hash);}catch(e){}};
+  const runCommand=async(name,payload)=>{if(!profile||!profile.lead)return null;setProfileBusy(true);setProfileError('');try{const data=await workspaceRpc(ctx.cfg,name,Object.assign({p_organization_id:organizationId,p_legacy_record_id:profile.lead.legacyRecordId},payload||{}));setProfile(data);await load();return data;}catch(e){setProfileError(String(e.message||e));return null;}finally{setProfileBusy(false);}};
+  const editLead=()=>{if(!profile||!profile.lead)return;const legacy=(leads||[]).find(x=>x.id===profile.lead.legacyRecordId)||Object.assign({id:profile.lead.legacyRecordId},profile.lead.payload||{});closeProfile();ctx.openModal('leads',legacy);};
+  const convertLead=()=>{if(!profile||!profile.lead)return;const legacy=(leads||[]).find(x=>x.id===profile.lead.legacyRecordId)||Object.assign({id:profile.lead.legacyRecordId,status:'Won'},profile.lead.payload||{});closeProfile();ctx.convertLead(legacy);};
+  const items=Array.isArray(result.items)?result.items:[],counts=result.counts||{};const sources=['Website','Referral','Instagram','Ads','Cold','Event','Manual'];
+  return html`<div class="view rec-shell crm-v2-shell"><${Head} eyebrow="SALES / CRM" title=${L('Leads & Pipeline','العملاء المحتملون')} desc=${L('Every website lead is captured, qualified, and followed through one verified pipeline.','كل Lead من الموقع يتسجل ويتأهل ويتتابع في Pipeline موحّد.')}>${canEdit&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('leads',{status:'New Lead',brand:'Magnet',source:'Manual'})}>${React.createElement(Icon.plus)} ${L('New lead','Lead جديد')}</button>`}<//>
+    <div class="crm-stages"><button class="rec-stage-tab ${stage===''?'on':''}" onClick=${()=>{setStage('');setPage(1);}}><b>${Number(result.total)||0}</b><span>${L('All leads','كل الـLeads')}</span></button>${CRM_STAGES.map(s=>html`<button key=${s} class="rec-stage-tab ${stage===s?'on':''}" onClick=${()=>{setStage(s);setPage(1);}}><b>${Number(counts[s])||0}</b><span>${s}</span></button>`)}</div>
+    <div class="rec-toolbar"><div class="rec-search">${React.createElement(Icon.search)}<input value=${search} onChange=${e=>setSearch(e.target.value)} placeholder=${L('Search name, company, phone, service…','ابحث بالاسم أو الشركة أو الموبايل أو الخدمة…')}/></div><select class="sel" value=${source} onChange=${e=>{setSource(e.target.value);setPage(1);}}><option value="">${L('All sources','كل المصادر')}</option>${sources.map(x=>html`<option key=${x}>${x}</option>`)}</select><select class="sel" value=${sort} onChange=${e=>{setSort(e.target.value);setPage(1);}}><option value="submitted_desc">${L('Newest leads','الأحدث')}</option><option value="submitted_asc">${L('Oldest leads','الأقدم')}</option><option value="name_asc">${L('Name A–Z','الاسم أ–ي')}</option><option value="value_desc">${L('Highest value','الأعلى قيمة')}</option></select><span class="muted client-count">${Number(result.total)||0} ${L('leads','Lead')}</span></div>
+    ${error&&html`<div class="rec-error">${error} <button class="mini" onClick=${load}>${L('Retry','إعادة المحاولة')}</button></div>`}${loading&&html`<span class="sk" style=${{height:300,borderRadius:15}}></span>`}
+    ${!loading&&!items.length&&html`<div class="rec-empty"><div><b>${L('No leads found','لا يوجد Leads')}</b><p>${L('Change the filters or add a lead.','غيّر الفلاتر أو أضف Lead.')}</p></div></div>`}
+    ${!loading&&items.length>0&&html`<div class="rec-list crm-v2-list"><div class="rec-list-head crm-v2-grid"><span>${L('Lead','العميل المحتمل')}</span><span>${L('Service','الخدمة')}</span><span>${L('Stage','المرحلة')}</span><span>${L('Source','المصدر')}</span><span>${L('Value','القيمة')}</span><span></span></div>${items.map(item=>html`<div class="rec-row crm-v2-grid" key=${item.id} role="button" tabIndex="0" onClick=${()=>openLead(item.legacyRecordId)} onKeyDown=${e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openLead(item.legacyRecordId);}}}><div class="rec-person"><div class="rec-avatar">${recInitials(item.name)}</div><div class="rec-person-copy"><b>${item.name}</b><span>${item.company||item.phone||item.email||'—'}</span></div></div><div class="rec-cell rec-truncate">${item.serviceInterest||'—'}<small>${fmtDateTime(item.submittedAt)}</small></div><div><${CrmBadge} stage=${item.stage}/></div><div class="rec-cell">${item.source||'Manual'}</div><div class="rec-cell"><b>${money(item.value||0)}</b></div><button class="mini" onClick=${e=>{e.stopPropagation();openLead(item.legacyRecordId);}}>${L('Open','فتح')}</button></div>`)}</div>`}
+    ${!loading&&Number(result.pages||1)>1&&html`<div class="rec-pagination"><span>${L('Page','صفحة')} ${page} / ${result.pages}</span><div class="flex gap8"><button class="mini" disabled=${page<=1} onClick=${()=>setPage(page-1)}>${L('Previous','السابق')}</button><button class="mini" disabled=${page>=result.pages} onClick=${()=>setPage(page+1)}>${L('Next','التالي')}</button></div></div>`}
+    ${profile&&html`<${LeadProfileModal} ctx=${ctx} detail=${profile} canEdit=${canEdit} busy=${profileBusy} error=${profileError} onClose=${closeProfile} onStage=${next=>runCommand('change_crm_lead_stage',{p_stage:next,p_note:null})} onNote=${note=>runCommand('add_crm_lead_note',{p_note:note})} onEdit=${editLead} onConvert=${convertLead}/>`}
+  </div>`;
+}
+
 /* ---------- comments thread (reusable) ---------- */
 function CommentThread({ ctx, entityType, entityId }){
   const [text,setText] = useState('');
@@ -7867,23 +7939,7 @@ function renderRoute(route, ctx, x){
     case 'dashboard': return html`<${DashboardView} ctx=${ctx} byBrand=${x.byBrand}/>`;
     case 'accounts': return html`<${AccountsView} ctx=${ctx} visible=${x.visible} byBrand=${x.byBrand} ce=${ce('accounts')}/>`;
 
-    case 'leads': return html`<div class="view">
-      <${Head} eyebrow="CRM" title="Leads & Pipeline" desc="Drag across stages; move to Won then convert to a client.">
-        ${ce('leads')&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('leads',{status:'New Lead',brand:'Magnet'})}>${React.createElement(Icon.plus)} New lead</button>`}
-      <//>
-      ${!ce('leads')&&html`<div class="board-ro" style=${{display:'flex',alignItems:'center',gap:6}}>${React.createElement(Icon.lock)} Read-only — you don't have permission to edit this board.</div>`}
-      <${Kanban} items=${x.visible('leads')} columns=${ST.leadStage} field="status"
-        canMove=${ce('leads')} onUpdate=${(id,patch)=>ctx.updateRecord('leads',id,patch)}
-        onMove=${(id,s)=>ctx.updateRecord('leads',id,{status:s})}
-        render=${l=>html`<div>
-          <div class="flex between center"><b style=${{fontSize:13}}>${l.company||l.name}</b><span class="mono lime" style=${{fontSize:11}}>${money(l.value)}</span></div>
-          <div class="muted" style=${{fontSize:11.5,marginTop:4}}>${l.serviceInterest||''}</div>
-          <div class="muted" style=${{fontSize:11,marginTop:6}}>${nameById(db.employees,l.ownerId)} · ${l.source||''}</div>
-          <div class="flex gap8" style=${{marginTop:10}}>
-            ${ce('leads')&&html`<button class="mini" onClick=${()=>ctx.openModal('leads',l)}>Edit</button>`}
-            ${l.status==='Won'&&ce('clients')&&html`<button class="mini pri" onClick=${()=>ctx.convertLead(l)}>→ Client</button>`}
-            ${ctx.canDelete('leads')&&html`<button class="mini danger" onClick=${()=>ctx.delRec('leads',l.id,l.company||l.name)}>Delete</button>`}
-          </div></div>`}/></div>`;
+    case 'leads': return html`<${SalesPipelineView} ctx=${ctx} leads=${x.visible('leads')} canEdit=${ce('leads')}/>`;
 
     case 'candidates': return html`<${RecruitmentView} ctx=${ctx} candidates=${x.visible('candidates')} canEdit=${ce('candidates')}/>`;
 
@@ -9821,7 +9877,7 @@ function SettingsView({ ctx, x }){
       <${Panel} title="Supabase connection">
         <p class="muted" style=${{fontSize:13,lineHeight:1.6,marginBottom:14}}>Legacy connection diagnostics only. Database provisioning and RLS changes must use the reviewed Supabase migrations after a verified backup. Paste a publishable key only; private SaaS data additionally requires the signed-in user's JWT. Never paste a service-role key here.</p>
         <div class="form-grid">
-          <label class="fld full"><span>Project URL</span><input value=${url} placeholder="https://jdylrthffifbhyrrhuqd.supabase.co" onChange=${e=>setUrl(e.target.value)}/></label>
+          <label class="fld full"><span>Project URL</span><input value=${url} placeholder="https://your-project-ref.supabase.co" onChange=${e=>setUrl(e.target.value)}/></label>
           <label class="fld full"><span>Anon public key</span><input value=${key} placeholder="eyJhbGciOi..." onChange=${e=>setKey(e.target.value)}/></label>
         </div>
         <div class="flex gap8" style=${{marginTop:14}}>
@@ -9916,55 +9972,79 @@ function _stat(l,v,c){ return html`<div style=${{flex:1,minWidth:110}}><div clas
 function ProgressBar({ pct }){ return html`<div class="flex center" style=${{gap:10,minWidth:120}}><div class="meter" style=${{flex:1}}><i style=${{width:Math.min(100,pct||0)+'%'}}></i></div><span class="mono" style=${{fontSize:11,color:'var(--ink-3)'}}>${pct||0}%</span></div>`; }
 
 /* ============================ CLIENTS ============================ */
-function ClientsView({ ctx, visible, ce }){
-  const { db, role } = ctx;
-  const [view,setView]=useState('Active Clients');
-  const [amgr,setAmgr]=useState(''); const [svc,setSvc]=useState(''); const [q,setQ]=useState('');
-  const [sel,setSel]=useState(null);
-  const seeFin=canSeeFinance(role);
-  const all=visible('clients');
-  const within30=(d)=>d&&d<=new Date(Date.now()+30*86400000).toISOString().slice(0,10);
-  const VIEWS={
-    'All Clients':()=>true,
-    'Active Clients':c=>c.status==='Active',
-    'Onboarding':c=>c.status==='Onboarding',
-    'VIP Clients':c=>c.priority==='VIP',
-    'At Risk Clients':c=>c.status==='At Risk'||calculateClientHealth(db,c.id).type==='neg',
-    'Renewal Needed':c=>c.status==='Renewal Needed'||within30(c.renewalDate),
-    'Pending Approvals':c=>getClientDeliverables(db,c.id).some(d=>d.status==='Client Review'),
-    'Archived':c=>['Archived','Churned'].includes(c.status),
-  };
-  let rows=all.filter(VIEWS[view]||(()=>true));
-  if(amgr) rows=rows.filter(c=>c.accountManagerId===amgr);
-  if(svc) rows=rows.filter(c=>c.serviceType===svc);
-  if(q){ const s=q.toLowerCase(); rows=rows.filter(c=>[c.brandName,c.name,c.industry,c.mainContactName,c.serviceType].join(' ').toLowerCase().includes(s)); }
+function ClientWorkspaceTable({rows,columns,empty,db}){
+  const list=Array.isArray(rows)?rows:[];
+  if(!list.length)return html`<div class="workspace-empty">${empty}</div>`;
+  return html`<div class="workspace-table"><table class="tbl"><thead><tr>${columns.map(col=>html`<th key=${col.k}>${col.label}</th>`)}</tr></thead><tbody>${list.map((row,index)=>html`<tr key=${row.id||index}>${columns.map(col=>html`<td key=${col.k}>${col.render?col.render(row,db):(col.date?fmtDate(row[col.k]):col.tag?html`<${Tag}>${row[col.k]||'—'}<//>`:(row[col.k]??'—'))}</td>`)}</tr>`)}</tbody></table></div>`;
+}
 
-  return html`<div class="view">
-    <${Head} eyebrow="Accounts" title="Clients" desc="Full client profiles, health, projects and approvals.">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('clients',{status:'Onboarding',priority:'Normal',brand:'Magnet',clientType:'Retainer'})}>${React.createElement(Icon.plus)} New client</button>`}<//>
-    <div class="flex gap8" style=${{marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
-      <select class="sel" value=${view} onChange=${e=>setView(e.target.value)}>${Object.keys(VIEWS).map(v=>html`<option key=${v} value=${v}>${v}</option>`)}</select>
-      <select class="sel" value=${amgr} onChange=${e=>setAmgr(e.target.value)}><option value="">All managers</option>${(db.employees||[]).map(em=>html`<option key=${em.id} value=${em.id}>${em.fullName||em.name}</option>`)}</select>
-      <div class="search" style=${{marginLeft:0,width:220}}>${React.createElement(Icon.search)}<input placeholder="Search brand, contact, industry…" value=${q} onChange=${e=>setQ(e.target.value)}/></div>
-      <span class="muted" style=${{fontSize:12,marginLeft:'auto'}}>${rows.length} of ${all.length}</span>
+function ClientWorkspaceModal({ctx,detail,canEdit,busy,error,onClose,onEdit}){
+  const ar=ctx.lang==='ar'; const L=(en,ara)=>ar?ara:en;
+  const [tab,setTab]=useState('Overview');
+  if(!detail||!detail.client)return html`<div class="ovl"><div class="modal wide"><div class="modal-b"><span class="sk" style=${{height:340}}></span></div></div></div>`;
+  const c=detail.client, profile=c.profile||{}, comm=detail.communication||{};
+  const labels={Overview:'نظرة عامة',Contacts:'جهات الاتصال',Projects:'المشروعات',Tasks:'المهام',Contracts:'العقود',Invoices:'الفواتير',Payments:'المدفوعات',Files:'الملفات',Communication:'التواصل',Reports:'التقارير',Activity:'النشاط'};
+  const tabs=['Overview','Contacts','Projects','Tasks','Contracts','Invoices','Payments','Files','Communication','Reports','Activity'];
+  const contacts=[...(c.primaryContactName||c.primaryContactEmail||c.primaryContactPhone?[{id:'primary',name:c.primaryContactName,email:c.primaryContactEmail,phone:c.primaryContactPhone,role:L('Primary contact','جهة الاتصال الرئيسية')}]:[]),...(detail.contacts||[])];
+  const communications=[...(comm.meetings||[]).map(x=>Object.assign({kind:L('Meeting','اجتماع')},x)),...(comm.messages||[]).map(x=>Object.assign({kind:L('Message','رسالة')},x)),...(comm.comments||[]).map(x=>Object.assign({kind:L('Comment','تعليق')},x))];
+  return html`<div class="ovl" onClick=${onClose}><div class="modal wide client-workspace-modal" onClick=${e=>e.stopPropagation()}>
+    <div class="modal-b client-workspace-body">
+      <div class="rec-profile-head client-workspace-head">
+        <div class="rec-profile-title"><${Avatar} name=${c.name} size=${52}/><div><div class="flex center gap8" style=${{flexWrap:'wrap'}}><h2>${c.name}</h2><${Tag}>${c.status}<//>${c.priority==='VIP'&&html`<${Tag} type="lime">VIP<//>`}</div><p>${c.legalName||c.industry||c.serviceType||L('Client workspace','مساحة العميل')}</p></div></div>
+        <div class="rec-profile-actions">${canEdit&&html`<button class="btn btn-ghost" onClick=${onEdit}>${L('Edit','تعديل')}</button>`}<button class="icon-btn" onClick=${onClose}><span style=${{fontSize:18}}>×</span></button></div>
+      </div>
+      <div class="workspace-hero-metrics">
+        <div><span>${L('Account manager','مدير الحساب')}</span><b>${nameById(ctx.db.employees,c.accountManagerId)||'—'}</b></div>
+        <div><span>${L('Current balance','الرصيد الحالي')}</span><b class=${Number(c.currentBalance)>0?'warn':''}>${c.currentBalance==null?L('Restricted','غير متاح'):money(c.currentBalance)}</b></div>
+        <div><span>${L('Active contract','العقد النشط')}</span><b>${detail.activeContract?(detail.activeContract.contractNumber||detail.activeContract.title||detail.activeContract.status):'—'}</b></div>
+        <div><span>${L('Project status','حالة المشروع')}</span><b>${detail.projectStatus||L('No active project','لا يوجد مشروع نشط')}</b></div>
+      </div>
+      ${error&&html`<div class="rec-error">${error}</div>`}${busy&&html`<div class="workspace-loading">${L('Refreshing workspace…','جاري تحديث مساحة العميل…')}</div>`}
+      <div class="rec-tabs workspace-tabs">${tabs.map(name=>html`<button key=${name} class=${tab===name?'on':''} onClick=${()=>setTab(name)}>${ar?labels[name]:name}</button>`)}</div>
+      <div class="workspace-tab-body">
+        ${tab==='Overview'&&html`<div class="workspace-overview">
+          <div class="rec-facts"><${RecFact} label=${L('Status','الحالة')} value=${c.status}/><${RecFact} label=${L('Service','الخدمة')} value=${c.serviceType}/><${RecFact} label=${L('Industry','المجال')} value=${c.industry}/><${RecFact} label=${L('Primary contact','جهة الاتصال')} value=${c.primaryContactName}/><${RecFact} label=${L('Phone','الموبايل')} value=${c.primaryContactPhone}/><${RecFact} label=${L('Email','الإيميل')} value=${c.primaryContactEmail}/></div>
+          <div class="workspace-relations"><span>${L('Client','عميل')}</span><i>→</i><span>${L('Projects','مشروعات')} ${detail.projects.length}</span><i>→</i><span>${L('Contracts','عقود')} ${detail.contracts.length}</span><i>→</i><span>${L('Invoices','فواتير')} ${detail.invoices.length}</span><i>→</i><span>${L('Payments','مدفوعات')} ${detail.payments.length}</span></div>
+          ${(profile.notes||profile.targetAudience||profile.brandTone)&&html`<div class="rec-section"><h4>${L('Account context','سياق الحساب')}</h4><div class="muted" style=${{lineHeight:1.8,whiteSpace:'pre-wrap'}}>${profile.notes||''}${profile.targetAudience?'\n'+L('Audience: ','الجمهور: ')+profile.targetAudience:''}${profile.brandTone?'\n'+L('Brand tone: ','نبرة البراند: ')+profile.brandTone:''}</div></div>`}
+        </div>`}
+        ${tab==='Contacts'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${contacts} empty=${L('No contacts linked.','لا توجد جهات اتصال مرتبطة.')} columns=${[{k:'name',label:L('Name','الاسم'),render:r=>r.name||r.fullName||'—'},{k:'role',label:L('Role','الصفة')},{k:'email',label:L('Email','الإيميل'),render:r=>r.email?html`<a class="lnk" href=${'mailto:'+r.email}>${r.email}</a>`:'—'},{k:'phone',label:L('Phone','الموبايل'),render:r=>r.phone?html`<a class="lnk" href=${'tel:'+r.phone}>${r.phone}</a>`:'—'}]}/>`}
+        ${tab==='Projects'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.projects} empty=${L('No projects linked.','لا توجد مشروعات مرتبطة.')} columns=${[{k:'projectName',label:L('Project','المشروع'),render:r=>r.projectName||r.name||'—'},{k:'projectType',label:L('Type','النوع')},{k:'status',label:L('Status','الحالة'),tag:true},{k:'deadline',label:L('Deadline','الموعد'),date:true}]}/>`}
+        ${tab==='Tasks'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.tasks} empty=${L('No tasks linked.','لا توجد مهام مرتبطة.')} columns=${[{k:'title',label:L('Task','المهمة'),render:r=>r.title||r.name||'—'},{k:'assignedTo',label:L('Assignee','المسؤول'),render:r=>nameById(ctx.db.employees,r.assignedTo)},{k:'status',label:L('Status','الحالة'),tag:true},{k:'dueDate',label:L('Due','الموعد'),date:true}]}/>`}
+        ${tab==='Contracts'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.contracts} empty=${L('No contracts linked.','لا توجد عقود مرتبطة.')} columns=${[{k:'contractNumber',label:L('Contract','العقد'),render:r=>r.contractNumber||r.title||'—'},{k:'contractType',label:L('Type','النوع')},{k:'status',label:L('Status','الحالة'),tag:true},{k:'endDate',label:L('End date','تاريخ الانتهاء'),date:true}]}/>`}
+        ${tab==='Invoices'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.invoices} empty=${L('Finance access required or no invoices.','تحتاج صلاحية مالية أو لا توجد فواتير.')} columns=${[{k:'invoiceNumber',label:L('Invoice','الفاتورة')},{k:'status',label:L('Status','الحالة'),tag:true},{k:'amount',label:L('Amount','القيمة'),render:r=>money(r.amount||0)},{k:'dueDate',label:L('Due','الاستحقاق'),date:true}]}/>`}
+        ${tab==='Payments'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.payments} empty=${L('Finance access required or no payments.','تحتاج صلاحية مالية أو لا توجد مدفوعات.')} columns=${[{k:'invoiceId',label:L('Invoice','الفاتورة'),render:r=>nameById(ctx.db.invoices,r.invoiceId,'invoiceNumber')},{k:'amount',label:L('Amount','القيمة'),render:r=>money(r.amount||0)},{k:'method',label:L('Method','الطريقة')},{k:'date',label:L('Date','التاريخ'),date:true}]}/>`}
+        ${tab==='Files'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.files} empty=${L('No files linked.','لا توجد ملفات مرتبطة.')} columns=${[{k:'title',label:L('File','الملف'),render:r=>r.title||r.name||'—'},{k:'type',label:L('Type','النوع')},{k:'status',label:L('Status','الحالة'),tag:true},{k:'link',label:'',render:r=>r.link?html`<a class="mini" href=${r.link} target="_blank" rel="noopener">${L('Open','فتح')}</a>`:'—'}]}/>`}
+        ${tab==='Communication'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${communications} empty=${L('No communication history.','لا يوجد سجل تواصل.')} columns=${[{k:'kind',label:L('Type','النوع')},{k:'title',label:L('Subject','الموضوع'),render:r=>r.title||r.message||r.text||'—'},{k:'status',label:L('Status','الحالة'),tag:true},{k:'date',label:L('Date','التاريخ'),render:r=>fmtDateTime(r.date||r.createdAt)}]}/>`}
+        ${tab==='Reports'&&html`<${ClientWorkspaceTable} db=${ctx.db} rows=${detail.reports} empty=${L('No reports linked or access is restricted.','لا توجد تقارير مرتبطة أو الصلاحية غير متاحة.')} columns=${[{k:'title',label:L('Report','التقرير')},{k:'period',label:L('Period','الفترة')},{k:'status',label:L('Status','الحالة'),tag:true},{k:'createdAt',label:L('Created','الإنشاء'),render:r=>fmtDateTime(r.createdAt)}]}/>`}
+        ${tab==='Activity'&&html`<div class="rec-timeline">${(detail.activity||[]).map(item=>html`<div class="rec-time" key=${item.id}><i></i><div><b>${item.action}</b><span>${item.entityType||''}</span><span>${fmtDateTime(item.occurredAt)}</span></div></div>`)}${!(detail.activity||[]).length&&html`<div class="workspace-empty">${L('No authorized activity to show.','لا يوجد نشاط مصرح بعرضه.')}</div>`}</div>`}
+      </div>
     </div>
-    <${Panel} pad=${false}><div style=${{overflowX:'auto'}}><table class="tbl"><thead><tr>
-      <th>Client</th><th>Status</th><th>Priority</th><th>Manager</th><th>Projects</th><th>Renewal</th>
-      ${seeFin?html`<th class="right">Retainer</th>`:null}<th>Health</th><th></th></tr></thead>
-    <tbody>${rows.map(c=>{ const h=calculateClientHealth(db,c.id); const projN=getClientProjects(db,c.id).filter(p=>!['Completed','Archived','Cancelled'].includes(p.status)).length;
-      return html`<tr key=${c.id} style=${{cursor:'pointer'}} onClick=${()=>setSel(c)}>
-      <td><div class="co-cell"><${Avatar} name=${c.brandName||c.name}/><div class="cn"><b>${c.brandName||c.name}</b><span>${c.industry||c.serviceType||''}</span></div></div></td>
-      <td><${Tag}>${c.status}<//></td>
-      <td>${c.priority==='VIP'?html`<${Tag} type="lime">VIP<//>`:html`<span class="muted">${c.priority}</span>`}</td>
-      <td class="muted">${nameById(db.employees,c.accountManagerId)}</td>
-      <td class="num">${projN}</td>
-      <td class="muted" style=${{whiteSpace:'nowrap'}}>${c.renewalDate?fmtDate(c.renewalDate):(c.nextCollectionDate?fmtDate(c.nextCollectionDate):'—')}</td>
-      ${seeFin?html`<td class="num">${money(c.monthlyRetainer)}</td>`:null}
-      <td><${Tag} type=${h.type}>${h.label}<//></td>
-      <td class="right"><button class="mini" onClick=${ev=>{ev.stopPropagation();setSel(c);}}>Open</button>${ctx.canDelete('clients')?html`<button class="mini danger" onClick=${ev=>{ev.stopPropagation();ctx.delRec('clients',c.id,c.brandName||c.name);}}>Delete</button>`:''}</td></tr>`; })}
-    ${rows.length===0&&html`<tr><td colspan="9" class="muted" style=${{padding:28,textAlign:'center'}}>No clients match.</td></tr>`}
-    </tbody></table></div><//>
-    ${sel&&html`<${ClientProfile} ctx=${ctx} client=${sel} ce=${ce} onClose=${()=>setSel(null)} onOpenProject=${p=>{setSel(null);ctx._openProject&&ctx._openProject(p);}}/>`}
+  </div></div>`;
+}
+
+function ClientsView({ ctx, visible, ce }){
+  const ar=ctx.lang==='ar'; const L=(en,ara)=>ar?ara:en;
+  const organizationId=ctx.user&&ctx.user.organizationId||activeOrganizationId();
+  const [status,setStatus]=useState('Active'); const [search,setSearch]=useState(''); const [query,setQuery]=useState(''); const [page,setPage]=useState(1);
+  const [result,setResult]=useState({items:[],total:0,page:1,pages:1}); const [loading,setLoading]=useState(true); const [error,setError]=useState('');
+  const [profile,setProfile]=useState(null); const [profileBusy,setProfileBusy]=useState(false); const [profileError,setProfileError]=useState(''); const deepLinkDone=useRef(false);
+  useEffect(()=>{const timer=setTimeout(()=>{setPage(1);setQuery(search.trim());},260);return()=>clearTimeout(timer);},[search]);
+  const load=async()=>{if(!organizationId){setError(L('Choose an organization first.','اختر المؤسسة أولًا.'));setLoading(false);return;}setLoading(true);setError('');try{const data=await workspaceRpc(ctx.cfg,'list_client_workspaces',{p_organization_id:organizationId,p_status:status||null,p_search:query||null,p_page:page,p_page_size:25});setResult(Object.assign({items:[],total:0,page:1,pages:1},data||{}));}catch(e){setError(L('Client workspace could not be loaded: ','تعذر تحميل مساحة العملاء: ')+String(e.message||e));}setLoading(false);};
+  useEffect(()=>{load();},[organizationId,status,query,page]);
+  const openClient=async(id)=>{if(!id)return;setProfile({});setProfileBusy(true);setProfileError('');try{const data=await workspaceRpc(ctx.cfg,'get_client_workspace',{p_organization_id:organizationId,p_legacy_client_id:id});if(!data||!data.ok)throw new Error('client-not-found');setProfile(data);}catch(e){setProfile(null);setError(L('Client could not be opened: ','تعذر فتح العميل: ')+String(e.message||e));}setProfileBusy(false);};
+  useEffect(()=>{if(deepLinkDone.current)return;try{const p=new URLSearchParams(location.search);if(p.get('open')==='clients'&&p.get('id')){deepLinkDone.current=true;openClient(p.get('id'));}}catch(e){}},[organizationId]);
+  const closeProfile=()=>{setProfile(null);setProfileError('');try{const url=new URL(location.href);url.searchParams.delete('open');url.searchParams.delete('id');history.replaceState({},'',url.pathname+(url.search?'?'+url.searchParams.toString():'')+url.hash);}catch(e){}};
+  const editProfile=()=>{if(!profile||!profile.client)return;const legacy=(visible('clients')||[]).find(x=>x.id===profile.client.legacyRecordId)||Object.assign({id:profile.client.legacyRecordId},profile.client.profile||{});closeProfile();ctx.openModal('clients',legacy);};
+  const items=Array.isArray(result.items)?result.items:[];
+  return html`<div class="view client-v2-shell">
+    <${Head} eyebrow="ACCOUNTS / CLIENT SUCCESS" title=${L('Clients','العملاء')} desc=${L('One workspace connecting every client relationship and activity.','مساحة واحدة تربط كل علاقات ونشاط العميل.')}>${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('clients',{status:'Onboarding',priority:'Normal',brand:'Magnet',clientType:'Retainer'})}>${React.createElement(Icon.plus)} ${L('New client','عميل جديد')}</button>`}<//>
+    <div class="rec-toolbar client-toolbar"><div class="rec-search">${React.createElement(Icon.search)}<input value=${search} onChange=${e=>setSearch(e.target.value)} placeholder=${L('Search client, contact, phone, service…','ابحث بالعميل أو جهة الاتصال أو الموبايل أو الخدمة…')}/></div><select class="sel" value=${status} onChange=${e=>{setStatus(e.target.value);setPage(1);}}><option value="">${L('All statuses','كل الحالات')}</option>${['Active','Onboarding','At Risk','Renewal Needed','Paused','Churned','Archived'].map(x=>html`<option key=${x}>${x}</option>`)}</select><span class="muted client-count">${Number(result.total)||0} ${L('clients','عميل')}</span></div>
+    ${error&&html`<div class="rec-error">${error} <button class="mini" onClick=${load}>${L('Retry','إعادة المحاولة')}</button></div>`}
+    ${loading&&html`<span class="sk" style=${{height:280,borderRadius:15}}></span>`}
+    ${!loading&&!items.length&&html`<div class="rec-empty"><div><b>${L('No clients found','لا يوجد عملاء')}</b><p>${L('Change the filter or add the first client.','غيّر الفلتر أو أضف أول عميل.')}</p></div></div>`}
+    ${!loading&&items.length>0&&html`<div class="rec-list client-v2-list"><div class="rec-list-head client-v2-grid"><span>${L('Client','العميل')}</span><span>${L('Status','الحالة')}</span><span>${L('Manager','مدير الحساب')}</span><span>${L('Projects','المشروعات')}</span><span>${L('Balance','الرصيد')}</span><span></span></div>${items.map(c=>html`<div class="rec-row client-v2-grid" key=${c.id} role="button" tabIndex="0" onClick=${()=>openClient(c.legacyRecordId)} onKeyDown=${e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openClient(c.legacyRecordId);}}}><div class="rec-person"><${Avatar} name=${c.name} size=${38}/><div class="rec-person-copy"><b>${c.name}</b><span>${c.industry||c.serviceType||c.primaryContactName||'—'}</span></div></div><div><${Tag}>${c.status}<//></div><div class="rec-cell">${nameById(ctx.db.employees,c.accountManagerId)}</div><div class="rec-cell"><b>${c.activeProjects||0}</b><small>${c.projectStatus||L('No active project','لا يوجد مشروع نشط')}</small></div><div class="rec-cell"><b>${c.currentBalance==null?'—':money(c.currentBalance)}</b><small>${c.activeContract?(c.activeContract.number||c.activeContract.status):L('No active contract','لا يوجد عقد نشط')}</small></div><button class="mini" onClick=${e=>{e.stopPropagation();openClient(c.legacyRecordId);}}>${L('Open','فتح')}</button></div>`)}</div>`}
+    ${!loading&&Number(result.pages||1)>1&&html`<div class="rec-pagination"><span>${L('Page','صفحة')} ${page} / ${result.pages}</span><div class="flex gap8"><button class="mini" disabled=${page<=1} onClick=${()=>setPage(page-1)}>${L('Previous','السابق')}</button><button class="mini" disabled=${page>=result.pages} onClick=${()=>setPage(page+1)}>${L('Next','التالي')}</button></div></div>`}
+    ${profile&&html`<${ClientWorkspaceModal} ctx=${ctx} detail=${profile} canEdit=${ce} busy=${profileBusy} error=${profileError} onClose=${closeProfile} onEdit=${editProfile}/>`}
   </div>`;
 }
 

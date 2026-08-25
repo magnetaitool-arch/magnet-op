@@ -22,9 +22,9 @@ for (const file of ['api/send-email.js', 'api/outbox.js', 'api/intake.js', 'api/
   'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
   'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
   'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js',
-  'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/organization-settings-test.js', 'tools/employee-privacy-test.js', 'tools/public-intake-test.js', 'tools/delivery-outbox-test.js', 'tools/preflight-staging-migration.js',
+  'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/organization-settings-test.js', 'tools/employee-privacy-test.js', 'tools/public-intake-test.js', 'tools/delivery-outbox-test.js', 'tools/recruitment-v2-test.js', 'tools/sales-client-workspace-v2-test.js', 'tools/preflight-staging-migration.js',
   'tools/reconcile-staging-identity.js', 'tools/test-staging-identity.js',
-  'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-organization-settings.js', 'tools/test-staging-employee-privacy.js', 'tools/test-staging-public-forms.js', 'tools/test-staging-public-intake.js', 'tools/test-staging-delivery-outbox.js',
+  'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-organization-settings.js', 'tools/test-staging-employee-privacy.js', 'tools/test-staging-public-forms.js', 'tools/test-staging-public-intake.js', 'tools/test-staging-delivery-outbox.js', 'tools/test-staging-recruitment-v2.js', 'tools/test-staging-sales-client-workspace-v2.js',
   'tools/m0-logical-backup.js', 'tools/m0-restore-staging.js', 'tools/m0-validate-staging.js',
   'tools/m0-security-baseline.js', 'tools/m0-configure-vercel-preview.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, file)], { stdio: 'pipe' }); ok(file); }
