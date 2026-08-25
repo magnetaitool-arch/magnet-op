@@ -18,13 +18,13 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const exists = (p) => fs.existsSync(path.join(ROOT, p));
 
 console.log('[1] node --check on server JS');
-for (const file of ['api/send-email.js', 'api/intake.js', 'api/public-form.js', 'api/runtime-config.js', 'netlify/functions/intake.js', 'netlify/functions/send-email.js',
+for (const file of ['api/send-email.js', 'api/intake.js', 'api/public-form.js', 'api/runtime-config.js', 'server/public-intake.js', 'netlify/functions/intake.js', 'netlify/functions/send-email.js',
   'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
   'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
   'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js',
-  'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/organization-settings-test.js', 'tools/employee-privacy-test.js', 'tools/preflight-staging-migration.js',
+  'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/organization-settings-test.js', 'tools/employee-privacy-test.js', 'tools/public-intake-test.js', 'tools/preflight-staging-migration.js',
   'tools/reconcile-staging-identity.js', 'tools/test-staging-identity.js',
-  'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-organization-settings.js', 'tools/test-staging-employee-privacy.js', 'tools/test-staging-public-forms.js',
+  'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-organization-settings.js', 'tools/test-staging-employee-privacy.js', 'tools/test-staging-public-forms.js', 'tools/test-staging-public-intake.js',
   'tools/m0-logical-backup.js', 'tools/m0-restore-staging.js', 'tools/m0-validate-staging.js',
   'tools/m0-security-baseline.js', 'tools/m0-configure-vercel-preview.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, file)], { stdio: 'pipe' }); ok(file); }
@@ -89,6 +89,15 @@ console.log('\n[5] dangerous-pattern scan');
 /Password must be at least 10 characters\./.test(html) ? ok('frontend enforces strong passwords') : bad('frontend password policy is weaker than expected');
 /sb_secret_|service_role.{0,40}=\s*['"]eyJ/.test(html) ? bad('possible service_role/secret key in index.html') : ok('no service_role/secret key in index.html');
 /\/\.netlify\/functions\/intake/.test(html) ? bad('index.html calls netlify intake (Vercel default) — use /api/intake') : ok('no hardcoded netlify intake call in index.html');
+const intakeCore = read('server/public-intake.js');
+const intakeMigration = read('supabase/migrations/20260825203000_transactional_public_intake.sql');
+/rpc\/submit_public_intake/.test(intakeCore) && !/rest\/v1\/records/.test(intakeCore)
+  ? ok('public intake uses one transactional server command instead of direct record writes')
+  : bad('public intake can bypass the transactional database command');
+/public_intake_rate_limits/.test(intakeMigration) && /idempotency_keys/.test(intakeMigration)
+  && /outbox_messages/.test(intakeMigration) && /audit_events/.test(intakeMigration)
+  ? ok('public intake is rate-limited, idempotent, audited, and durable')
+  : bad('public intake reliability/security controls are incomplete');
 /sendTaskAssignmentEmail\(created,false\)/.test(html) && /assignmentEmailStatus:result\.status/.test(html)
   ? ok('task assignments trigger tracked email delivery')
   : bad('task assignment email tracking is missing');

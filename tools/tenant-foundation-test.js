@@ -10,6 +10,8 @@ const migration = read('supabase/migrations/20260825170000_tenant_scoped_records
 const deleteMigration = read('supabase/migrations/20260825174200_record_soft_delete_command.sql');
 const app = read('index.html');
 const intake = read('api/intake.js');
+const intakeCore = read('server/public-intake.js');
+const intakeMigration = read('supabase/migrations/20260825203000_transactional_public_intake.sql');
 const publicForm = read('api/public-form.js');
 const accounts = read('supabase/functions/accounts/index.ts');
 let passed = 0;
@@ -46,8 +48,9 @@ console.log('\n[4] browser and public-server boundary');
 check(/tenantRecord\(\{ id:rec\.id, coll, data:rec \}\)/.test(app), 'browser writes include selected organization');
 check(/tenantQuery\('records\?select=\*/.test(app), 'browser reads explicitly filter selected organization');
 check(/filter:'organization_id=eq\.'/.test(app), 'Realtime subscription is tenant-filtered');
-check(/SUPABASE_SERVICE_ROLE_KEY/.test(intake) && !/process\.env\.SUPABASE_KEY \|\|/.test(intake), 'public intake fails closed without server credentials');
-check(/organization_id: organizationCache/.test(intake), 'public intake stamps tenant ownership');
+check(/SUPABASE_SERVICE_ROLE_KEY/.test(intakeCore) && /service_not_configured/.test(intakeCore), 'public intake fails closed without server credentials');
+check(/submit_public_intake/.test(intakeCore) && /p_organization_id/.test(intakeCore)
+  && /insert into public\.records \(id, coll, data, organization_id\)/i.test(intakeMigration), 'public intake stamps tenant ownership transactionally');
 check(/campaign\.get/.test(publicForm) && /brief\.submit/.test(publicForm), 'public campaign and brief access use a server route');
 check(/submit_public_brief/.test(publicForm) && /submit_public_brief/.test(migration), 'brief submission is transactional');
 check(/organization_id:row\.organization_id\|\|organizationId/.test(accounts), 'legacy account service writes tenant ownership');
