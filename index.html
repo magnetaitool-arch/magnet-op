@@ -1820,8 +1820,21 @@ const nowISO = () => new Date().toISOString();
 // which is wrong near midnight (e.g. Egypt UTC+2) — this keeps the date in the user's timezone.
 const todayISO = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 
-/* ============================ APP SETTINGS (currency + language) ============================ */
+/* ============================ APP SETTINGS ============================ */
+// Personal preferences stay on this device. Organization rules (attendance,
+// payroll, reports, visible modules, currency) are hydrated from the versioned
+// tenant settings table after canonical login. The cache preserves fast/offline
+// startup but is never the authority once the server can be reached.
 const APP_SETTINGS_KEY = 'tia_agency_os_appsettings';
+const ORG_SETTINGS_CACHE_KEY = 'magnet_organization_settings_v2';
+const APP_SETTINGS_DEFAULTS = { currency:'EGP', language:'en', theme:'dark', soundAlerts:true, emailNotifications:true };
+const PERSONAL_SETTING_KEYS = new Set(['language','theme','soundAlerts']);
+const ORGANIZATION_SETTING_KEYS = new Set([
+  'currency','emailNotifications','enabledModules','requireVerification','partners',
+  'payroll','payrollBasis','workStartTime','workEndTime','lateGraceMinutes',
+  'workDaysPerMonth','weekendDays','annualLeaveDefault','sickLeaveDefault',
+  'publicHolidays','employeeReportsAuto','employeeReportLanguage','employeeReportAutoSkipped'
+]);
 // Each currency carries English + Arabic labels and placement (before/after amount).
 const CURRENCIES = {
   USD:{ code:'USD', symbol:'$',  en:'USD', ar:'دولار', after:false },
@@ -1831,8 +1844,37 @@ const CURRENCIES = {
   EUR:{ code:'EUR', symbol:'€',  en:'EUR', ar:'يورو', after:false },
   KWD:{ code:'KWD', symbol:'د.ك', en:'KWD', ar:'د.ك',  after:true },
 };
-function getAppSettings(){ try { return Object.assign({ currency:'EGP', language:'en', theme:'dark', emailNotifications:true }, JSON.parse(store.get(APP_SETTINGS_KEY)||'{}')); } catch(e){ return { currency:'EGP', language:'en', theme:'dark', emailNotifications:true }; } }
-function setAppSettings(patch){ const next=Object.assign(getAppSettings(),patch); store.set(APP_SETTINGS_KEY, JSON.stringify(next)); return next; }
+function readSettingsObject(key){ try{ const value=JSON.parse(store.get(key)||'{}'); return value&&typeof value==='object'&&!Array.isArray(value)?value:{}; }catch(e){ return {}; } }
+function getPersonalSettings(){ const stored=readSettingsObject(APP_SETTINGS_KEY), out={}; PERSONAL_SETTING_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(stored,k)) out[k]=stored[k]; }); return out; }
+function getLegacyOrganizationSettings(){ const stored=readSettingsObject(APP_SETTINGS_KEY), out={}; ORGANIZATION_SETTING_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(stored,k)) out[k]=stored[k]; }); return out; }
+function organizationSettingsCache(){ return readSettingsObject(ORG_SETTINGS_CACHE_KEY); }
+function cachedOrganizationSettings(){
+  try{ const orgId=activeOrganizationId(); const entry=organizationSettingsCache()[orgId]; return entry&&entry.settings&&typeof entry.settings==='object'?entry:null; }catch(e){ return null; }
+}
+function writePersonalSettings(patch){
+  // Keep legacy organization values until a successful server hydration. This
+  // preserves valid pre-V2 device configuration during the staged cutover.
+  const next=readSettingsObject(APP_SETTINGS_KEY); PERSONAL_SETTING_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(patch||{},k)) next[k]=patch[k]; });
+  store.set(APP_SETTINGS_KEY,JSON.stringify(next)); return next;
+}
+function clearLegacyOrganizationSettings(){ store.set(APP_SETTINGS_KEY,JSON.stringify(getPersonalSettings())); }
+function cacheOrganizationSettings(organizationId,settings,version){
+  if(!organizationId)return; const cache=organizationSettingsCache();
+  cache[organizationId]={settings:Object.assign({},settings||{}),version:Number(version)||1,cachedAt:nowISO()};
+  store.set(ORG_SETTINGS_CACHE_KEY,JSON.stringify(cache));
+}
+function getAppSettings(){
+  const cached=cachedOrganizationSettings();
+  // Legacy org values are only a cold-start fallback. A successful server load
+  // replaces them and local writes are subsequently limited to personal prefs.
+  return Object.assign({},APP_SETTINGS_DEFAULTS,cached?cached.settings:getLegacyOrganizationSettings(),getPersonalSettings());
+}
+function setAppSettings(patch){
+  patch=patch||{}; writePersonalSettings(patch);
+  const orgPatch={}; ORGANIZATION_SETTING_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(patch,k)) orgPatch[k]=patch[k]; });
+  if(Object.keys(orgPatch).length){ const orgId=activeOrganizationId(); const cached=cachedOrganizationSettings(); if(orgId) cacheOrganizationSettings(orgId,Object.assign({},cached?cached.settings:getLegacyOrganizationSettings(),orgPatch),cached?cached.version:1); }
+  return Object.assign({},getAppSettings(),patch);
+}
 function currencySymbol(code){ return (CURRENCIES[code]||CURRENCIES.USD).symbol; }
 // Central currency formatter. English -> "EGP 15,000"; Arabic -> "15,000 ج.م".
 function formatCurrency(amount, currency, lang){
@@ -2388,9 +2430,9 @@ function moduleEnabled(key, appSettings){
 }
 // HR-specific permission helpers
 const canSeeSalary    = (role) => { const a=aliasRole(role); return a==='Admin' || a==='Accountant' || a==='HR'; };
-const canEditEmployee = (role) => aliasRole(role)==='Admin';
+const canEditEmployee = (role) => { const a=aliasRole(role); return a==='Admin' || a==='HR'; };
 const canManageAccess = (role) => aliasRole(role)==='Admin';
-const canSeeEmployeePrivate = (role) => { const a=aliasRole(role); return a==='Admin' || a==='Accountant' || a==='Project Manager'; };
+const canSeeEmployeePrivate = (role) => { const a=aliasRole(role); return a==='Admin' || a==='Accountant' || a==='HR'; };
 
 // Which request types each role may approve
 const FINANCE_REQ = ['Expense Request','Purchase Request','Bonus Request','Salary Adjustment','Client Discount Request','Invoice Approval'];
@@ -3982,7 +4024,11 @@ function tenantRecord(row){
 const SB_SESSION_KEY='tia_sb_session';
 let AUTH_V2={enabled:false, required:false, roles:[]};
 function getSbSession(){ try{ return JSON.parse(store.get(SB_SESSION_KEY)||'null'); }catch(e){ return null; } }
-function setSbSession(s){ try{ if(s) store.set(SB_SESSION_KEY, JSON.stringify(s)); else store.del(SB_SESSION_KEY); }catch(e){} }
+function setSbSession(s){ try{ if(s) store.set(SB_SESSION_KEY, JSON.stringify(s)); else store.del(SB_SESSION_KEY); }catch(e){}
+  // Realtime keeps its own websocket auth state. Rotate it whenever the access
+  // token refreshes so live updates do not silently stop after the first hour.
+  try{ if(window.__moRealtimeClient&&window.__moRealtimeClient.realtime&&window.__moRealtimeClient.realtime.setAuth)window.__moRealtimeClient.realtime.setAuth(s&&s.access_token?s.access_token:null); }catch(e){}
+}
 function sbAccessToken(){ try{ const s=getSbSession(); if(!s||!s.access_token) return ''; if(s.expires_at && (Number(s.expires_at)*1000) < (Date.now()+5000)) return ''; return s.access_token; }catch(e){ return ''; } }
 function applyAuthV2Contract(d){ if(d) AUTH_V2={enabled:!!d.enabled||!!d.required,required:!!d.required,roles:Array.isArray(d.roles)?d.roles:[]}; return AUTH_V2; }
 async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return AUTH_V2; const r=await fetch(_acctUrl(cfg),{method:'POST',headers:{apikey:cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'health'})}); if(r.ok){ const j=await r.json(); applyAuthV2Contract(j&&j.authV2); } return AUTH_V2; }catch(e){ return AUTH_V2; } }
@@ -4117,6 +4163,48 @@ async function loadCanonicalIdentity(cfg,legacyUser){
 }
 try{ window.__magnetIdentity={api:identityApi,load:loadCanonicalIdentity,merge:mergeCanonicalIdentity,mergeRoster:mergeCanonicalRoster,roleKey:canonicalRoleKey}; }catch(e){}
 
+/* ---- Organization settings: one versioned source of truth for every device.
+   Direct browser writes are revoked in Postgres; the RPC validates keys, checks
+   live capabilities, applies optimistic concurrency, and records an audit event. ---- */
+async function cloudLoadOrganizationSettings(cfg){
+  if(!cfgComplete(cfg)) throw new Error('cloud configuration required');
+  await sbEnsureFresh(cfg);
+  const organizationId=tenantOrganizationId();
+  const res=await fetch(_rest(cfg,'organization_settings?organization_id=eq.'+encodeURIComponent(organizationId)+'&select=settings,version,updated_at&limit=1'),{headers:_headers(cfg)});
+  if(!res.ok) throw new Error('Organization settings load failed ('+res.status+')');
+  const rows=await res.json(); const row=Array.isArray(rows)&&rows[0];
+  return {organizationId,settings:Object.assign({},row&&row.settings||{}),version:Number(row&&row.version)||1,updatedAt:row&&row.updated_at||''};
+}
+async function cloudUpdateOrganizationSettings(cfg,patch,expectedVersion){
+  if(!cfgComplete(cfg)) throw new Error('cloud configuration required');
+  await sbEnsureFresh(cfg);
+  const organizationId=tenantOrganizationId();
+  const res=await fetch(_rest(cfg,'rpc/update_organization_settings'),{
+    method:'POST',headers:_headers(cfg,{'Content-Type':'application/json'}),
+    body:JSON.stringify({p_organization_id:organizationId,p_patch:patch||{},p_expected_version:expectedVersion==null?null:Number(expectedVersion)})
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){ const conflict=res.status===409||String(data&&data.code||'')==='40001'||/version conflict/i.test(String(data&&data.message||'')); const err=new Error(conflict?'organization-settings-conflict':('Organization settings save failed ('+res.status+')')); err.status=conflict?409:res.status; throw err; }
+  return {organizationId,settings:Object.assign({},data&&data.settings||{}),version:Number(data&&data.version)||1,updatedAt:data&&data.updatedAt||''};
+}
+try{ window.__magnetSettings={load:cloudLoadOrganizationSettings,update:cloudUpdateOrganizationSettings,local:getAppSettings}; }catch(e){}
+
+function currentIdentityHasCapability(capability){ try{ const user=getSessionUser(); return !!(user&&Array.isArray(user.capabilities)&&user.capabilities.includes(capability)); }catch(e){ return false; } }
+async function cloudLoadEmployeeDirectory(cfg,since){
+  // HR/Finance/Owner already receive full employee rows through RLS; loading a
+  // redacted duplicate would waste bandwidth and could overwrite useful fields.
+  if(currentIdentityHasCapability('hr.sensitive.read')) return [];
+  if(!cfgComplete(cfg)) return [];
+  await sbEnsureFresh(cfg);
+  const res=await fetch(_rest(cfg,'rpc/employee_directory'),{
+    method:'POST',headers:_headers(cfg,{'Content-Type':'application/json'}),
+    body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_since:since||null})
+  });
+  if(!res.ok) throw new Error('Employee directory load failed ('+res.status+')');
+  const rows=await res.json(); return Array.isArray(rows)?rows:[];
+}
+try{ window.__magnetEmployeeDirectory={load:cloudLoadEmployeeDirectory}; }catch(e){}
+
 async function cloudPing(cfg){
   if(!cfgComplete(cfg)) throw new Error('Supabase URL and anon key required');
   const res = await fetch(_rest(cfg,tenantQuery('records?select=id&limit=1')), { headers:_headers(cfg) });
@@ -4145,10 +4233,12 @@ async function cloudLoadAll(cfg){
     start+=1000;
     if(start>100000) break; // hard stop — never loop forever
   }
+  const directory=await cloudLoadEmployeeDirectory(cfg,null).catch(()=>[]);
   const db = {};
   COLLECTIONS.forEach(c=>db[c]=[]);
   rows.forEach(r=>{ if(!db[r.coll]) db[r.coll]=[]; db[r.coll].push(Object.assign({id:r.id}, r.data||{})); });
-  const maxUpdated=rows.reduce((m,r)=>String(r.updated_at||'')>m?String(r.updated_at):m,'');
+  directory.forEach(r=>{ const rec=Object.assign({id:r.id},r.data||{}); if(r.deleted_at||rec._del)return; if(!(db.employees||[]).some(employee=>employee.id===rec.id))db.employees.push(rec); });
+  const maxUpdated=rows.concat(directory).reduce((m,r)=>String(r.updated_at||'')>m?String(r.updated_at):m,'');
   if(maxUpdated) window.__moCloudCursor=maxUpdated;
   return db;
 }
@@ -4166,16 +4256,22 @@ async function cloudLoadDelta(cfg, since){
     if(!Array.isArray(chunk)||chunk.length<1000)break;
     start+=1000;if(start>100000)break;
   }
-  const cursor=rows.reduce((m,r)=>String(r.updated_at||'')>m?String(r.updated_at):m,since);
-  return {rows,cursor};
+  const directory=await cloudLoadEmployeeDirectory(cfg,since).catch(()=>[]);
+  const cursor=rows.concat(directory).reduce((m,r)=>String(r.updated_at||'')>m?String(r.updated_at):m,since);
+  return {rows,directory,cursor};
 }
-function applyCloudDelta(prev, rows){
-  if(!rows||!rows.length)return prev; const next={...prev}; const touched=new Set();
-  rows.forEach(r=>{ const coll=r.coll;if(!coll||coll==='_accounts'||coll==='_ratelimit')return;
+function applyCloudDelta(prev, rows, directory){
+  if((!rows||!rows.length)&&(!directory||!directory.length))return prev; const next={...prev}; const touched=new Set();
+  (rows||[]).forEach(r=>{ const coll=r.coll;if(!coll||coll==='_accounts'||coll==='_ratelimit')return;
     if(!touched.has(coll)){next[coll]=(prev[coll]||[]).slice();touched.add(coll);}
     const rec=Object.assign({id:r.id},r.data||{}), i=next[coll].findIndex(x=>x.id===rec.id);
     if(r.deleted_at||rec._del){if(i>=0)next[coll].splice(i,1);return;}
     if(i>=0)next[coll][i]=rec;else next[coll].push(rec);
+  });
+  (directory||[]).forEach(r=>{ const coll='employees'; if(!touched.has(coll)){next[coll]=(prev[coll]||[]).slice();touched.add(coll);}
+    const rec=Object.assign({id:r.id},r.data||{}),i=next[coll].findIndex(employee=>employee.id===rec.id);
+    if(r.deleted_at||rec._del){if(i>=0&&next[coll][i]._directoryOnly)next[coll].splice(i,1);return;}
+    if(i<0)next[coll].push(rec);else if(next[coll][i]._directoryOnly)next[coll][i]=rec;
   });
   return touched.size?next:prev;
 }
@@ -4959,6 +5055,8 @@ function loadDB(){
   try { const cfg=getCfg(); if(cfg && cfg.url && cfg.key){ const empty={}; COLLECTIONS.forEach(c=>empty[c]=[]); return empty; } } catch(e){}
   const s = seed(); store.set(KEY, JSON.stringify(s)); return s;
 }
+
+function emptyDB(){ const db={}; COLLECTIONS.forEach(c=>db[c]=[]); return db; }
 
 
 /* ===== crm-ui.js ===== */
@@ -6048,7 +6146,12 @@ function App(){
   const [needsSetup, setNeedsSetup] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   useEffect(()=>{ // discover accounts, then choose sign-in vs first-owner setup
-    const settle=(accounts,status)=>{ const u=getSessionUser(); setAuthUser(u);
+    const settle=(accounts,status)=>{ const u=getSessionUser();
+      // A cloud browser cache belongs to the identity scope that downloaded it.
+      // Never render a previous role/user's cached private rows while the current
+      // JWT and organization membership are still being resolved.
+      if(u&&cfgComplete(cfg.current))setDb(emptyDB());
+      setAuthUser(u);
       // Decide setup-vs-sign-in in BOTH paths. If discovery fails we still fall back to the
       // locally known roster: with no session and no accounts a sign-in screen is a dead end,
       // because there is no longer a built-in Owner to sign in as.
@@ -6060,9 +6163,78 @@ function App(){
   },[]);
   const [navOpen, setNavOpen] = useState(false); // mobile drawer
   const [appSettings, setAppSettingsState] = useState(getAppSettings);
+  const organizationSettingsVersion = useRef(null);
+  const organizationSettingsHydrated = useRef(false);
+  const organizationSettingsPending = useRef({});
+  const organizationSettingsTimer = useRef(null);
+  const organizationSettingsSaveChain = useRef(Promise.resolve());
+  const [organizationSettingsStatus,setOrganizationSettingsStatus]=useState('local');
   const lang = appSettings.language;
   const currency = appSettings.currency;
-  const applyAppSettings = (patch)=>{ const next=setAppSettings(patch); setAppSettingsState(next); };
+  const installOrganizationSettings=(result)=>{
+    if(!result||!result.organizationId)return;
+    organizationSettingsVersion.current=Number(result.version)||1;
+    organizationSettingsHydrated.current=true;
+    cacheOrganizationSettings(result.organizationId,result.settings,organizationSettingsVersion.current);
+    clearLegacyOrganizationSettings();
+    setAppSettingsState(Object.assign({},APP_SETTINGS_DEFAULTS,result.settings||{},getPersonalSettings()));
+  };
+  const refreshOrganizationSettings=async()=>{
+    const result=await cloudLoadOrganizationSettings(cfg.current); installOrganizationSettings(result); return result;
+  };
+  const queueOrganizationSettings=(patch)=>{
+    organizationSettingsPending.current=Object.assign({},organizationSettingsPending.current,patch||{});
+    setOrganizationSettingsStatus('saving');
+    if(organizationSettingsTimer.current)clearTimeout(organizationSettingsTimer.current);
+    organizationSettingsTimer.current=setTimeout(()=>{
+      organizationSettingsTimer.current=null;
+      const requested=organizationSettingsPending.current; organizationSettingsPending.current={};
+      organizationSettingsSaveChain.current=organizationSettingsSaveChain.current.then(async()=>{
+        try{
+          let result;
+          try{ result=await cloudUpdateOrganizationSettings(cfg.current,requested,organizationSettingsVersion.current); }
+          catch(err){
+            // A simultaneous administrator edit is reconciled once against the
+            // newest version. No silent last-write-wins update is allowed.
+            if(err&&err.status===409){ const fresh=await cloudLoadOrganizationSettings(cfg.current); installOrganizationSettings(fresh); result=await cloudUpdateOrganizationSettings(cfg.current,requested,fresh.version); }
+            else throw err;
+          }
+          installOrganizationSettings(result); setOrganizationSettingsStatus('saved');
+        }catch(err){
+          setOrganizationSettingsStatus('error');
+          try{ showProPopup('syncFailed',lang==='ar'?'تعذّر حفظ إعدادات المؤسسة — أعد المحاولة.':'Organization settings were not saved — retry.'); }catch(e){}
+        }
+      });
+    },450);
+  };
+  const applyAppSettings = (patch)=>{
+    patch=patch||{}; const next=setAppSettings(patch); setAppSettingsState(next);
+    const organizationPatch={}; ORGANIZATION_SETTING_KEYS.forEach(k=>{ if(Object.prototype.hasOwnProperty.call(patch,k)) organizationPatch[k]=patch[k]; });
+    if(Object.keys(organizationPatch).length && authUser && cfgComplete(cfg.current) && sbAccessToken()) queueOrganizationSettings(organizationPatch);
+  };
+  useEffect(()=>{
+    if(!authReady||!authUser||!authUser.organizationId||!cfgComplete(cfg.current)||!sbAccessToken())return;
+    let active=true; setOrganizationSettingsStatus('loading');
+    (async()=>{
+      let result=await cloudLoadOrganizationSettings(cfg.current);
+      // One-time cutover preservation: the first authorized owner/admin may
+      // migrate valid organization settings already present on this device.
+      // Later devices can never overwrite the server snapshot this way.
+      const legacy=getLegacyOrganizationSettings();
+      const canBootstrap=Array.isArray(authUser.capabilities)&&authUser.capabilities.includes('organization.manage');
+      if(result.version===1&&canBootstrap){
+        const patch={}; Object.keys(legacy).forEach(k=>{ if(JSON.stringify(legacy[k])!==JSON.stringify(result.settings[k]))patch[k]=legacy[k]; });
+        // An empty validated patch intentionally advances version 1 too. That
+        // permanently closes the one-time legacy-import window, preventing a
+        // later old device from becoming an accidental settings authority.
+        try{ result=await cloudUpdateOrganizationSettings(cfg.current,patch,result.version); }
+        catch(err){ if(err&&err.status===409)result=await cloudLoadOrganizationSettings(cfg.current); else throw err; }
+      }
+      if(active){installOrganizationSettings(result);setOrganizationSettingsStatus('saved');}
+    })()
+      .catch(()=>{ if(active)setOrganizationSettingsStatus(cachedOrganizationSettings()?'offline':'error'); });
+    return()=>{active=false;};
+  },[authReady,authUser&&authUser.id,authUser&&authUser.organizationId]); // eslint-disable-line
   useEffect(()=>{ try { document.documentElement.dir = lang==='ar'?'rtl':'ltr'; document.documentElement.lang = lang; } catch(e){} }, [lang]);
   const [moreOpen, setMoreOpen] = useState(false); // mobile "More" sheet
   const [cmdkOpen, setCmdkOpen] = useState(false); // ⌘K command palette
@@ -6079,11 +6251,17 @@ function App(){
     ? { id:authUser.id, name:authUser.fullName||authUser.username, clientId:(authUser.assignedClients&&authUser.assignedClients[0])||'cl-nadia', email:authUser.email, account:authUser }
     : { id:'local-admin', name:'System Owner', clientId:'cl-nadia' };
   const isOwner = baseRole==='Owner' || baseRole==='Admin';
+  const authScopeKey = authUser ? [
+    authUser.organizationId||'',
+    authUser.canonicalRoleKey||authUser.role||'',
+    (authUser.capabilities||[]).slice().sort().join(',')
+  ].join('|') : '';
 
   // Map a logged-in account to an employee (by email/username/name) for attendance.
-  const empKeyFor = (u)=>{
+  const empKeyFor = (u,sourceDb)=>{
+    sourceDb=sourceDb||db;
     const actorName = u.fullName || u.username || 'User';
-    const emp = (db.employees||[]).find(e=>
+    const emp = (sourceDb.employees||[]).find(e=>
       (u.email && (e.loginEmail===u.email || e.email===u.email)) ||
       (e.userId && e.userId===u.id) ||
       (u.username && (e.loginEmail===u.username)) ||
@@ -6097,11 +6275,12 @@ function App(){
     cloudUpsert(cfg.current,'activityLogs',al);
   };
   // On login: log activity (shows as active) + auto check-in once per day.
-  const recordLogin = (u)=>{
+  const recordLogin = (u,sourceDb)=>{
     if(!u) return;
+    sourceDb=sourceDb||db;
     logActivity(u, 'logged in', 'signed in');
-    const today = todayISO(); const { emp, key, actorName } = empKeyFor(u);
-    if(!(db.attendance||[]).some(a=> a.employeeId===key && a.date===today)){
+    const today = todayISO(); const { emp, key, actorName } = empKeyFor(u,sourceDb);
+    if(!(sourceDb.attendance||[]).some(a=> a.employeeId===key && a.date===today)){
       const rec = { id:uid('att'), employeeId:key, employeeName:actorName, date:today, checkIn:hhmm(), checkOut:'', workMode:(emp&&emp.workMode)||'Remote', status:'Present', source:'auto-login', createdAt:nowISO(), updatedAt:nowISO() };
       setDb(d=>({...d, attendance:[rec, ...(d.attendance||[])]}));
       cloudUpsert(cfg.current,'attendance',rec);
@@ -6162,9 +6341,23 @@ function App(){
       }
       loginUser=canonical.user;
     }
+    // Make the resolved server identity authoritative before the first business
+    // query so role changes immediately change the downloaded collection set.
+    setSessionUser(loginUser, remember);
+    let authorizedDb=null;
+    if(authV2Ready&&cfgComplete(cfg.current)){
+      try{ authorizedDb=await cloudLoadAll(cfg.current); }
+      catch(e){
+        if(AUTH_V2.required){ setAcctToken(null); setSbSession(null); clearSessionUser(); setDb(emptyDB());
+          return lang==='ar'
+            ? 'تم تسجيل بيانات الدخول، لكن تعذّر تحميل مساحة العمل المصرح بها بأمان. جرّب مرة أخرى.'
+            : 'Credentials were accepted, but the authorized workspace could not be loaded safely. Try again.'; }
+      }
+    }
     try { AUTH.syncUsersFromCloud().catch(()=>{}); } catch(e){} // pull full team roster now that we have a token
-    setSessionUser(loginUser, remember); setAuthUser(loginUser); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
-    try { recordLogin(loginUser); } catch(e){}
+    if(authorizedDb)setDb(authorizedDb); else if(cfgComplete(cfg.current))setDb(emptyDB());
+    setAuthUser(loginUser); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
+    try { recordLogin(loginUser,authorizedDb||emptyDB()); } catch(e){}
     return null;
   };
   const doInitialSetup = async (details)=>{
@@ -6176,7 +6369,7 @@ function App(){
     setNeedsSetup(false); setShowLogin(true);
     return null;
   };
-  const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
+  const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB()); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
 
   // A login session is a cached identity snapshot, not the source of truth. Refresh
   // it on startup/focus and periodically so role repairs (for example Content ->
@@ -6205,7 +6398,7 @@ function App(){
             });
             setRoleOverride(null);
           } else if(canonical&&[401,403,409].includes(Number(canonical.status))){
-            clearSessionUser(); setAcctToken(null); setSbSession(null);
+            clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB());
             setAuthUser(null); setShowLogin(true); setRoleOverride(null);
           }
           return; // a canonical session must never be overwritten by a legacy role snapshot
@@ -6221,7 +6414,7 @@ function App(){
           });
           setRoleOverride(null);
         } else if(r&&r.unauthorized){
-          clearSessionUser(); setAcctToken(null); setSbSession(null);
+          clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB());
           setAuthUser(null); setShowLogin(true); setRoleOverride(null);
         }
       }catch(e){} finally{ busy=false; }
@@ -6281,13 +6474,15 @@ function App(){
     if(AUTH_V2.required){
       await sbEnsureFresh(cfg.current);
       if(!sbAccessToken()){
-        if(!cancelled){ clearSessionUser(); setAcctToken(null); setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); }
+        if(!cancelled){ clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB()); setAuthUser(null); setShowLogin(true); setRoleOverride(null); }
         return;
       }
     }
     const d=await cloudLoadAll(cfg.current);
-    if(!cancelled&&d&&Object.keys(d).some(k=>d[k].length)) setDb(prev=>mergeDB(prev,d));
-  })().catch(()=>{}); return()=>{cancelled=true;}; }, [authReady,authUser&&authUser.id]);
+    // The server response is the complete authorized projection for this JWT.
+    // Replacing instead of merging purges collections lost after a role downgrade.
+    if(!cancelled&&d) setDb(d);
+  })().catch(()=>{}); return()=>{cancelled=true;}; }, [authReady,authUser&&authUser.id,authScopeKey]);
   // AUTH_V2 (Step 3): multi-tab session sync + logout-all + wake/expiry refresh.
   // Every handler no-ops when the flag is OFF, so legacy behavior is unchanged.
   useEffect(()=>{
@@ -6295,8 +6490,8 @@ function App(){
       if(!e || !(AUTH_V2 && AUTH_V2.enabled)) return;
       if(e.key==='tia_current_user'){
         const ns=e.newValue ? (()=>{ try{ return JSON.parse(e.newValue); }catch(_){ return null; } })() : null;
-        if(!ns && authUser){ try{ setAcctToken(null); }catch(_){} setSbSession(null); setAuthUser(null); setShowLogin(true); setRoleOverride(null); }  // logged out in another tab -> log out here
-        else if(ns && !authUser){ setAuthUser(ns); setShowLogin(false); }                                                                          // logged in in another tab -> adopt here
+        if(!ns && authUser){ try{ setAcctToken(null); }catch(_){} setSbSession(null); setDb(emptyDB()); setAuthUser(null); setShowLogin(true); setRoleOverride(null); }  // logged out in another tab -> log out here
+        else if(ns && !authUser){ setDb(emptyDB()); setAuthUser(ns); setShowLogin(false); }                                                                          // logged in in another tab -> adopt here
       } else if(e.key===SB_SESSION_KEY){ scheduleSbRefresh(cfg.current); }                                                                          // session refreshed elsewhere -> resync timer
     };
     const onWake=()=>{ if(!document.hidden) sbEnsureFresh(cfg.current); };   // browser sleep/wake + focus -> refresh if near expiry
@@ -6339,7 +6534,8 @@ function App(){
       try {
         const d=await cloudLoadDelta(cfg.current,since);
         window.__moPollN=(window.__moPollN||0)+1; window.__moLastSync=Date.now();
-        if(!stop&&d&&d.rows.length){setDb(prev=>applyCloudDelta(prev,d.rows));window.__moCloudCursor=d.cursor;}
+        if(!stop&&d&&((d.rows||[]).length||(d.directory||[]).length))setDb(prev=>applyCloudDelta(prev,d.rows,d.directory));
+        if(!stop&&d)window.__moCloudCursor=d.cursor;
         // The poll just SUCCEEDED, so the connection is alive right now — flush any
         // writes that failed earlier (network drop). This makes offline edits reach
         // the cloud after the connection comes back, with no data
@@ -6354,7 +6550,7 @@ function App(){
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('focus', onFocus);
     return ()=>{ stop=true; clearInterval(h); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', onFocus); };
-  }, [cloudOn,authReady,authUser&&authUser.id]); // eslint-disable-line
+  }, [cloudOn,authReady,authUser&&authUser.id,authScopeKey]); // eslint-disable-line
   // REALTIME: subscribe to live INSERT/UPDATE/DELETE on the records table so
   // changes from any device appear INSTANTLY (no waiting for the poll). Loads the
   // Supabase client lazily from a CDN; if it can't load, the polling above stays
@@ -6373,6 +6569,9 @@ function App(){
         const mod = await import('https://esm.sh/@supabase/supabase-js@2');
         if(!alive) return;
         client = mod.createClient(cfg.current.url, cfg.current.key, { auth:{ persistSession:false }, realtime:{ params:{ eventsPerSecond:10 } } });
+        const realtimeToken=sbAccessToken();
+        if(realtimeToken&&client.realtime&&client.realtime.setAuth)await client.realtime.setAuth(realtimeToken);
+        window.__moRealtimeClient=client;
         const tenantId=tenantOrganizationId();
         channel = client.channel('records-live')
           .on('postgres_changes', Object.assign({ event:'*', schema:'public', table:'records' },tenantId?{filter:'organization_id=eq.'+tenantId}:{}), (p)=>{
@@ -6386,8 +6585,8 @@ function App(){
         window.__rtOn = true;
       } catch(e){ /* CDN blocked/offline -> polling remains the fallback */ }
     })();
-    return ()=>{ alive=false; window.__rtOn=false; try{ if(client&&channel) client.removeChannel(channel); }catch(e){} };
-  }, [cloudOn,authReady,authUser&&authUser.id]); // eslint-disable-line
+    return ()=>{ alive=false; window.__rtOn=false; try{ if(window.__moRealtimeClient===client)window.__moRealtimeClient=null; }catch(e){} try{ if(client&&channel) client.removeChannel(channel); }catch(e){} };
+  }, [cloudOn,authReady,authUser&&authUser.id,authScopeKey]); // eslint-disable-line
   // Theme: apply light/dark by toggling a body class (CSS variables flip).
   useEffect(()=>{ const light=(appSettings.theme||'light')==='light';
     document.body.classList.toggle('theme-light', light);
@@ -6882,8 +7081,8 @@ function App(){
       alert('Saved settings, but could not connect: '+e.message); }
   };
   const saveWebhooks = (webhooks) => { cfg.current=Object.assign({},cfg.current,{webhooks}); setCfg(cfg.current); alert(getLang()==='ar'?'اتحفظت روابط الويبهوك.':'Webhook URLs saved.'); };
-  const syncNow = async () => { if(!cloudOn) return alert(getLang()==='ar'?'مش متوصل بالسحابة.':'Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb(prev=>mergeDB(prev,d)); showProPopup('syncSuccess'); } catch(e){ showProPopup('syncFailed'); } };
-  const pullFromCloud = async () => { if(!cloudOn) return alert(getLang()==='ar'?'مش متوصل بالسحابة.':'Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb(prev=>mergeDB(prev,d)); showProPopup('syncSuccess','Pulled from cloud'); } catch(e){ showProPopup('syncFailed'); } };
+  const syncNow = async () => { if(!cloudOn) return alert(getLang()==='ar'?'مش متوصل بالسحابة.':'Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb((AUTH_V2.required||sbAccessToken())?d:mergeDB(db,d)); showProPopup('syncSuccess'); } catch(e){ showProPopup('syncFailed'); } };
+  const pullFromCloud = async () => { if(!cloudOn) return alert(getLang()==='ar'?'مش متوصل بالسحابة.':'Not connected.'); try { const d=await cloudLoadAll(cfg.current); if(d) setDb((AUTH_V2.required||sbAccessToken())?d:mergeDB(db,d)); showProPopup('syncSuccess','Pulled from cloud'); } catch(e){ showProPopup('syncFailed'); } };
   const disconnectCloud = () => { const w=cfg.current.webhooks; cfg.current={webhooks:w}; setCfg(cfg.current); setCloudOn(false); alert('Disconnected. Local-only mode.'); };
   const signInCloud = async (email,password) => {
     try {
@@ -6968,10 +7167,10 @@ function App(){
 
   // permission gate: returns true if allowed, else shows a professional message.
   const requirePerm = (module, action)=>{ if(can(role,module,action)) return true; showProPopup('permissionDenied'); return false; };
-  const ctx = { db, role, user, brand, cloudOn, cfg:cfg.current, lang, currency, appSettings, applyAppSettings, can, requirePerm,
+  const ctx = { db, role, user, brand, cloudOn, cfg:cfg.current, lang, currency, appSettings, applyAppSettings, organizationSettingsStatus, can, requirePerm,
     canEditSection:(section)=>userCanEditSection(authUser,section,role),
     canDelete:(section)=> isAdminRole(role) || (!PROTECTED_DELETE.includes(section) && userCanEditSection(authUser, section, role)),
-    delRec:(coll,id,name)=>{ if(confirm((lang==='ar'?'حذف ':'Delete ')+(name||(lang==='ar'?'هذا السجل':'this record'))+(lang==='ar'?'؟ لا يمكن التراجع.':'? This cannot be undone.'))) deleteRecord(coll,id); },
+    delRec:(coll,id,name)=>{ if(confirm((lang==='ar'?'أرشفة ':'Archive ')+(name||(lang==='ar'?'هذا السجل':'this record'))+(lang==='ar'?'؟ سيختفي من النظام ويمكن استعادته إداريًا.':'? It will leave active views and remains recoverable by an administrator.'))) deleteRecord(coll,id); },
     createRecord, updateRecord, deleteRecord, getRecords, addComment, addActivity, addNotification, awardPoints, upsertRecord,
     sendTaskAssignmentEmail, checkTaskAssignmentEmail,
     convertLead, convertCandidate, createDefaultTasksForProject, sendToClientReview, approveDeliverable, requestRevision, addDeliverableVersion,
@@ -9239,8 +9438,12 @@ function SettingsView({ ctx, x }){
   const savePp=(patch)=>{ const n=Object.assign({},pp,patch); setPp(n); setPopupPrefs(patch); };
   const arr=ctx.lang==='ar'; const pcfg=payrollCfg();
   const setPay=(k,v)=>ctx.applyAppSettings({payroll:Object.assign({},payrollCfg(),{[k]:v})});
+  const settingsState=ctx.organizationSettingsStatus||'local';
+  const settingsLabel={loading:arr?'جاري تحميل إعدادات المؤسسة':'Loading organization settings',saving:arr?'جاري الحفظ':'Saving',saved:arr?'إعدادات المؤسسة متزامنة':'Organization settings synced',offline:arr?'نسخة محفوظة — غير متصل':'Cached — offline',error:arr?'فشل مزامنة الإعدادات':'Settings sync failed',local:arr?'إعدادات محلية مؤقتة':'Temporary local settings'}[settingsState]||settingsState;
   return html`<div class="view">
-    <${Head} eyebrow="Configuration" title="Settings & Database" desc="Cloud status, Supabase connection, auth, webhooks, popups and backups."/>
+    <${Head} eyebrow="Configuration" title="Settings & Database" desc="Cloud status, Supabase connection, auth, webhooks, popups and backups.">
+      <${Tag} type=${settingsState==='saved'?'ok':(settingsState==='error'?'neg':(settingsState==='offline'?'warn':''))}>${settingsLabel}<//>
+    <//>
 
     <${Panel} title=${ctx.lang==='ar'?'العملة واللغة':'Currency & language'} className="mb18">
       <div class="flex gap8" style=${{flexWrap:'wrap'}}>

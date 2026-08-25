@@ -22,9 +22,9 @@ for (const file of ['api/send-email.js', 'api/intake.js', 'api/public-form.js', 
   'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
   'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
   'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js',
-  'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/preflight-staging-migration.js',
+  'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/organization-settings-test.js', 'tools/employee-privacy-test.js', 'tools/preflight-staging-migration.js',
   'tools/reconcile-staging-identity.js', 'tools/test-staging-identity.js',
-  'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-public-forms.js',
+  'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-organization-settings.js', 'tools/test-staging-employee-privacy.js', 'tools/test-staging-public-forms.js',
   'tools/m0-logical-backup.js', 'tools/m0-restore-staging.js', 'tools/m0-validate-staging.js',
   'tools/m0-security-baseline.js', 'tools/m0-configure-vercel-preview.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, file)], { stdio: 'pipe' }); ok(file); }
@@ -131,6 +131,9 @@ console.log('\n[5] dangerous-pattern scan');
 /cloudLoadDelta/.test(html) && /updated_at=gt\./.test(html) && !/setInterval\(tick,\s*5000\)/.test(html)
   ? ok('live sync uses updated_at deltas instead of 5-second full-database downloads')
   : bad('high-egress full-database polling has returned');
+/__moRealtimeClient\.realtime\.setAuth/.test(html) && /client\.realtime&&client\.realtime\.setAuth/.test(html)
+  ? ok('Realtime authenticates with the user JWT and rotates refreshed tokens')
+  : bad('Realtime may subscribe anonymously or keep an expired JWT');
 /needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /hasCloudAccounts/.test(html)
   ? ok('fresh browsers distinguish existing accounts from first-owner setup without exposing the roster')
   : bad('fresh browsers can show first-owner setup when accounts already exist');
