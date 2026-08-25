@@ -1296,6 +1296,7 @@ body.theme-light .tbl thead th{background:#fff}
 </style>
 <div id="root"><div id="boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f6f7f9;color:#6f7b8a;font-family:system-ui">Loading Magnet OS…</div></div>
 <!-- ===== MAGNET CLOUD (shared live data + shared accounts) ===== -->
+<script src="/api/runtime-config"></script>
 <script>
   // Auto-connect this deployment to the shared Supabase cloud so everyone who
   // opens the site reads/writes the SAME live data, and team accounts created in
@@ -1305,7 +1306,19 @@ body.theme-light .tbl thead th{background:#fff}
   try {
     var __CFG_KEY='tia_agency_os_cloud';
     var __ex=null; try{ __ex=JSON.parse(localStorage.getItem(__CFG_KEY)||"null"); }catch(_){ }
-    if(!__ex || !__ex.url || !__ex.key){
+    var __runtime=window.__MAGNET_RUNTIME_CONFIG__;
+    if(__runtime && __runtime.url && __runtime.key){
+      // Hosted deployments are authoritative. This prevents a Preview build
+      // from silently reusing a Production Supabase config cached in the same
+      // browser, while file:// keeps the existing local/manual configuration.
+      __ex={url:__runtime.url,key:__runtime.key};
+      localStorage.setItem(__CFG_KEY, JSON.stringify(__ex));
+    } else if(location.protocol==='http:' || location.protocol==='https:'){
+      // Hosted builds fail closed when their deployment-scoped endpoint is
+      // missing or invalid. Never reuse a cached Production config in Preview.
+      localStorage.removeItem(__CFG_KEY);
+      window.__MAGNET_RUNTIME_CONFIG_ERROR__=true;
+    } else if(!__ex || !__ex.url || !__ex.key){
       localStorage.setItem(__CFG_KEY, JSON.stringify({
         url:"https://jdylrthffifbhyrrhuqd.supabase.co",
         key:"sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz"

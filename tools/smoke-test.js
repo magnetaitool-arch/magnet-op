@@ -18,10 +18,12 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const exists = (p) => fs.existsSync(path.join(ROOT, p));
 
 console.log('[1] node --check on server JS');
-for (const file of ['api/send-email.js', 'api/intake.js', 'netlify/functions/intake.js', 'netlify/functions/send-email.js',
+for (const file of ['api/send-email.js', 'api/intake.js', 'api/runtime-config.js', 'netlify/functions/intake.js', 'netlify/functions/send-email.js',
   'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
   'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
-  'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js']) {
+  'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js',
+  'tools/m0-logical-backup.js', 'tools/m0-restore-staging.js', 'tools/m0-validate-staging.js',
+  'tools/m0-security-baseline.js', 'tools/m0-configure-vercel-preview.js']) {
   try { execFileSync(process.execPath, ['--check', path.join(ROOT, file)], { stdio: 'pipe' }); ok(file); }
   catch (e) { bad(file + ' — ' + String(e.stderr || e).split('\n')[0]); }
 }
