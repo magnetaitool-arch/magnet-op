@@ -53,6 +53,7 @@ function vercelPost(deployment, path, payload) {
   const output = cliJson('pnpm', [
     'dlx', 'vercel@latest', 'curl', path, '--deployment', deployment, '--',
     '--silent', '--show-error', '--request', 'POST', '--header', 'Content-Type: application/json',
+    '--header', `Origin: ${deployment}`,
     '--data', JSON.stringify(payload),
   ]);
   return output;
@@ -125,13 +126,18 @@ async function main() {
     const storedBrief = await serviceRows(`records?id=eq.${briefId}&select=data`);
     check(storedBrief[0] && storedBrief[0].data.status === 'submitted', 'brief submission persisted on Staging');
 
-    const intake = vercelPost(deployment, '/api/intake', {
+    const intakePayload = {
       type: 'lead', name: 'Synthetic Public Lead', email: 'synthetic@example.invalid', campaignId, campaignName: 'Synthetic Campaign', source: 'Automated Staging Test',
-    });
+    };
+    const intake = vercelPost(deployment, '/api/intake', intakePayload);
     check(intake.ok === true && /^lea-/.test(String(intake.id || '')), 'public lead intake succeeds without anonymous database access');
     createdIds.push(intake.id);
+    const replay = vercelPost(deployment, '/api/intake', intakePayload);
+    check(replay.ok === true && replay.id === intake.id && replay.replayed === true, 'repeated public intake is idempotent');
     const storedLead = await serviceRows(`records?id=eq.${encodeURIComponent(intake.id)}&select=organization_id,coll`);
     check(storedLead[0] && storedLead[0].organization_id === organizationId && storedLead[0].coll === 'leads', 'public intake stamps authoritative tenant');
+    const queued = await serviceRows(`outbox_messages?organization_id=eq.${organizationId}&payload->>entityId=eq.${encodeURIComponent(intake.id)}&select=id,kind,status`);
+    check(queued.length === 2 && queued.every((row) => row.status === 'PENDING'), 'public intake queues durable email and WhatsApp delivery');
 
     const relatedNotifications = await serviceRows(`records?coll=eq.notifications&organization_id=eq.${organizationId}&or=(data->>entityId.eq.${briefId},data->>entityId.eq.${encodeURIComponent(intake.id)})&select=id`);
     createdIds.push(...relatedNotifications.map((row) => row.id));
@@ -139,6 +145,10 @@ async function main() {
   } finally {
     for (const id of [...new Set(createdIds)]) {
       await fetch(`${base}/rest/v1/records?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers }).catch(() => null);
+    }
+    for (const id of createdIds) {
+      await fetch(`${base}/rest/v1/outbox_messages?payload->>entityId=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers }).catch(() => null);
+      await fetch(`${base}/rest/v1/idempotency_keys?response_body->>id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers }).catch(() => null);
     }
   }
 
