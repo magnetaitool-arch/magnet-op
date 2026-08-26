@@ -51,7 +51,11 @@ async function organizationId(base, key) {
     { headers: serviceHeaders(key) },
   );
   const id = result.response.ok && Array.isArray(result.payload) && result.payload[0] && result.payload[0].id;
-  if (!id) throw new Error('organization_unavailable');
+  if (!id) {
+    const error = new Error('organization_unavailable');
+    error.upstreamStatus = result.response.status;
+    throw error;
+  }
   organizationCache = id;
   return id;
 }
@@ -179,6 +183,14 @@ module.exports = async (req, res) => {
 
     return respond(req, res, 400, { ok: false, error: 'invalid_action' });
   } catch (error) {
+    console.error('[public-form] request failed', {
+      action: ['campaign.get', 'brief.get', 'brief.open', 'brief.submit'].includes(action) ? action : 'unknown',
+      code: ['organization_unavailable', 'brief_open_failed'].includes(String(error && error.message))
+        ? String(error.message)
+        : 'unexpected',
+      upstreamStatus: Number.isInteger(error && error.upstreamStatus) ? error.upstreamStatus : null,
+      environment: String(process.env.VERCEL_ENV || 'unknown'),
+    });
     return respond(req, res, 503, { ok: false, error: 'service_unavailable' });
   }
 };

@@ -39,7 +39,7 @@
     "test:tenant:staging": "node tools/test-staging-tenant-rls.js --project-ref=xqqgbvigfojfydzfguan",
     "test:organization-settings:staging": "node tools/test-staging-organization-settings.js --project-ref=xqqgbvigfojfydzfguan",
     "test:employee-privacy:staging": "node tools/test-staging-employee-privacy.js --project-ref=xqqgbvigfojfydzfguan",
-    "test:public-forms:staging": "node tools/test-staging-public-forms.js --project-ref=xqqgbvigfojfydzfguan",
+    "test:public-forms:staging": "node tools/test-staging-public-forms.js --project-ref=xqqgbvigfojfydzfguan --deployment=https://magnet-os-staging.vercel.app",
     "test:public-intake:staging": "node tools/test-staging-public-intake.js --project-ref=xqqgbvigfojfydzfguan",
     "test:delivery-outbox:staging": "node tools/test-staging-delivery-outbox.js --project-ref=xqqgbvigfojfydzfguan",
     "test:recruitment-v2:staging": "node tools/test-staging-recruitment-v2.js --project-ref=xqqgbvigfojfydzfguan",

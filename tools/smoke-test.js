@@ -91,6 +91,11 @@ console.log('\n[5] dangerous-pattern scan');
 /\/\.netlify\/functions\/intake/.test(html) ? bad('index.html calls netlify intake (Vercel default) — use /api/intake') : ok('no hardcoded netlify intake call in index.html');
 const intakeCore = read('server/public-intake.js');
 const intakeMigration = read('supabase/migrations/20260825203000_transactional_public_intake.sql');
+const runtimeConfig = read('api/runtime-config.js');
+/VERCEL_PROJECT_ID === productionProjectId/.test(runtimeConfig)
+  && /isMagnetProduction \? 'https:\/\/jdylrthffifbhyrrhuqd\.supabase\.co' : ''/.test(runtimeConfig)
+  ? ok('only the exact Production Vercel project may use the Production Supabase fallback')
+  : bad('a non-Production Vercel project can fall back to the Production database');
 /rpc\/submit_public_intake/.test(intakeCore) && !/rest\/v1\/records/.test(intakeCore)
   ? ok('public intake uses one transactional server command instead of direct record writes')
   : bad('public intake can bypass the transactional database command');

@@ -5,9 +5,11 @@
 // or returned here. Preview and Development are configured in Vercel to use the
 // separate Staging project, while Production retains its current defaults.
 module.exports = function handler(req, res) {
-  const isProduction = process.env.VERCEL_ENV === 'production';
-  const fallbackUrl = isProduction ? 'https://jdylrthffifbhyrrhuqd.supabase.co' : '';
-  const fallbackKey = isProduction ? 'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz' : '';
+  const productionProjectId = 'prj_HrxlpYScEnBGgUpFJbNt2mxlIW3x';
+  const isMagnetProduction = process.env.VERCEL_ENV === 'production'
+    && process.env.VERCEL_PROJECT_ID === productionProjectId;
+  const fallbackUrl = isMagnetProduction ? 'https://jdylrthffifbhyrrhuqd.supabase.co' : '';
+  const fallbackKey = isMagnetProduction ? 'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz' : '';
   const url = String(process.env.SUPABASE_URL || fallbackUrl).trim();
   const key = String(process.env.SUPABASE_ANON_KEY || fallbackKey).trim();
   const validUrl = /^https:\/\/[a-z]{20}\.supabase\.co\/?$/.test(url);

@@ -75,7 +75,7 @@ begin
   insert into public.records(id,coll,data,organization_id) values
     ('prj-m6-${suffix}','projects',jsonb_build_object('id','prj-m6-${suffix}','clientId',client_record_id,'projectName','Synthetic Project','status','In Progress','createdAt',now()),target_organization_id),
     ('tsk-m6-${suffix}','tasks',jsonb_build_object('id','tsk-m6-${suffix}','clientId',client_record_id,'title','Synthetic Task','status','In Progress','createdAt',now()),target_organization_id),
-    ('inv-m6-${suffix}','invoices',jsonb_build_object('id','inv-m6-${suffix}','clientId',client_record_id,'invoiceNumber','SYN-1','amount',1000,'status','Issued','createdAt',now()),target_organization_id),
+    ('inv-m6-${suffix}','invoices',jsonb_build_object('id','inv-m6-${suffix}','clientId',client_record_id,'projectId','prj-m6-${suffix}','invoiceNumber','SYN-1','amount',1000,'status','Issued','createdAt',now()),target_organization_id),
     ('pay-m6-${suffix}','payments',jsonb_build_object('id','pay-m6-${suffix}','clientId',client_record_id,'invoiceId','inv-m6-${suffix}','amount',250,'date',current_date,'createdAt',now()),target_organization_id);
   workspace_result := public.get_client_workspace(target_organization_id,client_record_id);
   if coalesce((workspace_result->>'ok')::boolean,false) is not true then raise exception 'workspace profile failed'; end if;

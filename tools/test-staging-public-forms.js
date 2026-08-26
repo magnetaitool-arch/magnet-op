@@ -9,6 +9,10 @@ const { spawnSync } = require('node:child_process');
 
 const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
 const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
+const STABLE_STAGING_DEPLOYMENTS = new Set([
+  'https://magnet-os-staging.vercel.app',
+  'https://magnet-os-v2-staging.vercel.app',
+]);
 
 function argsOf(argv) {
   const result = {};
@@ -64,8 +68,9 @@ async function main() {
   const projectRef = String(args['project-ref'] || '').trim();
   const deployment = String(args.deployment || '').replace(/\/$/, '');
   if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) throw new Error('Refused: non-Production project ref required.');
-  if (!/^https:\/\/magnet-[a-z0-9-]+-magnetaitool-archs-projects\.vercel\.app$/.test(deployment)) {
-    throw new Error('Refused: explicit Magnet OS Preview deployment URL required.');
+  const isImmutablePreview = /^https:\/\/magnet-[a-z0-9-]+-magnetaitool-archs-projects\.vercel\.app$/.test(deployment);
+  if (!isImmutablePreview && !STABLE_STAGING_DEPLOYMENTS.has(deployment)) {
+    throw new Error('Refused: explicit MAGNET OS Staging deployment URL required.');
   }
 
   const project = cliJson('pnpm', ['dlx', 'supabase@latest', 'projects', 'list', '--output', 'json'])

@@ -203,6 +203,10 @@ async function handlePublicIntake(request, env = process.env) {
     }
     return { status: 200, headers: cors, body: { ...result.payload, deliveryAttempted } };
   } catch (error) {
+    console.error('[public-intake] request failed', {
+      code: String(error && error.message) === 'organization_unavailable' ? 'organization_unavailable' : 'unexpected',
+      environment: String(env.VERCEL_ENV || 'unknown'),
+    });
     return { status: 503, headers: cors, body: { error: 'service_unavailable' } };
   }
 }

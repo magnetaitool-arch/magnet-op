@@ -71,6 +71,7 @@ async function main() {
   const roleKeys = ['sales', 'content_creator', 'hr', 'finance'];
   const identities = [];
   const recordIds = [];
+  const cleanupFailures = [];
   let secondOrganizationId = null;
   const assertions = [];
   const check = (condition, label) => {
@@ -135,12 +136,15 @@ async function main() {
     });
     secondOrganizationId = secondOrganization[0].id;
 
+    // These collections exercise the same capability families without firing
+    // append-only V2 projection/event tables. That makes every canary safely
+    // removable after the browser/JWT assertions finish.
     const canaries = [
-      { id: `rls-crm-${suffix}`, coll: 'leads', organization_id: organizationId, data: { id: `rls-crm-${suffix}`, name: 'Synthetic CRM Canary', createdBy: users.sales.id } },
-      { id: `rls-work-${suffix}`, coll: 'tasks', organization_id: organizationId, data: { id: `rls-work-${suffix}`, title: 'Synthetic Work Canary', createdBy: users.content_creator.id, assignedTo: users.content_creator.id } },
-      { id: `rls-hr-${suffix}`, coll: 'candidates', organization_id: organizationId, data: { id: `rls-hr-${suffix}`, fullName: 'Synthetic HR Canary', createdBy: users.hr.id } },
-      { id: `rls-fin-${suffix}`, coll: 'invoices', organization_id: organizationId, data: { id: `rls-fin-${suffix}`, invoiceNumber: 'SYNTHETIC', createdBy: users.finance.id } },
-      { id: `rls-cross-${suffix}`, coll: 'leads', organization_id: secondOrganizationId, data: { id: `rls-cross-${suffix}`, name: 'Cross Tenant Canary' } },
+      { id: `rls-crm-${suffix}`, coll: 'proposals', organization_id: organizationId, data: { id: `rls-crm-${suffix}`, name: 'Synthetic CRM Canary', createdBy: users.sales.id } },
+      { id: `rls-work-${suffix}`, coll: 'deliverables', organization_id: organizationId, data: { id: `rls-work-${suffix}`, title: 'Synthetic Work Canary', createdBy: users.content_creator.id, assignedTo: users.content_creator.id } },
+      { id: `rls-hr-${suffix}`, coll: 'freelancers', organization_id: organizationId, data: { id: `rls-hr-${suffix}`, fullName: 'Synthetic HR Canary', createdBy: users.hr.id } },
+      { id: `rls-fin-${suffix}`, coll: 'expenses', organization_id: organizationId, data: { id: `rls-fin-${suffix}`, amount: 1, createdBy: users.finance.id } },
+      { id: `rls-cross-${suffix}`, coll: 'proposals', organization_id: secondOrganizationId, data: { id: `rls-cross-${suffix}`, name: 'Cross Tenant Canary' } },
     ];
     recordIds.push(...canaries.map((row) => row.id));
     await serviceRows('records', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(canaries) });
@@ -191,7 +195,7 @@ async function main() {
     recordIds.push(salesWriteId);
     const salesWrite = await userRequest(users.sales, 'records', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ id: salesWriteId, coll: 'leads', organization_id: organizationId, data: { id: salesWriteId, name: 'Authorized', createdBy: users.sales.id } }),
+      body: JSON.stringify({ id: salesWriteId, coll: 'proposals', organization_id: organizationId, data: { id: salesWriteId, name: 'Authorized', createdBy: users.sales.id } }),
     });
     check(salesWrite.response.status === 201, 'Sales CRM write accepted');
     const hardDelete = await userRequest(users.sales, `records?id=eq.${salesWriteId}`, { method: 'DELETE' });
@@ -214,10 +218,20 @@ async function main() {
     check(deletedServiceRead.length === 1 && deletedServiceRead[0].deleted_at && deletedServiceRead[0].data._del === true, 'soft-delete tombstone remains recoverable server-side');
   } finally {
     for (const recordId of recordIds) {
-      await fetch(`${base}/rest/v1/records?id=eq.${encodeURIComponent(recordId)}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
+      const mapDelete = await fetch(
+        `${base}/rest/v1/legacy_record_tenant_map?record_id=eq.${encodeURIComponent(recordId)}`,
+        { method: 'DELETE', headers: serviceHeaders },
+      ).catch(() => null);
+      if (!mapDelete || !mapDelete.ok) cleanupFailures.push('tenant-map');
+      const recordDelete = await fetch(
+        `${base}/rest/v1/records?id=eq.${encodeURIComponent(recordId)}`,
+        { method: 'DELETE', headers: serviceHeaders },
+      ).catch(() => null);
+      if (!recordDelete || !recordDelete.ok) cleanupFailures.push('record');
     }
     if (secondOrganizationId) {
-      await fetch(`${base}/rest/v1/organizations?id=eq.${secondOrganizationId}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
+      const organizationDelete = await fetch(`${base}/rest/v1/organizations?id=eq.${secondOrganizationId}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
+      if (!organizationDelete || !organizationDelete.ok) cleanupFailures.push('organization');
     }
     for (const identity of identities.reverse()) {
       await fetch(`${base}/auth/v1/admin/users/${identity.id}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
@@ -226,6 +240,7 @@ async function main() {
 
   const remaining = await jsonFetch(`${base}/rest/v1/records?id=like.rls-*-${suffix}&select=id`, { headers: serviceHeaders });
   check(remaining.response.ok && Array.isArray(remaining.body) && remaining.body.length === 0, 'all RLS canary records removed');
+  check(cleanupFailures.length === 0, 'all RLS canary cleanup operations succeeded');
   const failed = assertions.filter((assertion) => !assertion.pass);
   process.stdout.write(`Tenant RLS E2E: ${assertions.length - failed.length} passed, ${failed.length} failed. Synthetic users and records removed.\n`);
   if (failed.length) process.exitCode = 1;
