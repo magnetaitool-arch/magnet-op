@@ -1995,7 +1995,7 @@ const I18N = {
   shareCenter:'مركز المشاركة', documents:'مركز المستندات', calendar:'تقويم المحتوى', revisionsHub:'إدارة التعديلات',
   meetings:'الاجتماعات', files:'الملفات', comments:'التعليقات', activityLogs:'سجل النشاط', notifications:'الإشعارات',
   reports:'التقارير', sops:'الإجراءات', settings:'الإعدادات', backupCenter:'مركز النسخ الاحتياطي', dataHealth:'صحة البيانات',
-  systemQA:'فحص النظام', workflow:'سير العمل', rolesPermissions:'الأدوار والصلاحيات',
+  systemHealth:'صحة النظام', systemQA:'فحص النظام', workflow:'سير العمل', rolesPermissions:'الأدوار والصلاحيات',
   // nav groups
   'Main':'الرئيسية','Operations':'العمليات','Intelligence':'الذكاء','Sales':'المبيعات','Finance':'المالية',
   'Team / HR':'الفريق والموارد البشرية','Workspace':'مساحة العمل','System':'النظام',
@@ -2299,7 +2299,7 @@ const SECTIONS = ['dashboard','accounts','leads','clients','projects','tasks','d
   'requests','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings',
   'files','comments','activityLogs','notifications','reports','sops','settings',
   'approvalCenter','automations','agents','workflow','rolesPermissions','users','teams',
-  'backupCenter','dataHealth','systemQA','leaderboard','arcade'];
+  'backupCenter','dataHealth','systemHealth','systemQA','leaderboard','arcade'];
 
 const FINANCE_SECTIONS = ['invoices','payments','expenses','profitability','fixedCosts','partners','collections'];
 const SALES_SECTIONS = ['leads','contacts','salesActivities','proposals','quotations'];
@@ -2456,7 +2456,7 @@ const OPEN_SECTIONS = ['leaderboard','arcade']; // fun/engagement modules visibl
 // SYSTEM-CONFIG modules only the Owner/Admin may ever see. Regular staff must not be
 // able to open Settings (cloud config, enabled modules, currency), export/restore all
 // data, or touch users/roles/diagnostics. Hard-locked below (not grantable per-user).
-const ADMIN_ONLY_SECTIONS = ['settings','backupCenter','dataHealth','systemQA','users','rolesPermissions'];
+const ADMIN_ONLY_SECTIONS = ['settings','backupCenter','dataHealth','systemHealth','systemQA','users','rolesPermissions'];
 // Merged into another module — hidden from the sidebar but the route + modal still
 // work. Clients now lives entirely inside Accounts (add/edit/report from there).
 const HIDDEN_NAV = ['clients'];
@@ -2508,7 +2508,7 @@ const MODULE_CATALOG = [
   {group:'Intelligence', items:[['automations','Automations'],['agents','AI Agents'],['reports','Reports']]},
   {group:'Workspace', items:[['files','Files / Assets'],['comments','Comments'],['activityLogs','Activity Log'],['notifications','Notifications'],['sops','SOPs / KB']]},
   {group:'Fun', items:[['leaderboard','Leaderboard'],['arcade','Arcade']]},
-  {group:'System', items:[['users','Users & Permissions'],['rolesPermissions','Roles & Permissions'],['backupCenter','Backup Center'],['dataHealth','Data Health'],['systemQA','System QA'],['settings','Settings']]},
+  {group:'System', items:[['users','Users & Permissions'],['rolesPermissions','Roles & Permissions'],['backupCenter','Backup Center'],['dataHealth','Data Health'],['systemHealth','System Health'],['systemQA','System QA'],['settings','Settings']]},
 ];
 const MODULE_ALWAYS_ON = ['dashboard','settings'];
 // A lean default for a content/delivery-focused agency team.
@@ -2516,7 +2516,7 @@ const FOCUSED_DEFAULT = ['dashboard','accounts','plans','leads','campaigns','bri
   'teams','candidates','employees','availability','freelancers','departments','workload','attendance','leaves',
   'requests','approvalCenter',
   'invoices','payments','collections','expenses','fixedCosts','partners','profitability',
-  'files','comments','notifications','reports','leaderboard','arcade','users','rolesPermissions','backupCenter','settings'];
+  'files','comments','notifications','reports','leaderboard','arcade','users','rolesPermissions','backupCenter','systemHealth','settings'];
 function moduleEnabled(key, appSettings){
   const en = appSettings && appSettings.enabledModules;
   if(!Array.isArray(en)) return true;            // null/missing → show all
@@ -7395,7 +7395,7 @@ function App(){
     {group:'Team / HR', items:[['candidates','Recruitment','target'],['teams','Teams','people'],['employees','Employees','people'],['availability','Team Availability','pulse'],['freelancers','Freelancers','people'],['departments','Departments','grid'],['workload','Workload','pulse'],['attendance','Attendance','clock'],['leaves','Leaves','calendar'],['payroll','Payroll','wallet']]},
     {group:'Workspace', items:[['files','Files / Assets','docs'],['comments','Comments','mail'],['activityLogs','Activity Log','clock'],['notifications','Notifications','bell'],['reports','Reports','fileText'],['sops','SOPs / KB','layers']]},
     {group:'Fun', items:[['leaderboard','Leaderboard','trend'],['arcade','Arcade','bolt']]},
-    {group:'System', items:[['users','Users & Permissions','people'],['rolesPermissions','Roles & Permissions','shield'],['backupCenter','Backup Center','download'],['dataHealth','Data Health','pulse'],['systemQA','System QA','check'],['settings','Settings','settings']]},
+    {group:'System', items:[['users','Users & Permissions','people'],['rolesPermissions','Roles & Permissions','shield'],['backupCenter','Backup Center','download'],['dataHealth','Data Health','pulse'],['systemHealth','System Health','pulse','new'],['systemQA','System QA','check'],['settings','Settings','settings']]},
   ];
   // FOCUSED NAV: the handful of modules each role uses daily are shown up top; the
   // rest (that the role can still access) collapse under "More". Keyed by the BASE
@@ -8230,6 +8230,7 @@ function renderRoute(route, ctx, x){
     case 'agents': return html`<${AgentsView} ctx=${ctx} visible=${x.visible}/>`;
     case 'backupCenter': return html`<${BackupCenterView} ctx=${ctx} x=${x}/>`;
     case 'dataHealth': return html`<${DataHealthView} ctx=${ctx}/>`;
+    case 'systemHealth': return html`<${SystemHealthView} ctx=${ctx}/>`;
     case 'systemQA': return html`<${SystemQAView} ctx=${ctx}/>`;
     case 'settings': return html`<${SettingsView} ctx=${ctx} x=${x}/>`;
     default: return html`<div class="view"><${Head} title=${route}/><p class="muted">Coming soon.</p></div>`;
@@ -11405,6 +11406,98 @@ function DataHealthView({ ctx }){
             <td><span class="tag ${w.severity}"><span class="d"></span>${w.label}</span></td>
             <td class="num">${w.count}</td>
             <td class="right"><button class="mini" onClick=${()=>ctx.go(w.route)}>Open</button></td></tr>`)}</tbody></table><//>`}
+  </div>`;
+}
+
+/* ---------------- System Health V2 ---------------- */
+function SystemHealthView({ ctx }){
+  const ar=ctx.lang==='ar';
+  const L=(en,ara)=>ar?ara:en;
+  const [snapshot,setSnapshot]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState('');
+  const canInspect=!!(ctx.user&&Array.isArray(ctx.user.capabilities)&&ctx.user.capabilities.includes('organization.manage'));
+  const statusText=(value)=>({HEALTHY:L('Healthy','سليم'),DEGRADED:L('Needs attention','يحتاج تدخل'),CONFIGURED:L('Configured','متصل'),NOT_CONFIGURED:L('Not configured','غير متصل'),ACTIVE:L('Active','نشط'),UNAVAILABLE:L('Unavailable','غير متاح')})[String(value||'').toUpperCase()]||String(value||L('Unknown','غير معروف'));
+  const tagClass=(value)=>['HEALTHY','CONFIGURED','ACTIVE'].includes(String(value||'').toUpperCase())?'pos':['DEGRADED','NOT_CONFIGURED','UNAVAILABLE'].includes(String(value||'').toUpperCase())?'neg':'';
+  const count=(obj,key)=>Number(obj&&obj.statuses&&obj.statuses[key])||0;
+  const duration=(seconds)=>{const n=Number(seconds)||0;if(n<60)return L('Under a minute','أقل من دقيقة');if(n<3600)return Math.ceil(n/60)+' '+L('min','دقيقة');return Math.ceil(n/3600)+' '+L('hr','ساعة');};
+  const healthDate=(value)=>{try{return new Date(value).toLocaleString(ar?'ar-EG':'en-GB',{dateStyle:'medium',timeStyle:'short'});}catch(e){return '—';}};
+  const warningCopy={
+    EMAIL_NOT_CONFIGURED:L('Email delivery is not configured for this deployment.','إرسال البريد غير مضبوط على النسخة دي.'),
+    WORKER_NOT_CONFIGURED:L('The delivery worker secret is missing; queued messages will not drain reliably.','سر عامل الإرسال غير موجود؛ الرسائل المعلّقة لن تُرسل بشكل موثوق.'),
+    WHATSAPP_NOT_CONFIGURED:L('WhatsApp is optional and is not connected yet.','واتساب اختياري ولسه مش متوصل.'),
+    OUTBOX_FAILURES:L('Some outbound messages failed and need review or retry.','في رسائل فشل إرسالها وتحتاج مراجعة أو إعادة محاولة.'),
+    OUTBOX_DELAYED:L('The outbound queue has been waiting too long.','طابور الرسائل متأخر عن الوقت الطبيعي.'),
+    OUTBOX_PROCESSING:L('Messages are currently being processed.','في رسائل بيتم إرسالها دلوقتي.'),
+    DEAD_JOBS:L('Some background jobs exhausted all retries.','في عمليات خلفية استنفدت كل محاولات التشغيل.'),
+    JOB_FAILURES:L('Some background jobs failed.','في عمليات خلفية فشلت.'),
+    JOBS_DELAYED:L('Background jobs are delayed.','العمليات الخلفية متأخرة.'),
+  };
+  const load=async()=>{
+    if(!canInspect){setLoading(false);setError('not-allowed');return;}
+    setLoading(true);setError('');
+    try{
+      await sbEnsureFresh(ctx.cfg);
+      const token=sbAccessToken();
+      const organizationId=ctx.organizationId||activeOrganizationId();
+      if(!token||!organizationId)throw new Error('session-required');
+      const response=await fetch('/api/system-health',{method:'GET',cache:'no-store',headers:{Authorization:'Bearer '+token,'x-magnet-organization-id':organizationId}});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data.ok){const healthError=new Error(data.error||'health-unavailable');healthError.status=response.status;throw healthError;}
+      setSnapshot(data);
+    }catch(e){
+      setSnapshot(null);
+      setError(e&&e.status===403?'not-allowed':e&&e.status===401?'session-required':'unavailable');
+    }
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[ctx.organizationId,canInspect]);
+  if(!canInspect||error==='not-allowed')return html`<div class="view"><${Head} eyebrow="SYSTEM / SECURITY" title=${L('System Health','صحة النظام')} desc=${L('Live operational status without exposing secrets.','حالة تشغيل النظام من غير عرض أي أسرار.')}/><${Panel}><${EmptyState} icon="shield" title=${L('Owner access required','مطلوب صلاحية المالك')} text=${L('Only an active Owner/Admin with organization management permission can inspect system health.','الشاشة دي متاحة فقط لمالك/أدمن نشط ومعاه صلاحية إدارة المؤسسة.')}/><//></div>`;
+  return html`<div class="view">
+    <${Head} eyebrow="SYSTEM / OPERATIONS" title=${L('System Health','صحة النظام')} desc=${L('One secure view for database, login, storage, delivery and jobs.','شاشة آمنة واحدة لقاعدة البيانات والدخول والتخزين والإرسال والعمليات الخلفية.')}>
+      <button class="btn btn-pri" disabled=${loading} onClick=${load}>${React.createElement(Icon.refresh)} ${loading?L('Checking…','جاري الفحص…'):L('Check now','افحص الآن')}</button>
+    <//>
+    ${loading&&!snapshot?html`<${Panel}><div class="flex center gap8"><span class="spin"></span><span>${L('Running a read-only health check…','جاري تنفيذ فحص قراءة فقط…')}</span></div><//>`:''}
+    ${error&&error!=='not-allowed'?html`<${Panel}><${EmptyState} icon="alert" title=${error==='session-required'?L('Session needs renewal','الجلسة تحتاج تجديد'):L('Health service unavailable','خدمة الفحص غير متاحة')} text=${error==='session-required'?L('Sign in again, then retry. No data was changed.','سجّل دخول من جديد ثم جرّب. لم يتم تغيير أي بيانات.'):L('The app could not complete the safe database check. Retry once and review Supabase/Vercel if it continues.','التطبيق لم يقدر يكمل فحص قاعدة البيانات الآمن. جرّب مرة، ولو استمرت راجع Supabase وVercel.')}/><//>`:''}
+    ${snapshot&&html`
+      <div class="panel" style=${{padding:20,marginBottom:18,borderColor:snapshot.status==='HEALTHY'?'rgba(86,211,128,.38)':'rgba(255,117,117,.38)',background:snapshot.status==='HEALTHY'?'linear-gradient(135deg,rgba(45,160,92,.12),var(--panel))':'linear-gradient(135deg,rgba(194,63,63,.12),var(--panel))'}}>
+        <div class="flex between center" style=${{gap:14,flexWrap:'wrap'}}>
+          <div><div class="eyebrow">${L('Current state','الحالة الحالية')}</div><h2 style=${{margin:'7px 0 5px'}}>${statusText(snapshot.status)}</h2><div class="muted" style=${{fontSize:12}}>${L('Checked','آخر فحص')}: ${healthDate(snapshot.checkedAt)} · ${Number(snapshot.latencyMs)||0} ms</div></div>
+          <span class="tag ${tagClass(snapshot.status)}"><span class="d"></span>${statusText(snapshot.status)}</span>
+        </div>
+        <div class="muted" style=${{fontSize:11.5,marginTop:13}}>${L('Manual checks only — this page does not poll in the background or waste Supabase bandwidth.','الفحص يدوي فقط — الشاشة لا تعمل Polling في الخلفية ولا تستهلك Bandwidth من Supabase.')}</div>
+      </div>
+      <div class="grid g-3 stagger" style=${{marginBottom:18}}>
+        <${KPI} label=${L('Database','قاعدة البيانات')} value=${statusText(snapshot.database&&snapshot.database.status)} sub=${L('PostgreSQL ','PostgreSQL ')+(snapshot.database&&snapshot.database.version||'—')} icon="pulse"/>
+        <${KPI} label=${L('Active identities','الحسابات النشطة')} value=${Number(snapshot.auth&&snapshot.auth.activeProfiles)||0} sub=${(Number(snapshot.auth&&snapshot.auth.memberships)||0)+' '+L('memberships','عضوية')} icon="people"/>
+        <${KPI} label=${L('Business records','سجلات العمل')} value=${Number(snapshot.database&&snapshot.database.businessRecords)||0} sub=${(Number(snapshot.database&&snapshot.database.publicTables)||0)+' '+L('database tables','جدول قاعدة بيانات')} icon="grid"/>
+      </div>
+      <div class="grid g-3 stagger" style=${{marginBottom:18}}>
+        ${[
+          {name:L('Email','البريد'),state:snapshot.providers.email.status,detail:L('Resend + sender configuration','إعدادات Resend والمرسل'),icon:'mail'},
+          {name:L('WhatsApp','واتساب'),state:snapshot.providers.whatsapp.status,detail:L('Optional Meta provider','ربط Meta الاختياري'),icon:'chat'},
+          {name:L('Delivery worker','عامل الإرسال'),state:snapshot.providers.worker.status,detail:L('Durable outbox processing','تشغيل طابور الرسائل الموثوق'),icon:'bolt'},
+        ].map(service=>html`<div class="panel" key=${service.name} style=${{padding:16}}><div class="flex between center"><span style=${{display:'flex',gap:9,alignItems:'center'}}>${React.createElement(Icon[service.icon]||Icon.pulse)}<b>${service.name}</b></span><span class="tag ${tagClass(service.state)}"><span class="d"></span>${statusText(service.state)}</span></div><div class="muted" style=${{fontSize:11.5,marginTop:10}}>${service.detail}</div></div>`)}
+      </div>
+      <div class="grid g-2 stagger" style=${{marginBottom:18}}>
+        <${Panel} title=${L('Outbound messages','الرسائل الصادرة')}>
+          <div class="grid g-4" style=${{marginBottom:14}}>${[['PENDING',L('Queued','معلّقة')],['PROCESSING',L('Processing','جاري الإرسال')],['DELIVERED',L('Delivered','وصلت')],['FAILED',L('Failed','فشلت')]].map(pair=>html`<div key=${pair[0]}><div class="num" style=${{fontSize:20,fontWeight:800}}>${count(snapshot.outbox,pair[0])}</div><div class="muted" style=${{fontSize:10.5}}>${pair[1]}</div></div>`)}</div>
+          <div class="muted" style=${{fontSize:11.5}}>${L('Oldest ready item','أقدم رسالة جاهزة')}: ${duration(snapshot.outbox&&snapshot.outbox.oldestReadyAgeSeconds)}</div>
+        <//>
+        <${Panel} title=${L('Background jobs','العمليات الخلفية')}>
+          <div class="grid g-4" style=${{marginBottom:14}}>${[['PENDING',L('Queued','معلّقة')],['RUNNING',L('Running','تعمل')],['SUCCEEDED',L('Succeeded','نجحت')],['FAILED',L('Failed','فشلت')]].map(pair=>html`<div key=${pair[0]}><div class="num" style=${{fontSize:20,fontWeight:800}}>${count(snapshot.jobs,pair[0])}</div><div class="muted" style=${{fontSize:10.5}}>${pair[1]}</div></div>`)}</div>
+          <div class="muted" style=${{fontSize:11.5}}>${L('Dead jobs','عمليات متوقفة نهائيًا')}: ${count(snapshot.jobs,'DEAD')}</div>
+        <//>
+      </div>
+      <div class="grid g-2 stagger" style=${{marginBottom:18}}>
+        <${Panel} title=${L('Storage','التخزين')}><div class="flex between"><span>${L('Objects','ملفات')}</span><b class="num">${Number(snapshot.storage&&snapshot.storage.objects)||0}</b></div><div class="flex between" style=${{marginTop:10}}><span>${L('Used size','الحجم المستخدم')}</span><b class="num">${formatFileSize(snapshot.storage&&snapshot.storage.bytes)}</b></div><div class="flex between" style=${{marginTop:10}}><span>${L('Uploading documents','مستندات قيد الرفع')}</span><b class="num">${Number(snapshot.storage&&snapshot.storage.uploadingDocuments)||0}</b></div><//>
+        <${Panel} title=${L('Deployment','نسخة النشر')}><div class="flex between"><span>${L('Environment','البيئة')}</span><b>${snapshot.deployment&&snapshot.deployment.environment||'—'}</b></div><div class="flex between" style=${{marginTop:10}}><span>${L('Region','المنطقة')}</span><b>${snapshot.deployment&&snapshot.deployment.region||'—'}</b></div><div class="flex between" style=${{marginTop:10}}><span>${L('Commit','الكوميت')}</span><b class="mono">${snapshot.deployment&&snapshot.deployment.commit||'—'}</b></div><//>
+      </div>
+      <${Panel} title=${L('Action center','مركز التنبيهات')}>
+        ${(snapshot.warnings||[]).length===0?html`<${EmptyState} icon="check" title=${L('Everything operational','كل الخدمات سليمة')} text=${L('No critical delivery, queue or job issue was detected.','لم يتم اكتشاف مشكلة حرجة في الإرسال أو الطوابير أو العمليات الخلفية.')}/>`
+          :html`<div>${snapshot.warnings.map((warning,index)=>html`<div key=${warning.code+index} class="flex between center" style=${{padding:'11px 0',gap:14,borderBottom:index<(snapshot.warnings.length-1)?'1px solid var(--line)':'none'}}><div><b>${warningCopy[warning.code]||warning.code}</b>${warning.count?html`<div class="muted" style=${{fontSize:11,marginTop:4}}>${L('Affected','المتأثر')}: ${warning.count}</div>`:''}${warning.ageSeconds?html`<div class="muted" style=${{fontSize:11,marginTop:4}}>${L('Waiting','مدة الانتظار')}: ${duration(warning.ageSeconds)}</div>`:''}</div><span class="tag ${warning.severity==='CRITICAL'?'neg':''}"><span class="d"></span>${warning.severity==='CRITICAL'?L('Action required','يحتاج تدخل'):warning.severity==='OPTIONAL'?L('Optional','اختياري'):L('Info','معلومة')}</span></div>`)}</div>`}
+      <//>
+    `}
   </div>`;
 }
 
