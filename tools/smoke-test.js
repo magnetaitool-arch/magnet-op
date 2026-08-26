@@ -59,8 +59,8 @@ const acct = read('supabase/functions/accounts/index.ts');
 /action==='me'/.test(acct) && /refreshCurrentUser/.test(read('index.html')) && /setInterval\(refreshIdentity,60000\)/.test(read('index.html'))
   ? ok('open sessions revalidate live role/status/access and cannot stay on a stale employee role')
   : bad('open sessions can keep a stale role after an account repair or downgrade');
-/version:14/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
-  ? ok('accounts v14 fails closed on an ambiguous login instead of selecting an arbitrary role')
+/version:15/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
+  ? ok('accounts v15 fails closed on an ambiguous login instead of selecting an arbitrary role')
   : bad('accounts service can still select an arbitrary duplicate login identity');
 /per_page=50/.test(acct) && /last_page/.test(acct) && /linkedAuthUserId/.test(acct)
   ? ok('Supabase Auth reconciliation uses confirmed links and paginated discovery')

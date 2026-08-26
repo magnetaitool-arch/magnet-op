@@ -90,7 +90,9 @@ check(/reconcileLegacyIdentity\(au\.id,rec\.rowId\)/.test(accountsEdge), 'legacy
 check(/linkedAuthUserId\(rec\.rowId\)/.test(accountsEdge), 'repeat login resolves the immutable identity link before provider email discovery');
 check(/adminDeleteUser\(au\.id\)/.test(accountsEdge), 'failed new-user reconciliation removes the incomplete Auth identity');
 check(/provider_password_update_failed/.test(accountsEdge), 'failed provider password updates fail closed');
-check(/session=await passwordGrant\(email, body\.password\);[\s\S]{0,500}adminSetPassword\(au\.id, body\.password\)/.test(accountsEdge), 'repeat login grants a session before attempting a provider password repair');
+check(/providerPassword\(pw:string\)[\s\S]{0,220}hmac\('provider-password:'/.test(accountsEdge), 'legacy credentials are converted to a server-derived provider password');
+check(/session=await passwordGrant\(email, body\.password\);[\s\S]{0,650}adminSetPassword\(au\.id, upgradedPassword\)/.test(accountsEdge), 'repeat login checks existing credentials before applying a policy-compatible provider repair');
+check(/adminCreateUser\(email, upgradedPassword\)/.test(accountsEdge), 'first login supports legacy passwords that do not meet the provider password policy');
 check(/confirmation_token = coalesce\(auth_user\.confirmation_token, ''\)/.test(stagingReconciliation)
   && /recovery_token = coalesce\(auth_user\.recovery_token, ''\)/.test(stagingReconciliation)
   && /email_change_token_new = coalesce\(auth_user\.email_change_token_new, ''\)/.test(stagingReconciliation)

@@ -11,7 +11,11 @@ const { spawnSync } = require('node:child_process');
 
 const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
 const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
-const ALLOWED_ORIGIN = 'https://magnet-os-staging.vercel.app';
+const DEFAULT_ALLOWED_ORIGIN = 'https://magnet-os-staging.vercel.app';
+const STAGING_ORIGINS = new Set([
+  DEFAULT_ALLOWED_ORIGIN,
+  'https://magnet-os-v2-staging.vercel.app',
+]);
 
 function parseArgs(argv) {
   const output = {};
@@ -58,7 +62,9 @@ async function jsonFetch(url, init = {}) {
 }
 
 async function main() {
-  const projectRef = String(parseArgs(process.argv)['project-ref'] || '').trim();
+  const args = parseArgs(process.argv);
+  const projectRef = String(args['project-ref'] || '').trim();
+  const allowedOrigin = String(args.origin || DEFAULT_ALLOWED_ORIGIN).replace(/\/$/, '');
   if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) {
     throw new Error('Refused: an explicit non-Production project ref is required.');
   }
@@ -66,6 +72,9 @@ async function main() {
   const project = projects.find((candidate) => candidate.ref === projectRef);
   if (!project || project.name !== EXPECTED_STAGING_NAME || project.status !== 'ACTIVE_HEALTHY') {
     throw new Error('Refused: target is not the healthy MAGNET OS STAGING project.');
+  }
+  if (!STAGING_ORIGINS.has(allowedOrigin)) {
+    throw new Error('Refused: --origin must identify an approved MAGNET OS Staging host.');
   }
   const keys = commandJson(['projects', 'api-keys', '--project-ref', projectRef, '--output', 'json']);
   const publishable = keys.find((candidate) => candidate.type === 'publishable') || keys.find((candidate) => candidate.name === 'anon');
@@ -79,7 +88,11 @@ async function main() {
   const recordId = `acct-${accountId}`;
   const email = `v2-login-${suffix}@example.invalid`;
   const username = `v2.login.${suffix}`;
-  const password = `LoginAa1-${crypto.randomBytes(18).toString('base64url')}`;
+  // Deliberately represents a historical credential that is valid in the
+  // legacy verifier but shorter than the current application/provider policy.
+  // The Edge bridge must derive a provider-safe secret without changing what
+  // the employee types at the login screen.
+  const password = 'Aa1-old!';
   let authUserId = '';
   let createdRecord = false;
   let activityRecordId = '';
@@ -111,7 +124,7 @@ async function main() {
   async function identityAction(action, token, payload = {}) {
     return await jsonFetch(`${base}/functions/v1/identity`, {
       method: 'POST',
-      headers: { apikey: publishable.api_key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      headers: { apikey: publishable.api_key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Origin: allowedOrigin },
       body: JSON.stringify({ action, ...payload }),
     });
   }
@@ -146,6 +159,7 @@ async function main() {
     const upgrade = await accountAction('authv2', { identifier: username, password });
     const accessToken = upgrade.body && upgrade.body.session && upgrade.body.session.access_token;
     check(upgrade.response.status === 200 && accessToken, 'legacy login upgrades to a Supabase session');
+    check(password.length < 10, 'canary reproduces a historical password below the current policy length');
 
     const authUser = await jsonFetch(`${base}/auth/v1/user`, {
       headers: { apikey: publishable.api_key, Authorization: `Bearer ${accessToken}` },

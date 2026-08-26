@@ -12,6 +12,7 @@ const configuredOrigins = String(Deno.env.get('ALLOWED_ORIGINS') || '')
   .split(',').map((value) => value.trim()).filter(Boolean);
 const ALLOWED_ORIGINS = new Set(configuredOrigins.length ? configuredOrigins : [
   'https://magnet-os-staging.vercel.app',
+  'https://magnet-os-v2-staging.vercel.app',
   'http://127.0.0.1:4175',
   'http://localhost:4175',
 ]);

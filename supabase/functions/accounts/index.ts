@@ -1,4 +1,4 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v14.
+// Magnet OS — accounts/auth Edge Function (service-role), v15.
 // v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
@@ -34,6 +34,12 @@ async function makePbkdf2(pw:string){ const salt=crypto.getRandomValues(new Uint
 async function verifyPw(pw:string, hash:string){ hash=String(hash||''); if(hash.indexOf('pbkdf2$')===0){ try{ const p=hash.split('$'); const bits=await pbkdf2Bits(pw, fromB64(p[2]), parseInt(p[1],10)||150000); return b64(new Uint8Array(bits))===p[3]; }catch{ return false; } } if(hash.indexOf('sha256:')===0) return (await sha256hex(pw))===hash; return legacyFallback(pw)===hash; }
 
 async function hmac(msg:string){ const key=await crypto.subtle.importKey('raw', enc.encode(SECRET), {name:'HMAC',hash:'SHA-256'}, false, ['sign']); const sig=await crypto.subtle.sign('HMAC', key, enc.encode(msg)); return b64url(String.fromCharCode(...new Uint8Array(sig))); }
+// Legacy accounts may still have passwords that predate the provider's current
+// password policy. The browser credential is verified only against the legacy
+// PBKDF2 hash; Supabase Auth receives a server-derived, policy-compliant secret.
+// This keeps first login compatible without weakening the provider or exposing
+// a reusable derived value to the browser.
+async function providerPassword(pw:string){ return 'Nme1!'+await hmac('provider-password:'+String(pw||'')); }
 async function makeToken(u:any){ const payload=b64url(JSON.stringify({uid:u.id, role:u.role||'', exp:Date.now()+30*86400000})); return payload+'.'+await hmac(payload); }
 async function readToken(token:string){ try{ const [payload,sig]=String(token||'').split('.'); if(!payload||!sig) return null; if((await hmac(payload))!==sig) return null; const p=JSON.parse(unb64url(payload)); if(!p.exp||p.exp<Date.now()) return null; return p; }catch{ return null; } }
 function isAdmin(role:string){ const r=String(role||''); return ['Owner','Admin','Manager'].includes(r); }
@@ -193,7 +199,7 @@ Deno.serve(async (req)=>{
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:14,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
+    if(action==='health') return json({ok:true,service:'accounts',version:15,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
 
     // Return the CURRENT server-side identity for an existing session. The UI must
     // not keep trusting the role/access snapshot cached at login forever: an Owner
@@ -239,6 +245,7 @@ Deno.serve(async (req)=>{
       // endpoint is temporarily unhealthy.
       const linkedUserId=await linkedAuthUserId(rec.rowId);
       let au=linkedUserId?{id:linkedUserId}:await adminFindUserByEmail(email), createdAuthUser=false, session:any=null;
+      const upgradedPassword=await providerPassword(body.password||'');
       if(au && au.id){
         try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
         catch{ await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
@@ -248,16 +255,17 @@ Deno.serve(async (req)=>{
         // password grant first; only repair the provider password when the legacy
         // credential is valid but the provider credential is genuinely stale.
         session=await passwordGrant(email, body.password);
+        if(!session || !session.access_token) session=await passwordGrant(email, upgradedPassword);
         if(!session || !session.access_token){
-          if(!(await adminSetPassword(au.id, body.password))){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_password_update_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
-          session=await passwordGrant(email, body.password);
+          if(!(await adminSetPassword(au.id, upgradedPassword))){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_password_update_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
+          session=await passwordGrant(email, upgradedPassword);
         }
       } else {
-        au=await adminCreateUser(email, body.password); createdAuthUser=!!(au&&au.id);
+        au=await adminCreateUser(email, upgradedPassword); createdAuthUser=!!(au&&au.id);
         if(!createdAuthUser){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_user_create_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
         try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
         catch{ await adminDeleteUser(au.id); await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
-        session=await passwordGrant(email, body.password);
+        session=await passwordGrant(email, upgradedPassword);
       }
       if(!session || !session.access_token){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_session_failed',rec.u.id); return json({ ok:false, reason:'session-failed' }); }
       await rlClear('login', body.identifier);
