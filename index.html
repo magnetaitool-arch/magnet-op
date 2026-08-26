@@ -2542,6 +2542,29 @@ function canApproveRequest(role, reqType){
   return false;
 }
 
+// Canonical approval UX gate. This only decides which controls to render; the
+// database command remains the authority and validates the live membership,
+// capability, tenant and current status again on every decision.
+function canTransitionApproval(user, role, collection, item){
+  const caps=new Set((user&&Array.isArray(user.capabilities))?user.capabilities:[]);
+  const canonical=!!(user&&user.organizationId);
+  const type=String(item&&item.requestType||'');
+  if(canonical){
+    if(collection==='approvalRequests'){
+      if(caps.has('approvals.manage'))return true;
+      if(TIMEOFF_REQ.includes(type)&&caps.has('hr.manage'))return true;
+      if(FINANCE_REQ.includes(type)&&caps.has('finance.manage'))return true;
+      return false;
+    }
+    if(collection==='invoices')return caps.has('approvals.manage')||caps.has('finance.manage');
+    if(collection==='deliverables'||collection==='proposals')return caps.has('approvals.manage');
+    return false;
+  }
+  if(collection==='approvalRequests')return canApproveRequest(role,type);
+  if(collection==='invoices')return isAdminRole(role)||aliasRole(role)==='Accountant';
+  return canApprove(role);
+}
+
 // A logged-in ACCOUNT (acct-…) and the person's EMPLOYEE card (emp-…) are separate
 // records and are often NOT linked. Tasks are assigned by employee id, but the
 // session identifies by account id — so "my tasks" matched nothing for staff.
@@ -7117,6 +7140,43 @@ function App(){
   };
 
   /* ---- workflow: deliverable approval / revision ---- */
+  const applyApprovalChanges = (changes) => {
+    if(!Array.isArray(changes)||!changes.length)return;
+    setDb(current=>{
+      const next=Object.assign({},current);
+      changes.forEach(change=>{
+        if(!change||!change.coll||!change.id||!change.data||!Array.isArray(next[change.coll]))return;
+        const row=Object.assign({id:change.id},change.data);
+        const exists=next[change.coll].some(item=>item&&item.id===change.id);
+        next[change.coll]=exists?next[change.coll].map(item=>item&&item.id===change.id?row:item):[...next[change.coll],row];
+      });
+      return next;
+    });
+  };
+  const approvalErrorText = (error) => {
+    const raw=String(error&&error.message||error||'approval_failed');
+    if(/status_conflict|not_pending|not_reviewable|document_not_pending/i.test(raw)) return lang==='ar'?'حالة العنصر اتغيّرت عند مستخدم تاني. تم إيقاف القرار؛ حدّث الصفحة وراجعه من جديد.':'This item changed on another device. The decision was stopped; refresh and review it again.';
+    if(/capability|required|not_allowed|42501/i.test(raw)) return lang==='ar'?'حسابك لا يملك صلاحية الموافقة على النوع ده. اطلب من المالك مراجعة الرول والصلاحيات.':'Your account is not allowed to approve this item type. Ask the owner to review the role and capabilities.';
+    if(/linked_.*_missing|23503/i.test(raw)) return lang==='ar'?'الطلب مرتبط بسجل ناقص أو محذوف، لذلك لم تتم الموافقة حفاظًا على البيانات.':'The request points to a missing record, so approval was stopped to protect the data.';
+    return lang==='ar'?'الموافقة لم تُحفظ على السيرفر. لم نعرض نجاح وهمي؛ جرّب مرة أخرى أو حدّث الصفحة.':'The approval was not saved by the server. No false success was shown; retry or refresh.';
+  };
+  const transitionApproval = async (collection,item,action,comment) => {
+    try{
+      if(!organizationId||!sbAccessToken())throw new Error('authenticated_session_required');
+      const result=await workspaceRpc(cfg.current,'transition_approval_v2',{
+        p_organization_id:organizationId,p_collection:collection,p_record_id:item.id,
+        p_expected_status:item.status,p_action:action,p_comment:comment||null
+      });
+      if(!result||result.ok!==true)throw new Error(result&&result.error||'approval_failed');
+      applyApprovalChanges(result.changes);
+      refreshCanonicalNotifications();
+      return result;
+    }catch(error){
+      const message=approvalErrorText(error);
+      showProPopup('syncFailed',message);
+      return {ok:false,error:message};
+    }
+  };
   const sendToClientReview = (dlv) => { updateRecord('deliverables',dlv.id,{status:'Client Review'}); addActivity('deliverables',dlv.id,'sent to client review',dlv.title);
     // Notify ONLY this client's portal users — a role-wide 'Client' broadcast would show
     // client A's deliverable titles to client B. Falls back to the broadcast only when
@@ -7124,14 +7184,11 @@ function App(){
     let _sent=0; try { (AUTH.loadUsers()||[]).filter(u=>aliasRole(u.role)==='Client' && (u.assignedClients||[]).includes(dlv.clientId)).forEach(u=>{ addNotification(u.id,'Ready for your review',`${dlv.title} is ready for approval`,'deliverables',dlv.id); _sent++; }); } catch(e){}
     if(!_sent) addNotification('Client','Ready for your review',`${dlv.title} is ready for approval`,'deliverables',dlv.id);
     triggerWebhook('deliverableClientReviewWebhook',{deliverable:dlv}); awardPoints(POINTS.sentToClient,'Sent to client'); };
-  const approveDeliverable = (dlv) => { updateRecord('deliverables',dlv.id,{status:'Approved',approvedBy:user.id,approvedAt:nowISO()}); addActivity('deliverables',dlv.id,'approved',dlv.title); addNotification('Project Manager','Deliverable approved',`${dlv.title} approved by ${user.name}`,'deliverables',dlv.id); triggerWebhook('deliverableApprovedWebhook',{deliverable:dlv}); awardPoints(POINTS.deliverableApproved,'Deliverable approved'); showProPopup('deliverableApproved',dlv.title); };
-  const requestRevision = (dlv, note) => {
-    const rev = createRecord('revisions',{ deliverableId:dlv.id, clientId:dlv.clientId, projectId:dlv.projectId, requestedBy:user.id, assignedTo:dlv.assignedTo, note:note||'Please revise', status:'Requested', priority:'Med', versionFrom:dlv.version||1, versionTo:(dlv.version||1)+1 });
-    updateRecord('deliverables',dlv.id,{status:'Revision Requested',revisionCount:(dlv.revisionCount||0)+1,clientFeedback:note||''});
-    addActivity('deliverables',dlv.id,'revision requested',note||'');
-    addNotification('Project Manager','Revision requested',`${dlv.title}: ${note||''}`,'deliverables',dlv.id);
-    if(dlv.assignedTo) addNotification(dlv.assignedTo,'Revision assigned to you',`${dlv.title}: ${note||''}`,'deliverables',dlv.id);
-    triggerWebhook('revisionRequestedWebhook',{deliverable:dlv,revision:rev});
+  const approveDeliverable = async (dlv) => { const result=await transitionApproval('deliverables',dlv,'APPROVE',''); if(result&&result.ok){ triggerWebhook('deliverableApprovedWebhook',{deliverable:Object.assign({},dlv,{status:'Approved'})}); awardPoints(POINTS.deliverableApproved,'Deliverable approved'); showProPopup('deliverableApproved',dlv.title); } return result; };
+  const requestRevision = async (dlv, note) => {
+    const result=await transitionApproval('deliverables',dlv,'REQUEST_CHANGES',note||'Please revise');
+    if(result&&result.ok) triggerWebhook('revisionRequestedWebhook',{deliverable:Object.assign({},dlv,{status:'Revision Requested'}),note:note||''});
+    return result;
   };
   const addDeliverableVersion = (dlv) => { updateRecord('deliverables',dlv.id,{version:(dlv.version||1)+1,status:'Internal Review'}); addActivity('deliverables',dlv.id,'new version',`v${(dlv.version||1)+1}`); };
 
@@ -7145,50 +7202,10 @@ function App(){
     showProPopup('requestSubmitted',created.title); // clear confirmation so people don't resubmit
     return created;
   };
-  const approveRequest = (req, comment) => {
-    updateRecord('approvalRequests', req.id, { status:'Approved', approvedBy:user.id, approvedAt:nowISO(), managerComment:comment||req.managerComment||'' });
-    addActivity('approvalRequests', req.id, 'request approved', req.title);
-    addNotification(req.requestedBy,'Request approved',`${req.title} was approved`+(comment?(' — '+comment):''),'requests',req.id);
-    triggerWebhook('requestApprovedWebhook',{request:req});
-    awardPoints(POINTS.requestApproved,'Approval');
-    // side-effects by type
-    if(req.requestType==='Send to Client Approval' && req.deliverableId){ const d=byId(db.deliverables,req.deliverableId); if(d) sendToClientReview(d); }
-    if(req.requestType==='Invoice Approval' && req.invoiceId){ updateRecord('invoices',req.invoiceId,{status:'Approved Internally'}); triggerWebhook('invoiceApprovedWebhook',{invoiceId:req.invoiceId}); }
-    if(req.requestType==='Proposal Approval' && req.proposalId){ updateRecord('proposals',req.proposalId,{status:'Approved Internally'}); triggerWebhook('proposalApprovedWebhook',{proposalId:req.proposalId}); }
-    // HR self-service side-effects:
-    if(req.requestType==='Leave Request'){
-      // record it on the HR Leaves calendar as an approved leave
-      createRecord('leaves', { employeeId:req.employeeId||req.requestedBy, employeeName:req.requestedByName||'', leaveType:req.leaveType||'Annual', startDate:req.date||req.startDate||todayISO(), endDate:req.endDate||req.date||req.startDate||'', days:Number(req.days)||1, reason:req.reason||req.description||'', status:'Approved', approvedBy:user.id, approvedAt:nowISO(), source:'request', requestId:req.id });
-    }
-    if(req.requestType==='Lateness Report'){
-      // mark today's attendance as Late (or create the row if absent)
-      const eid=req.employeeId||req.requestedBy; const day=req.date||todayISO();
-      const existing=(db.attendance||[]).find(a=>a.employeeId===eid && a.date===day);
-      const note='Lateness approved'+(req.reason?(': '+req.reason):'');
-      if(existing){ updateRecord('attendance', existing.id, { status:'Late', notes:(existing.notes?existing.notes+' · ':'')+note }); }
-      else { createRecord('attendance', { employeeId:eid, employeeName:req.requestedByName||'', date:day, checkIn:req.fromTime||'', checkOut:'', workMode:'Office', status:'Late', notes:note, source:'request' }); }
-    }
-    if(req.requestType==='Half Day'){
-      // half a day on the HR Leaves calendar so reports stay accurate
-      createRecord('leaves', { employeeId:req.employeeId||req.requestedBy, employeeName:req.requestedByName||'', leaveType:req.leaveType||'Annual', startDate:req.date||todayISO(), endDate:req.date||todayISO(), days:0.5, reason:req.reason||req.description||'', status:'Approved', approvedBy:user.id, approvedAt:nowISO(), source:'request', requestId:req.id });
-    }
-    if(req.requestType==='Permission Request'||req.requestType==='Early Leave'){
-      // leave a trace on that day's attendance row (if one exists) so HR sees it
-      const eid=req.employeeId||req.requestedBy; const day=req.date||todayISO();
-      const existing=(db.attendance||[]).find(a=>a.employeeId===eid && a.date===day);
-      const label=(req.requestType==='Early Leave'?'Early leave approved':'Permission approved')+((req.fromTime||req.toTime)?(' ('+(req.fromTime||'')+(req.toTime?('-'+req.toTime):'')+')'):'');
-      if(existing) updateRecord('attendance', existing.id, { notes:(existing.notes?existing.notes+' · ':'')+label });
-    }
-    showProPopup('requestApproved',req.title);
-  };
-  const rejectRequest = (req, comment) => {
-    updateRecord('approvalRequests', req.id, { status:'Rejected', rejectedBy:user.id, rejectedAt:nowISO(), managerComment:comment||'' });
-    addActivity('approvalRequests', req.id, 'request rejected', req.title);
-    addNotification(req.requestedBy,'Request rejected',`${req.title} was rejected`+(comment?(' — '+comment):''),'requests',req.id);
-    showProPopup('requestRejected',req.title);
-    triggerWebhook('requestRejectedWebhook',{request:req});
-  };
-  const requestChanges = (req, comment) => { updateRecord('approvalRequests',req.id,{status:'Changes Requested',managerComment:comment||''}); addActivity('approvalRequests',req.id,'changes requested',req.title); addNotification(req.requestedBy,'Changes requested',req.title+(comment?(' — '+comment):''),'requests',req.id); };
+  const approveRequest = async (req, comment) => { const result=await transitionApproval('approvalRequests',req,'APPROVE',comment); if(result&&result.ok){ triggerWebhook('requestApprovedWebhook',{request:Object.assign({},req,{status:'Approved'})}); awardPoints(POINTS.requestApproved,'Approval'); showProPopup('requestApproved',req.title); } return result; };
+  const rejectRequest = async (req, comment) => { const result=await transitionApproval('approvalRequests',req,'REJECT',comment); if(result&&result.ok){ showProPopup('requestRejected',req.title); triggerWebhook('requestRejectedWebhook',{request:Object.assign({},req,{status:'Rejected'})}); } return result; };
+  const requestChanges = async (req, comment) => transitionApproval('approvalRequests',req,'REQUEST_CHANGES',comment);
+  const approveDocument = async (collection,item) => { const result=await transitionApproval(collection,item,'APPROVE',''); if(result&&result.ok)showProPopup('requestApproved',item.title||item.invoiceNumber||item.id); return result; };
 
   /* ---- chat ---- */
   const sendChat = (channelType, channelId, message, visibility, extra) => {
@@ -7445,7 +7462,7 @@ function App(){
     createRecord, updateRecord, deleteRecord, getRecords, addComment, addActivity, addNotification, awardPoints, upsertRecord,
     sendTaskAssignmentEmail, checkTaskAssignmentEmail,
     convertLead, convertCandidate, createDefaultTasksForProject, sendToClientReview, approveDeliverable, requestRevision, addDeliverableVersion,
-    submitRequest, approveRequest, rejectRequest, requestChanges, sendChat, setAvailability, driveAction, docPrint, docCopy, docEmail,
+    submitRequest, approveRequest, rejectRequest, requestChanges, approveDocument, sendChat, setAvailability, driveAction, docPrint, docCopy, docEmail,
     runAgent, agentToTask, agentToProposal, agentToNotes, runAutomation, toggleAutomation, startWorkflow, advanceWorkflow, syncTeam,
     invTotal, invPaid, rpc:(name,args)=>sbRpc(cfg.current,name,args),organizationId,notificationsV2:canonicalNotifs,refreshNotifications:refreshCanonicalNotifications,markNotificationsRead:markCanonicalNotificationsRead,openEntity,
     openModal:(coll,initial,schema,title)=>setModal({coll,initial,schema:schema||FORM_SCHEMAS[coll],title:title||((initial&&initial.id?(getLang()==='ar'?'تعديل ':'Edit '):(getLang()==='ar'?'إضافة ':'New '))+(t(coll)!==coll?t(coll):coll))}),
@@ -10796,7 +10813,7 @@ function TaskDetail({ ctx, task, ce, onClose }){
 function DeliverablesView({ ctx, visible, ce }){
   const { db, role } = ctx; const [sel,setSel]=useState(null);
   const rows=visible('deliverables');
-  const approve=canApprove(role);
+  const approve=d=>canTransitionApproval(ctx.user,role,'deliverables',d);
   const mark=(d,p,act)=>{ ctx.updateRecord('deliverables',d.id,p); if(act) ctx.addActivity('deliverables',d.id,act,d.title); };
   return html`<div class="view">
     <${Head} eyebrow="Delivery" title="Deliverables" desc="Production board with full client approval workflow.">
@@ -10810,10 +10827,10 @@ function DeliverablesView({ ctx, visible, ce }){
         ${d.approvalStatus&&d.approvalStatus!=='Not Sent'?html`<div style=${{marginTop:6}}><${Tag} type=${d.approvalStatus==='Approved'?'ok':d.approvalStatus==='Revision Requested'?'warn':d.approvalStatus==='Rejected'?'neg':''}>${d.approvalStatus}<//></div>`:''}
         <div class="flex gap8" style=${{marginTop:8,flexWrap:'wrap'}}>
           ${ce&&d.status!=='Client Review'&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();ctx.sendToClientReview(d);}}>→ Client</button>`}
-          ${approve&&d.status==='Client Review'&&html`<button class="mini pri" onClick=${ev=>{ev.stopPropagation();ctx.approveDeliverable(d);}}>Approve</button>`}
-          ${approve&&d.status==='Client Review'&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();const n=prompt(getLang()==='ar'?'ملاحظة التعديل؟':'Revision note?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'تعديل':'Revise'}</button>`}
+          ${approve(d)&&d.status==='Client Review'&&html`<button class="mini pri" onClick=${ev=>{ev.stopPropagation();ctx.approveDeliverable(d);}}>Approve</button>`}
+          ${approve(d)&&d.status==='Client Review'&&html`<button class="mini" onClick=${ev=>{ev.stopPropagation();const n=prompt(getLang()==='ar'?'ملاحظة التعديل؟':'Revision note?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'تعديل':'Revise'}</button>`}
         </div></div>`}/>
-    ${sel&&html`<${DeliverableDetail} ctx=${ctx} dlv=${sel} ce=${ce} approve=${approve} onClose=${()=>setSel(null)}/>`}
+    ${sel&&html`<${DeliverableDetail} ctx=${ctx} dlv=${sel} ce=${ce} approve=${approve(sel)} onClose=${()=>setSel(null)}/>`}
   </div>`;
 }
 
@@ -10875,8 +10892,8 @@ function RequestsView({ ctx, visible, ce }){
   const all=visible('approvalRequests');
   const VIEWS={
     'My Requests':r=>r.requestedBy===user.id,
-    'Pending My Approval':r=>r.status==='Pending Approval'&&(aliasRole(role)==='Admin'||r.assignedManagerId===user.id||canApproveRequest(role,r.requestType)),
-    'All Requests':()=>['Admin','Project Manager','Accountant','HR','Marketing Director','Art Director'].includes(aliasRole(role)),
+    'Pending My Approval':r=>r.status==='Pending Approval'&&canTransitionApproval(user,role,'approvalRequests',r),
+    'All Requests':r=>canTransitionApproval(user,role,'approvalRequests',r)||r.requestedBy===user.id,
     'Approved':r=>r.status==='Approved',
     'Rejected':r=>r.status==='Rejected',
   };
@@ -10899,8 +10916,10 @@ function RequestDetail({ ctx, req, onClose }){
   const { db, role, user } = ctx;
   const r = byId(db.approvalRequests, req.id)||req;
   const [comment,setComment]=useState('');
-  const canApr = r.status==='Pending Approval' && (aliasRole(role)==='Admin' || r.assignedManagerId===user.id || canApproveRequest(role,r.requestType));
+  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  const canApr = r.status==='Pending Approval' && canTransitionApproval(user,role,'approvalRequests',r);
   const arr=getLang()==='ar';
+  const decide=async action=>{ if(busy)return;setBusy(true);setError('');const result=await action();setBusy(false);if(result&&result.ok)onClose();else setError(result&&result.error||(arr?'تعذر حفظ القرار.':'Decision could not be saved.')); };
   return html`<${Modal} title=${r.requestNumber+' · '+r.title} wide=${true} onClose=${onClose}>
     <div class="flex" style=${{gap:18,flexWrap:'wrap',marginBottom:16}}>
       ${_stat(arr?'النوع':'Type',t(r.requestType))}${_stat(arr?'الأولوية':'Priority',t(r.priority))}${_stat(arr?'الحالة':'Status',t(r.status))}${_stat(arr?'مقدم الطلب':'By',r.requestedByName)}${r.leaveType?_stat(arr?'نوع الإجازة':'Leave type',t(r.leaveType)):''}${(r.startDate||r.date)?_stat(arr?'من':'From',fmtDate(r.startDate||r.date)):''}${r.endDate?_stat(arr?'إلى':'To',fmtDate(r.endDate)):''}${r.days?_stat(arr?'أيام':'Days',r.days):''}${(r.fromTime||r.from)?_stat(arr?'من (وقت)':'From',(r.fromTime||r.from)):''}${(r.toTime||r.to)?_stat(arr?'إلى (وقت)':'To',(r.toTime||r.to)):''}${r.amount?_stat(arr?'المبلغ':'Amount',money(r.amount)):''}</div>
@@ -10912,10 +10931,11 @@ function RequestDetail({ ctx, req, onClose }){
        return extra.length?html`<div class="panel" style=${{padding:12,marginBottom:12}}><div class="eyebrow">${arr?'تفاصيل إضافية':'More details'}</div><div class="flex" style=${{gap:16,flexWrap:'wrap',marginTop:8}}>${extra.map(k=>_stat(k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase()), String(r[k])))}</div></div>`:''; })()}
     ${canApr?html`<div style=${{marginTop:8}}>
       <input class="sel" style=${{width:'100%',marginBottom:10}} placeholder=${arr?'تعليق المدير (اختياري)…':'Manager comment (optional)…'} value=${comment} onChange=${e=>setComment(e.target.value)}/>
+      ${error&&html`<div class="neg" style=${{fontSize:12.5,marginBottom:10}}>${error}</div>`}
       <div class="flex gap8">
-        <button class="btn btn-pri" onClick=${()=>{ctx.approveRequest(r,comment);onClose();}}>${arr?'موافقة':'Approve'}</button>
-        <button class="btn btn-ghost" onClick=${()=>{ctx.rejectRequest(r,comment);onClose();}}>${arr?'رفض':'Reject'}</button>
-        <button class="btn btn-ghost" onClick=${()=>{ctx.requestChanges(r,comment);onClose();}}>${arr?'طلب تعديلات':'Request changes'}</button>
+        <button class="btn btn-pri" disabled=${busy} onClick=${()=>decide(()=>ctx.approveRequest(r,comment))}>${busy?(arr?'جارٍ الحفظ…':'Saving…'):(arr?'موافقة':'Approve')}</button>
+        <button class="btn btn-ghost" disabled=${busy} onClick=${()=>decide(()=>ctx.rejectRequest(r,comment))}>${arr?'رفض':'Reject'}</button>
+        <button class="btn btn-ghost" disabled=${busy} onClick=${()=>decide(()=>ctx.requestChanges(r,comment))}>${arr?'طلب تعديلات':'Request changes'}</button>
       </div></div>`
     : r.status==='Approved'?html`<div class="ok" style=${{fontSize:13}}>${arr?'تمت الموافقة':'Approved'} ${r.approvedAt?('· '+fmtDateTime(r.approvedAt)):''}</div>`
     : r.status==='Rejected'?html`<div class="neg" style=${{fontSize:13}}>${arr?'اترفض':'Rejected'} ${r.rejectedAt?('· '+fmtDateTime(r.rejectedAt)):''}</div>`
@@ -11627,7 +11647,7 @@ function ApprovalCenterView({ ctx }){
   const { db, role, user } = ctx;
   const [tab,setTab]=useState('Requests');
   const [fb,setFb]=useState({});
-  const canApr = ['Admin','Project Manager','Accountant','HR','Marketing Director','Art Director'].includes(aliasRole(role));
+  const [busy,setBusy]=useState(''); const [error,setError]=useState('');
   // gather pending items from across the system
   const pendReq=(db.approvalRequests||[]).filter(r=>r.status==='Pending Approval');
   const pendDlv=(db.deliverables||[]).filter(d=>d.status==='Client Review'||d.status==='Internal Review');
@@ -11636,6 +11656,9 @@ function ApprovalCenterView({ ctx }){
   const tabs=[['Requests',pendReq.length],['Deliverables',pendDlv.length],['Proposals',pendProp.length],['Invoices',pendInv.length]];
   const total=pendReq.length+pendDlv.length+pendProp.length+pendInv.length;
   const setF=(id,v)=>setFb(Object.assign({},fb,{[id]:v}));
+  const canApr=(coll,item)=>canTransitionApproval(user,role,coll,item);
+  const canAny=[...pendReq.map(x=>['approvalRequests',x]),...pendDlv.map(x=>['deliverables',x]),...pendProp.map(x=>['proposals',x]),...pendInv.map(x=>['invoices',x])].some(x=>canApr(x[0],x[1]));
+  const decide=async(key,action)=>{if(busy)return;setBusy(key);setError('');const result=await action();setBusy('');if(!result||!result.ok)setError(result&&result.error||(getLang()==='ar'?'تعذر حفظ القرار.':'Decision could not be saved.'));};
   return html`<div class="view">
     <${Head} eyebrow="Operations" title="Approval Center" desc="One queue for everything awaiting a manager decision."/>
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
@@ -11646,23 +11669,24 @@ function ApprovalCenterView({ ctx }){
     </div>
     <div class="flex gap8" style=${{marginBottom:16,flexWrap:'wrap'}}>
       ${tabs.map(t=>html`<button key=${t[0]} class="mini ${tab===t[0]?'pri':''}" onClick=${()=>setTab(t[0])}>${t[0]} (${t[1]})</button>`)}</div>
-    ${!canApr?html`<${Panel}><${EmptyState} title="Read-only" text="Your role can submit items but not approve them. Managers and admins review here." icon="shield"/><//>`
+    ${error&&html`<div class="neg" style=${{fontSize:12.5,marginBottom:12}}>${error}</div>`}
+    ${!canAny&&total?html`<${Panel}><${EmptyState} title="Read-only" text="Your live role can view these items but cannot approve their types." icon="shield"/><//>`
       : tab==='Requests'?(pendReq.length?pendReq.map(r=>html`<${Panel} key=${r.id} className="mb18">
           <div class="flex between center"><div><b>${r.title}</b><div class="muted" style=${{fontSize:12,marginTop:3}}>${r.requestType} · by ${r.requestedByName}</div></div><${Tag}>${r.priority}<//></div>
-          <input class="sel" style=${{width:'100%',margin:'12px 0'}} placeholder="Feedback (optional)" value=${fb[r.id]||''} onChange=${e=>setF(r.id,e.target.value)}/>
-          <div class="flex gap8"><button class="btn btn-pri" onClick=${()=>ctx.approveRequest(r,fb[r.id])}>Approve</button>
-            <button class="btn btn-ghost" onClick=${()=>ctx.requestChanges(r,fb[r.id])}>Request edits</button>
-            <button class="btn btn-ghost" onClick=${()=>ctx.rejectRequest(r,fb[r.id])}>Reject</button></div><//>`):html`<${Panel}><${EmptyState} title="No pending requests" text="The request queue is clear." icon="check"/><//>`)
+          ${canApr('approvalRequests',r)?html`<input class="sel" style=${{width:'100%',margin:'12px 0'}} placeholder="Feedback (optional)" value=${fb[r.id]||''} onChange=${e=>setF(r.id,e.target.value)}/>
+          <div class="flex gap8"><button class="btn btn-pri" disabled=${!!busy} onClick=${()=>decide(r.id+'-approve',()=>ctx.approveRequest(r,fb[r.id]))}>${busy===r.id+'-approve'?'Saving…':'Approve'}</button>
+            <button class="btn btn-ghost" disabled=${!!busy} onClick=${()=>decide(r.id+'-changes',()=>ctx.requestChanges(r,fb[r.id]))}>Request edits</button>
+            <button class="btn btn-ghost" disabled=${!!busy} onClick=${()=>decide(r.id+'-reject',()=>ctx.rejectRequest(r,fb[r.id]))}>Reject</button></div>`:html`<div class="muted" style=${{fontSize:12,marginTop:12}}>You do not have permission to decide this request type.</div>`}<//>`):html`<${Panel}><${EmptyState} title="No pending requests" text="The request queue is clear." icon="check"/><//>`)
       : tab==='Deliverables'?(pendDlv.length?pendDlv.map(d=>html`<${Panel} key=${d.id} className="mb18">
           <div class="flex between center"><div><b>${d.title}</b><div class="muted" style=${{fontSize:12,marginTop:3}}>${d.type} · v${d.version||1} · ${nameById(db.clients,d.clientId)}</div></div><${Tag}>${d.status}<//></div>
-          <div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" onClick=${()=>ctx.approveDeliverable(d)}>Approve</button>
-            <button class="btn btn-ghost" onClick=${()=>{const n=prompt(getLang()==='ar'?'إيه المطلوب تعديله؟':'What needs changing?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'طلب تعديلات':'Request edits'}</button></div><//>`):html`<${Panel}><${EmptyState} title="No deliverables to review" text="Nothing is awaiting sign-off." icon="check"/><//>`)
+          ${canApr('deliverables',d)?html`<div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" disabled=${!!busy} onClick=${()=>decide(d.id+'-approve',()=>ctx.approveDeliverable(d))}>${busy===d.id+'-approve'?'Saving…':'Approve'}</button>
+            <button class="btn btn-ghost" disabled=${!!busy} onClick=${()=>{const n=prompt(getLang()==='ar'?'إيه المطلوب تعديله؟':'What needs changing?');if(n)ctx.requestRevision(d,n);}}>${getLang()==='ar'?'طلب تعديلات':'Request edits'}</button></div>`:html`<div class="muted" style=${{fontSize:12,marginTop:12}}>You do not have permission to approve this deliverable.</div>`}<//>`):html`<${Panel}><${EmptyState} title="No deliverables to review" text="Nothing is awaiting sign-off." icon="check"/><//>`)
       : tab==='Proposals'?(pendProp.length?pendProp.map(p=>html`<${Panel} key=${p.id} className="mb18">
           <div class="flex between center"><div><b>${p.title}</b><div class="muted" style=${{fontSize:12,marginTop:3}}>${nameById(db.clients,p.clientId)}</div></div><${Tag}>${p.status}<//></div>
-          <div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" onClick=${()=>{ctx.updateRecord('proposals',p.id,{status:'Approved Internally'});ctx.addActivity('proposals',p.id,'approved internally',p.title);showProPopup('requestApproved',p.title);}}>Approve</button></div><//>`):html`<${Panel}><${EmptyState} title="No proposals pending" text="No proposals are awaiting internal approval." icon="check"/><//>`)
+          ${canApr('proposals',p)?html`<div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" disabled=${!!busy} onClick=${()=>decide(p.id+'-approve',()=>ctx.approveDocument('proposals',p))}>${busy===p.id+'-approve'?'Saving…':'Approve'}</button></div>`:html`<div class="muted" style=${{fontSize:12,marginTop:12}}>You do not have permission to approve this proposal.</div>`}<//>`):html`<${Panel}><${EmptyState} title="No proposals pending" text="No proposals are awaiting internal approval." icon="check"/><//>`)
       : (pendInv.length?pendInv.map(i=>html`<${Panel} key=${i.id} className="mb18">
           <div class="flex between center"><div><b>${i.invoiceNumber}</b><div class="muted" style=${{fontSize:12,marginTop:3}}>${nameById(db.clients,i.clientId)} · ${money(ctx.invTotal(i))}</div></div><${Tag}>${i.status}<//></div>
-          <div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" onClick=${()=>{ctx.updateRecord('invoices',i.id,{status:'Approved Internally'});ctx.addActivity('invoices',i.id,'approved internally',i.invoiceNumber);showProPopup('requestApproved',i.invoiceNumber);}}>Approve</button></div><//>`):html`<${Panel}><${EmptyState} title="No invoices pending" text="No invoices are awaiting internal approval." icon="check"/><//>`)}
+          ${canApr('invoices',i)?html`<div class="flex gap8" style=${{marginTop:12}}><button class="btn btn-pri" disabled=${!!busy} onClick=${()=>decide(i.id+'-approve',()=>ctx.approveDocument('invoices',i))}>${busy===i.id+'-approve'?'Saving…':'Approve'}</button></div>`:html`<div class="muted" style=${{fontSize:12,marginTop:12}}>You do not have permission to approve this invoice.</div>`}<//>`):html`<${Panel}><${EmptyState} title="No invoices pending" text="No invoices are awaiting internal approval." icon="check"/><//>`)}
   </div>`;
 }
 

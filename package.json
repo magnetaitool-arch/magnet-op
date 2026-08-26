@@ -31,6 +31,7 @@
     "test:contract-v2": "node tools/contract-v2-test.js",
     "test:documents-v2": "node tools/document-storage-v2-test.js",
     "test:tasks-v2": "node tools/tasks-search-notifications-v2-test.js",
+    "test:approvals-v2": "node tools/approvals-v2-test.js",
     "test:identity:staging": "node tools/test-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
     "test:login:staging": "node tools/test-staging-app-login.js --project-ref=xqqgbvigfojfydzfguan",
     "test:tenant:staging": "node tools/test-staging-tenant-rls.js --project-ref=xqqgbvigfojfydzfguan",
@@ -45,7 +46,8 @@
     "test:contract-v2:staging": "node tools/test-staging-contract-v2.js --project-ref=xqqgbvigfojfydzfguan",
     "test:documents-v2:staging": "node tools/test-staging-document-storage-v2.js --project-ref=xqqgbvigfojfydzfguan",
     "test:tasks-v2:staging": "node tools/test-staging-tasks-search-notifications-v2.js --project-ref=xqqgbvigfojfydzfguan",
-    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js && node tools/recruitment-v2-test.js && node tools/sales-client-workspace-v2-test.js && node tools/finance-v2-test.js && node tools/contract-v2-test.js && node tools/document-storage-v2-test.js && node tools/tasks-search-notifications-v2-test.js",
+    "test:approvals-v2:staging": "node tools/test-staging-approvals-v2.js --project-ref=xqqgbvigfojfydzfguan",
+    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js && node tools/recruitment-v2-test.js && node tools/sales-client-workspace-v2-test.js && node tools/finance-v2-test.js && node tools/contract-v2-test.js && node tools/document-storage-v2-test.js && node tools/tasks-search-notifications-v2-test.js && node tools/approvals-v2-test.js",
     "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {
