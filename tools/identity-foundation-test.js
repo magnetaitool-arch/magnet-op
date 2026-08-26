@@ -26,6 +26,8 @@ const attachSql = read('supabase/migrations/20260825120129_attach_auth_profile_t
 const auditSql = read('supabase/migrations/20260825120600_preserve_audit_identity_history.sql');
 const edge = read('supabase/functions/identity/index.ts');
 const accountsEdge = read('supabase/functions/accounts/index.ts');
+const stagingReconciliation = read('tools/reconcile-staging-identity.js');
+const restoredAuthTest = read('tools/test-staging-auth-placeholder-repair.js');
 const html = read('index.html');
 const pkg = JSON.parse(read('package.json'));
 
@@ -89,6 +91,13 @@ check(/linkedAuthUserId\(rec\.rowId\)/.test(accountsEdge), 'repeat login resolve
 check(/adminDeleteUser\(au\.id\)/.test(accountsEdge), 'failed new-user reconciliation removes the incomplete Auth identity');
 check(/provider_password_update_failed/.test(accountsEdge), 'failed provider password updates fail closed');
 check(/session=await passwordGrant\(email, body\.password\);[\s\S]{0,500}adminSetPassword\(au\.id, body\.password\)/.test(accountsEdge), 'repeat login grants a session before attempting a provider password repair');
+check(/confirmation_token = coalesce\(auth_user\.confirmation_token, ''\)/.test(stagingReconciliation)
+  && /recovery_token = coalesce\(auth_user\.recovery_token, ''\)/.test(stagingReconciliation)
+  && /email_change_token_new = coalesce\(auth_user\.email_change_token_new, ''\)/.test(stagingReconciliation)
+  && /email_change = coalesce\(auth_user\.email_change, ''\)/.test(stagingReconciliation),
+'restored passwordless identities normalize legacy provider token columns before first login');
+check(/PRODUCTION_REF/.test(restoredAuthTest) && /refused_non_staging|explicit non-Production/.test(restoredAuthTest)
+  && /magnet_auth_repair_canary/.test(restoredAuthTest), 'restored Auth regression test is Staging-only and disposable');
 
 console.log('\n[6] browser cutover contract');
 check(/loadCanonicalIdentity\(cfg\.current,res\.user\)/.test(html), 'login resolves canonical identity before opening private data');
@@ -102,6 +111,7 @@ console.log('\n[7] runnable verification');
 check(pkg.scripts && pkg.scripts['test:identity'], 'offline identity test is registered');
 check(pkg.scripts && pkg.scripts['test:identity:staging'], 'Staging identity E2E is registered');
 check(pkg.scripts && pkg.scripts['test:login:staging'], 'Staging full login cutover test is registered');
+check(pkg.scripts && pkg.scripts['test:auth-repair:staging'], 'Staging restored Auth repair test is registered');
 check(pkg.scripts && pkg.scripts['diagnose:auth:staging'], 'Staging identity diagnostic is registered');
 
 console.log(`\nResult: ${passed} passed, ${failed} failed.`);

@@ -88,6 +88,24 @@ begin
   end if;
 end $$;
 
+-- M0 intentionally restored Auth users without Production passwords or live
+-- sessions. The original placeholder insert also left four legacy GoTrue token
+-- columns NULL. GoTrue's Admin update path scans those columns as strings before
+-- it can set the verified legacy password, so the first secure login failed with
+-- provider_password_update_failed. Normalize only confirmed, passwordless
+-- Staging identities. No password, credential, or Production row is copied.
+update auth.users auth_user
+set
+  confirmation_token = coalesce(auth_user.confirmation_token, ''),
+  recovery_token = coalesce(auth_user.recovery_token, ''),
+  email_change_token_new = coalesce(auth_user.email_change_token_new, ''),
+  email_change = coalesce(auth_user.email_change, ''),
+  updated_at = now()
+from public.legacy_identity_links legacy_link
+where legacy_link.auth_user_id = auth_user.id
+  and legacy_link.link_status = 'CONFIRMED'
+  and nullif(auth_user.encrypted_password, '') is null;
+
 update auth.users auth_user
 set
   email = profile.email_normalized,
@@ -283,7 +301,13 @@ function main() {
       (select count(*)::int from public.login_aliases where status='ACTIVE') as aliases,
       (select count(*)::int from public.legacy_identity_links where link_status='CONFIRMED') as confirmed_legacy_links,
       (select count(*)::int from auth.users where coalesce(raw_app_meta_data->>'staging_placeholder','false')='true') as remaining_placeholders,
-      (select count(*)::int from auth.identities identity join public.profiles profile on profile.id=identity.user_id where identity.provider='email') as profile_email_identities
+      (select count(*)::int from auth.identities identity join public.profiles profile on profile.id=identity.user_id where identity.provider='email') as profile_email_identities,
+      (select count(*)::int
+       from auth.users auth_user
+       join public.legacy_identity_links legacy_link on legacy_link.auth_user_id=auth_user.id and legacy_link.link_status='CONFIRMED'
+       where nullif(auth_user.encrypted_password,'') is null
+         and (auth_user.confirmation_token is null or auth_user.recovery_token is null
+           or auth_user.email_change_token_new is null or auth_user.email_change is null)) as unrepaired_passwordless_users
   `)[0] || {};
 
   process.stdout.write(`${apply ? 'APPLIED' : 'DRY RUN PASS'}: ${EXPECTED_STAGING_NAME} identity reconciliation.\n`);

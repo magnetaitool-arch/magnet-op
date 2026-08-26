@@ -35,6 +35,7 @@
     "test:system-health-v2": "node tools/system-health-v2-test.js",
     "test:identity:staging": "node tools/test-staging-identity.js --project-ref=xqqgbvigfojfydzfguan",
     "test:login:staging": "node tools/test-staging-app-login.js --project-ref=xqqgbvigfojfydzfguan",
+    "test:auth-repair:staging": "node tools/test-staging-auth-placeholder-repair.js --project-ref=xqqgbvigfojfydzfguan",
     "test:tenant:staging": "node tools/test-staging-tenant-rls.js --project-ref=xqqgbvigfojfydzfguan",
     "test:organization-settings:staging": "node tools/test-staging-organization-settings.js --project-ref=xqqgbvigfojfydzfguan",
     "test:employee-privacy:staging": "node tools/test-staging-employee-privacy.js --project-ref=xqqgbvigfojfydzfguan",
