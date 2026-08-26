@@ -85,8 +85,10 @@ check(/rpc\/identity_update_membership/.test(edge), 'role changes use the transa
 check(/legacy_identity_links/.test(edge) && /legacyUserId/.test(edge), 'member directory returns stable confirmed cutover links');
 check(!/console\.error\([^\n]*(jwt|email|password|token)/i.test(edge), 'Edge logs do not print credentials or personal identity values');
 check(/reconcileLegacyIdentity\(au\.id,rec\.rowId\)/.test(accountsEdge), 'legacy password login must reconcile canonical identity before issuing a session');
+check(/linkedAuthUserId\(rec\.rowId\)/.test(accountsEdge), 'repeat login resolves the immutable identity link before provider email discovery');
 check(/adminDeleteUser\(au\.id\)/.test(accountsEdge), 'failed new-user reconciliation removes the incomplete Auth identity');
 check(/provider_password_update_failed/.test(accountsEdge), 'failed provider password updates fail closed');
+check(/session=await passwordGrant\(email, body\.password\);[\s\S]{0,500}adminSetPassword\(au\.id, body\.password\)/.test(accountsEdge), 'repeat login grants a session before attempting a provider password repair');
 
 console.log('\n[6] browser cutover contract');
 check(/loadCanonicalIdentity\(cfg\.current,res\.user\)/.test(html), 'login resolves canonical identity before opening private data');

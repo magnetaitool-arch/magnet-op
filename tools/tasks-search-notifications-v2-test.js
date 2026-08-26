@@ -67,6 +67,9 @@ check(/list_notifications_v2/.test(app),'app loads the current user notification
 check(/mark_notifications_read_v2/.test(app),'read receipts are persisted server-side');
 check(/setInterval\(\(\)=>\{if\(live\)refreshCanonicalNotifications\(\);\},30000\)/.test(app),'notification inbox refreshes without full database polling');
 check(/openEntity\(n\.route\|\|n\.entityType,n\.entityId\)/.test(app),'notification click opens the exact entity');
+check(/CustomEvent\('magnet:open-entity'/.test(app),'same-route search results dispatch an exact-entity event');
+check((app.match(/addEventListener\('magnet:open-entity'/g)||[]).length>=5,'V2 workspaces handle same-route exact-entity events');
+check(/organizationId:authUser\.organizationId/.test(app) && /capabilities:Array\.isArray\(authUser\.capabilities\)/.test(app),'canonical organization and capabilities reach V2 workspaces');
 check(/Array\.isArray\(canonicalNotifs\)\?canonicalNotifs:legacyNotifs/.test(app),'legacy inbox remains an explicit fallback');
 
 console.log(`\nResult: ${passed} passed, ${failed} failed.`);

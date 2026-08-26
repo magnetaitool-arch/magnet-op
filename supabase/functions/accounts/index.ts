@@ -1,4 +1,4 @@
-// Magnet OS — accounts/auth Edge Function (service-role), v13.
+// Magnet OS — accounts/auth Edge Function (service-role), v14.
 // v7+ makes account administration confirmable and recoverable: separate login and
 // recovery throttles, explicit lock status/unlock, live-role authorization (so an old
 // token cannot keep admin rights), duplicate-login prevention, and last-owner guards.
@@ -84,16 +84,25 @@ async function adminFindUserByEmail(email:string){
   try{
     const target=String(email||'').trim().toLowerCase();
     for(let page=1;page<=1000;page++){
-      const r=await fetch(AUTHB+'/admin/users?page='+page+'&per_page=1000', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+      const r=await fetch(AUTHB+'/admin/users?page='+page+'&per_page=50', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
       if(!r.ok) return null;
       const d=await r.json(); const list=(d && (d.users||d)) || [];
       const batch=Array.isArray(list)?list:[];
       const found=batch.find((u:any)=> String(u.email||'').trim().toLowerCase()===target);
       if(found) return found;
-      if(batch.length<1000 || (d&&d.last_page&&page>=Number(d.last_page))) break;
+      if(batch.length<50 || (d&&d.last_page&&page>=Number(d.last_page))) break;
     }
     return null;
   }catch{ return null; }
+}
+async function linkedAuthUserId(legacyAccountRowId:string){
+  try{
+    const endpoint=URL.replace(/\/$/,'')+'/rest/v1/legacy_identity_links?legacy_account_row_id=eq.'+encodeURIComponent(legacyAccountRowId)+'&link_status=eq.CONFIRMED&select=auth_user_id&limit=2';
+    const r=await fetch(endpoint,{headers:{apikey:KEY,Authorization:'Bearer '+KEY}});
+    if(!r.ok)return '';
+    const rows=await r.json();
+    return Array.isArray(rows)&&rows.length===1?String(rows[0].auth_user_id||''):'';
+  }catch{return '';}
 }
 async function adminSetPassword(uid:string, password:string){
   try{ const r=await fetch(AUTHB+'/admin/users/'+uid, { method:'PUT', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' }, body:JSON.stringify({ password, email_confirm:true }) }); return r.ok; }catch{ return false; }
@@ -184,7 +193,7 @@ Deno.serve(async (req)=>{
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:13,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
+    if(action==='health') return json({ok:true,service:'accounts',version:14,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
 
     // Return the CURRENT server-side identity for an existing session. The UI must
     // not keep trusting the role/access snapshot cached at login forever: an Owner
@@ -224,18 +233,32 @@ Deno.serve(async (req)=>{
       if(!(await verifyPw(body.password||'', rec.u.passwordHash||''))){ await rlBump('login', body.identifier, RL_LOGIN_WINDOW_MS); await logAuthEvent(requestId,'session_upgrade_failed',false,'invalid_credentials',rec.u.id); return json({ ok:false, reason:'invalid' }); }
       const email=String(rec.u.email||'').toLowerCase().trim();
       if(!email || email.indexOf('@')<1){ await logAuthEvent(requestId,'session_upgrade_failed',false,'missing_email',rec.u.id); return json({ ok:false, reason:'no-email' }); }
-      let au=await adminFindUserByEmail(email), createdAuthUser=false;
+      // Once an account has a confirmed immutable cutover link, resolve it by that
+      // link instead of scanning Auth users by email. Besides being faster and
+      // tenant-safe, this keeps repeat login available if the provider's list-users
+      // endpoint is temporarily unhealthy.
+      const linkedUserId=await linkedAuthUserId(rec.rowId);
+      let au=linkedUserId?{id:linkedUserId}:await adminFindUserByEmail(email), createdAuthUser=false, session:any=null;
       if(au && au.id){
         try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
         catch{ await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
-        if(!(await adminSetPassword(au.id, body.password))){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_password_update_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
+        // Normal repeat logins must not update the provider password. Supabase may
+        // reject setting a password to its current value, which previously made a
+        // migrated employee's first login work and every later login fail. Try the
+        // password grant first; only repair the provider password when the legacy
+        // credential is valid but the provider credential is genuinely stale.
+        session=await passwordGrant(email, body.password);
+        if(!session || !session.access_token){
+          if(!(await adminSetPassword(au.id, body.password))){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_password_update_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
+          session=await passwordGrant(email, body.password);
+        }
       } else {
         au=await adminCreateUser(email, body.password); createdAuthUser=!!(au&&au.id);
         if(!createdAuthUser){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_user_create_failed',rec.u.id); return json({ok:false,reason:'session-failed'},503); }
         try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
         catch{ await adminDeleteUser(au.id); await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
+        session=await passwordGrant(email, body.password);
       }
-      const session=await passwordGrant(email, body.password);
       if(!session || !session.access_token){ await logAuthEvent(requestId,'session_upgrade_failed',false,'provider_session_failed',rec.u.id); return json({ ok:false, reason:'session-failed' }); }
       await rlClear('login', body.identifier);
       await logAuthEvent(requestId,'session_upgrade_succeeded',true,null,rec.u.id);

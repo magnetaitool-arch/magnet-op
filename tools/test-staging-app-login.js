@@ -191,6 +191,15 @@ async function main() {
     const changedContext = await identityAction('context', accessToken);
     const changedMembership = changedContext.body && changedContext.body.context && changedContext.body.context.memberships && changedContext.body.context.memberships[0];
     check(changedMembership && changedMembership.roleKey === 'sales', 'the existing open session sees the canonical Sales role immediately');
+
+    // Regression gate: the provider must accept the same valid credentials on the
+    // next login. The previous implementation rewrote the provider password on
+    // every attempt; Supabase rejects password reuse, so login worked only once.
+    const repeatLogin = await accountAction('authv2', { identifier: username, password });
+    check(repeatLogin.response.status === 200 && repeatLogin.body.ok === true && repeatLogin.body.session && repeatLogin.body.session.access_token, 'the same account can obtain a second secure session');
+    const repeatContext = await identityAction('context', repeatLogin.body.session.access_token);
+    const repeatMembership = repeatContext.body && repeatContext.body.context && repeatContext.body.context.memberships && repeatContext.body.context.memberships[0];
+    check(repeatContext.response.status === 200 && repeatMembership && repeatMembership.roleKey === 'sales', 'repeat login preserves the live canonical role');
   } finally {
     if (authUserId) {
       await fetch(`${base}/rest/v1/legacy_identity_links?auth_user_id=eq.${authUserId}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
