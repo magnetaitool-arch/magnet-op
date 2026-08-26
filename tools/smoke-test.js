@@ -158,6 +158,10 @@ const intakeMigration = read('supabase/migrations/20260825203000_transactional_p
   && /applyAuthV2Contract\(res\.authV2\)/.test(html) && /authV2:r\.authV2/.test(html)
   ? ok('a successful login carries the server cutover contract and mandatory mode has an environment safety belt')
   : bad('login can race the Auth cutover flag or silently downgrade mandatory mode');
+/function syncQueueScope\(\)/.test(html) && /item=Object\.assign\(\{\},item,scope,\{scopeVersion:1\}\)/.test(html)
+  && /otherScopes=all\.filter\(item=>!syncQueueMatches\(item,scope\)\)/.test(html) && /quarantined:/.test(html)
+  ? ok('offline writes are isolated by tenant and immutable user identity')
+  : bad('a shared browser can replay one user\'s pending writes under another account');
 !/Spark Marketing/.test(html) && !/<option[^>]*value=["']TIA["']/.test(html) && !/@tia\.com/.test(html)
   && /const BRANDS = \['Magnet'\]/.test(html) && !/setBrand\(/.test(html)
   ? ok('workspace branding is Magnet-only with no legacy brand selector')

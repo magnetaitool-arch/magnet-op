@@ -4641,9 +4641,9 @@ async function cloudUpsert(cfg, coll, rec){
     const res = await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify([tenantRecord({ id:rec.id, coll, data:rec })]) });
-    if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueLoad().length); }  // server rejected -> retry later
+    if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueCurrent().length); }  // server rejected -> retry later
     else moSaveStatus('saved');
-  } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueLoad().length); }      // offline -> durable queue, retry later
+  } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueCurrent().length); }      // offline -> durable queue, retry later
 }
 async function cloudDelete(cfg, id){
   if(!cfgComplete(cfg) || !id) return;
@@ -4653,9 +4653,9 @@ async function cloudDelete(cfg, id){
       method:'POST', headers:_headers(cfg,{'Content-Type':'application/json'}),
       body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_record_id:id})
     });
-    if(!res.ok){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueLoad().length); }
+    if(!res.ok){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueCurrent().length); }
     else moSaveStatus('saved');
-  } catch(e){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueLoad().length); }
+  } catch(e){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueCurrent().length); }
 }
 async function cloudPushAll(cfg, db){
   if(!cfgComplete(cfg)) return;
@@ -4674,7 +4674,11 @@ async function cloudPushAll(cfg, db){
 /* ---- Durable offline sync queue (additive). Failed cloud writes no longer
    vanish until the next bulk push: they are queued in localStorage and retried
    automatically (on the browser 'online' event, every 30s while pending, and on
-   startup). Records are already saved locally BEFORE the cloud write, and the
+   startup). Every queued write is bound to the immutable signed-in identity and
+   active organization that created it. A later login on the same browser can
+   never replay another person's pending work; older unscoped queue entries are
+   preserved for diagnostics but quarantined from automatic delivery. Records are
+   already saved locally BEFORE the cloud write, and the
    cloud merge keeps the newest copy per id, so draining can never overwrite a
    newer cloud record with a stale one being resurrected: the queued write is
    simply upserted and the usual merge-by-updatedAt rules apply on next load.
@@ -4682,23 +4686,38 @@ async function cloudPushAll(cfg, db){
    shows the pending count (click = retry now). ---- */
 const SYNC_QUEUE_KEY = 'tia_sync_queue';
 function syncQueueLoad(){ try { const l=JSON.parse(store.get(SYNC_QUEUE_KEY)||'[]'); return Array.isArray(l)?l:[]; } catch(e){ return []; } }
+function syncQueueScope(){
+  try{
+    const user=getSessionUser();
+    const authUserId=String(user&&(user.authUserId||user.id)||'').trim();
+    const organizationId=String(user&&user.organizationId||activeOrganizationId()||'').trim();
+    return authUserId&&organizationId?{authUserId,organizationId}:null;
+  }catch(e){return null;}
+}
+function syncQueueMatches(item,scope){return !!(scope&&item&&item.authUserId===scope.authUserId&&item.organizationId===scope.organizationId);}
+function syncQueueCurrent(list){const scope=syncQueueScope();return scope?(list||syncQueueLoad()).filter(item=>syncQueueMatches(item,scope)):[];}
 function syncQueueSave(list){ try { store.set(SYNC_QUEUE_KEY, JSON.stringify(list.slice(-500))); } catch(e){} syncQueueChip(); }
 function syncQueuePush(item){
   try {
+    const scope=syncQueueScope(); if(!scope)return false;
     const list=syncQueueLoad();
-    const keyOf=(x)=> x.type+':'+(x.id || (x.rec&&x.rec.id) || '');
+    item=Object.assign({},item,scope,{scopeVersion:1});
+    const keyOf=(x)=> [x.organizationId||'',x.authUserId||'',x.type,x.id||(x.rec&&x.rec.id)||''].join(':');
     const k=keyOf(item); const i=list.findIndex(x=>keyOf(x)===k);
     item.queuedAt=nowISO(); item.tries=(i>=0?(list[i].tries||0):0);
     if(i>=0) list[i]=item; else list.push(item);       // newest write per record wins in the queue
     syncQueueSave(list);
-  } catch(e){}
+    return true;
+  } catch(e){return false;}
 }
 let _sqDraining=false;
 async function syncQueueDrain(){
   if(_sqDraining) return; _sqDraining=true;
   try {
     const cfg=getCfg(); if(!cfgComplete(cfg)) return;
-    const list=syncQueueLoad(); if(!list.length) return;
+    const all=syncQueueLoad(); const scope=syncQueueScope();
+    const list=syncQueueCurrent(all); if(!scope||!list.length){syncQueueChip();return;}
+    const otherScopes=all.filter(item=>!syncQueueMatches(item,scope));
     moSaveStatus('retrying');
     const keep=[];
     for(const item of list){
@@ -4719,14 +4738,14 @@ async function syncQueueDrain(){
       } catch(e){ ok=false; }
       if(!ok){ item.tries=(item.tries||0)+1; keep.push(item); }
     }
-    syncQueueSave(keep);
+    syncQueueSave(otherScopes.concat(keep));
     if(!keep.length){ window.__moLastSync=Date.now(); moSaveStatus('saved'); }
     else { const mt=keep.reduce(function(m,x){ return Math.max(m,x.tries||0); },0); moSaveStatus(mt>=3?'failed':'queued', keep.length); }
   } finally { _sqDraining=false; }
 }
 function syncQueueChip(){
   try {
-    const n=syncQueueLoad().length;
+    const n=syncQueueCurrent().length;
     let el=document.getElementById('sync-pending-chip');
     if(!n){ if(el) el.remove(); return; }
     if(!el){
@@ -4740,13 +4759,13 @@ function syncQueueChip(){
     el.textContent=_arc?('في انتظار المزامنة: '+n):('SYNC PENDING: '+n);
   } catch(e){}
 }
-window.__syncQueue = { size:()=>syncQueueLoad().length, list:syncQueueLoad, drain:syncQueueDrain };
+window.__syncQueue = { size:()=>syncQueueCurrent().length, list:()=>syncQueueCurrent(), quarantined:()=>{const scope=syncQueueScope();return syncQueueLoad().filter(item=>!syncQueueMatches(item,scope));}, drain:syncQueueDrain };
 try {
   window.addEventListener('online', function(){ syncQueueDrain(); });          // network came back
-  window.addEventListener('focus', function(){ if(syncQueueLoad().length) syncQueueDrain(); });
-  document.addEventListener('visibilitychange', function(){ if(!document.hidden && syncQueueLoad().length) syncQueueDrain(); });
-  setInterval(function(){ if(syncQueueLoad().length) syncQueueDrain(); }, 8000); // backup retry every 8s
-  setTimeout(function(){ syncQueueChip(); if(syncQueueLoad().length) syncQueueDrain(); }, 2500);
+  window.addEventListener('focus', function(){ if(syncQueueCurrent().length) syncQueueDrain(); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && syncQueueCurrent().length) syncQueueDrain(); });
+  setInterval(function(){ if(syncQueueCurrent().length) syncQueueDrain(); }, 8000); // backup retry every 8s
+  setTimeout(function(){ syncQueueChip(); if(syncQueueCurrent().length) syncQueueDrain(); }, 2500);
 } catch(e){}
 
 /* ---- Supabase Auth (optional). Falls back to local role switcher if absent. ---- */
@@ -6605,7 +6624,7 @@ function App(){
     setNeedsSetup(false); setShowLogin(true);
     return null;
   };
-  const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB()); setAuthUser(null); setShowLogin(true); setRoleOverride(null); };
+  const doLogout = ()=>{ try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB()); setAuthUser(null); setShowLogin(true); setRoleOverride(null); try{syncQueueChip();const status=document.getElementById('mo-save-status');if(status)status.remove();}catch(e){} };
 
   // A login session is a cached identity snapshot, not the source of truth. Refresh
   // it on startup/focus and periodically so role repairs (for example Content ->
