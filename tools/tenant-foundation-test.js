@@ -45,7 +45,8 @@ check(/member_role = 'client'/.test(migration) && /record_matches_current_client
 check(/record_matches_current_user/.test(migration), 'employee-owned records have server-side self scope');
 
 console.log('\n[4] browser and public-server boundary');
-check(/tenantRecord\(\{ id:rec\.id, coll, data:rec \}\)/.test(app), 'browser writes include selected organization');
+check(/tenantRecord\(\{ id:cloudRec\.id, coll, data:cloudRec \}\)/.test(app)
+  && /const cloudRec=cloudRecordWithAuthorship\(coll,rec\)/.test(app), 'browser writes include selected organization');
 check(/tenantQuery\('records\?select=\*/.test(app), 'browser reads explicitly filter selected organization');
 check(/filter:'organization_id=eq\.'/.test(app), 'Realtime subscription is tenant-filtered');
 check(/SUPABASE_SERVICE_ROLE_KEY/.test(intakeCore) && /service_not_configured/.test(intakeCore), 'public intake fails closed without server credentials');

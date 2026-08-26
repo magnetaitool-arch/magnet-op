@@ -4657,16 +4657,37 @@ function moSaveStatus(state, n){
     if(state==='saved'){ _moSaveHide=setTimeout(function(){ try{ if(el){ el.style.opacity='0'; setTimeout(function(){ try{ if(el&&el.style.opacity==='0') el.remove(); }catch(e){} },350); } }catch(e){} }, 1600); }
   }catch(e){}
 }
+/* RLS self-scope metadata. Legacy UI ids remain on actorId/authorId/senderId so
+   existing relationships and filters keep working, while an additional field
+   is always stamped from the signed Supabase identity. The database still
+   verifies this value against auth.uid(); the browser cannot grant itself
+   access by inventing another id. Passing the queue-bound auth id also repairs
+   pre-fix offline items safely when their original user retries them. */
+const SELF_SCOPED_ID_FIELD = Object.freeze({
+  activityLogs:'userId', comments:'userId', chatMessages:'userId',
+  approvalRequests:'userId', gameScores:'createdBy', gameStats:'createdBy'
+});
+function cloudRecordWithAuthorship(coll, rec, queueAuthUserId){
+  if(!rec || typeof rec!=='object') return rec;
+  const field=SELF_SCOPED_ID_FIELD[coll]; if(!field) return rec;
+  let authUserId=String(queueAuthUserId||'').trim();
+  if(!authUserId){
+    try{ const sessionUser=getSessionUser(); authUserId=String(sessionUser&&(sessionUser.authUserId||'')||'').trim(); }catch(e){}
+  }
+  if(!authUserId || rec[field]===authUserId) return rec;
+  return Object.assign({},rec,{[field]:authUserId});
+}
 async function cloudUpsert(cfg, coll, rec){
   if(!cfgComplete(cfg) || !rec || !rec.id) return;
+  const cloudRec=cloudRecordWithAuthorship(coll,rec);
   moSaveStatus('saving');
   try {
     const res = await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
-        body: JSON.stringify([tenantRecord({ id:rec.id, coll, data:rec })]) });
-    if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueCurrent().length); }  // server rejected -> retry later
+        body: JSON.stringify([tenantRecord({ id:cloudRec.id, coll, data:cloudRec })]) });
+    if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec:cloudRec }); moSaveStatus('queued', syncQueueCurrent().length); }  // server rejected -> retry later
     else moSaveStatus('saved');
-  } catch(e){ syncQueuePush({ type:'upsert', coll, rec }); moSaveStatus('queued', syncQueueCurrent().length); }      // offline -> durable queue, retry later
+  } catch(e){ syncQueuePush({ type:'upsert', coll, rec:cloudRec }); moSaveStatus('queued', syncQueueCurrent().length); }      // offline -> durable queue, retry later
 }
 async function cloudDelete(cfg, id){
   if(!cfgComplete(cfg) || !id) return;
@@ -4747,9 +4768,11 @@ async function syncQueueDrain(){
       let ok=false;
       try {
         if(item.type==='upsert' && item.rec && item.rec.id){
+          const queuedRec=cloudRecordWithAuthorship(item.coll,item.rec,item.authUserId);
+          item.rec=queuedRec;
           const res=await fetch(_rest(cfg,'records?on_conflict=id'),
             { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
-              body: JSON.stringify([tenantRecord({ id:item.rec.id, coll:item.coll, data:item.rec })]) });
+              body: JSON.stringify([tenantRecord({ id:queuedRec.id, coll:item.coll, data:queuedRec })]) });
           ok=res.ok;
         } else if(item.type==='delete' && item.id){
           const res=await fetch(_rest(cfg,'rpc/soft_delete_record'), {
@@ -6548,7 +6571,7 @@ function App(){
   };
   const hhmm = ()=>{ const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); };
   const logActivity = (u, action, details)=>{
-    const al = { id:uid('al'), entityType:'users', entityId:u.id, action, actorId:u.id, actorName:(u.fullName||u.username||'User'), details:details||'', createdAt:nowISO() };
+    const al = { id:uid('al'), entityType:'users', entityId:u.id, action, actorId:u.id, userId:(u.authUserId||u.id), actorName:(u.fullName||u.username||'User'), details:details||'', createdAt:nowISO() };
     setDb(d=>({...d, activityLogs:[al, ...(d.activityLogs||[])].slice(0,1000)}));
     cloudUpsert(cfg.current,'activityLogs',al);
   };
@@ -6883,7 +6906,7 @@ function App(){
 
   /* ---- logging helpers ---- */
   const addActivity = (entityType, entityId, action, details) => {
-    const rec = { id:uid('al'), entityType, entityId, action, actorId:user.id, actorName:user.name, details:details||'', createdAt:nowISO() };
+    const rec = { id:uid('al'), entityType, entityId, action, actorId:user.id, userId:(user.authUserId||user.id), actorName:user.name, details:details||'', createdAt:nowISO() };
     setDb(d=>({...d, activityLogs:[rec, ...(d.activityLogs||[])].slice(0,1000)}));
     cloudUpsert(cfg.current,'activityLogs',rec);
   };

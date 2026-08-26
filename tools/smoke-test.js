@@ -162,6 +162,11 @@ const intakeMigration = read('supabase/migrations/20260825203000_transactional_p
   && /otherScopes=all\.filter\(item=>!syncQueueMatches\(item,scope\)\)/.test(html) && /quarantined:/.test(html)
   ? ok('offline writes are isolated by tenant and immutable user identity')
   : bad('a shared browser can replay one user\'s pending writes under another account');
+/function cloudRecordWithAuthorship\(coll, rec, queueAuthUserId\)/.test(html)
+  && /const queuedRec=cloudRecordWithAuthorship\(item\.coll,item\.rec,item\.authUserId\)/.test(html)
+  && /activityLogs:'userId'/.test(html) && /userId:\(u\.authUserId\|\|u\.id\)/.test(html)
+  ? ok('self-scoped writes and pre-fix queued activity use the signed Supabase identity')
+  : bad('self-scoped records can fail RLS or remain stuck with a legacy actor id');
 !/Spark Marketing/.test(html) && !/<option[^>]*value=["']TIA["']/.test(html) && !/@tia\.com/.test(html)
   && /const BRANDS = \['Magnet'\]/.test(html) && !/setBrand\(/.test(html)
   ? ok('workspace branding is Magnet-only with no legacy brand selector')

@@ -26,7 +26,9 @@ const lib = require('./_lib');
   console.log('\n[supabase records table]');
   try {
     const r = await fetch(url + '/rest/v1/records?select=id&limit=1', { headers: lib.restHeaders(anon) });
-    r.ok ? ok('records reachable with anon key (' + r.status + ')') : f('records read failed (' + r.status + ') — did you run supabase-schema.sql?');
+    if (r.ok) ok('records endpoint reachable and returns no unauthorized failure (' + r.status + ')');
+    else if (r.status === 401 || r.status === 403) ok('records endpoint blocks anonymous reads (' + r.status + ') — JWT/RLS lockdown is active.');
+    else f('records probe failed (' + r.status + ') — verify project health and schema availability.');
   } catch (e) { f('records unreachable: ' + (e.message || e)); }
 
   console.log('\n[security: _accounts exposure]');

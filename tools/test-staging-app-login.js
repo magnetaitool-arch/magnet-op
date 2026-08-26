@@ -82,6 +82,7 @@ async function main() {
   const password = `LoginAa1-${crypto.randomBytes(18).toString('base64url')}`;
   let authUserId = '';
   let createdRecord = false;
+  let activityRecordId = '';
   const checks = [];
   const check = (condition, label) => {
     checks.push({ pass: !!condition, label });
@@ -192,6 +193,42 @@ async function main() {
     const changedMembership = changedContext.body && changedContext.body.context && changedContext.body.context.memberships && changedContext.body.context.memberships[0];
     check(changedMembership && changedMembership.roleKey === 'sales', 'the existing open session sees the canonical Sales role immediately');
 
+    // Reproduce the exact post-login sync regression: the legacy actorId is UI
+    // metadata and is not an authenticated identity claim. RLS must reject that
+    // shape, while the repaired record carries userId=auth.uid() and succeeds.
+    activityRecordId = `activity-login-canary-${suffix}`;
+    const userHeaders = {
+      apikey: publishable.api_key,
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    };
+    const legacyActivity = {
+      id: activityRecordId,
+      entityType: 'users',
+      entityId: accountId,
+      action: 'logged in',
+      actorId: accountId,
+      actorName: 'V2 Login Canary',
+      details: 'staging canary',
+      createdAt: new Date().toISOString(),
+    };
+    const rejectedLegacyActivity = await jsonFetch(`${base}/rest/v1/records?on_conflict=id`, {
+      method: 'POST', headers: userHeaders,
+      body: JSON.stringify([{ id: activityRecordId, coll: 'activityLogs', data: legacyActivity, organization_id: organizationId }]),
+    });
+    check(!rejectedLegacyActivity.response.ok, 'RLS reproduces the legacy-only login activity rejection');
+    const repairedActivity = { ...legacyActivity, userId: authUserId };
+    const acceptedActivity = await jsonFetch(`${base}/rest/v1/records?on_conflict=id`, {
+      method: 'POST', headers: userHeaders,
+      body: JSON.stringify([{ id: activityRecordId, coll: 'activityLogs', data: repairedActivity, organization_id: organizationId }]),
+    });
+    check(acceptedActivity.response.ok, 'canonical login activity sync is accepted by RLS');
+    const ownActivity = await jsonFetch(`${base}/rest/v1/records?id=eq.${encodeURIComponent(activityRecordId)}&select=id`, {
+      headers: { apikey: publishable.api_key, Authorization: `Bearer ${accessToken}` },
+    });
+    check(ownActivity.response.ok && Array.isArray(ownActivity.body) && ownActivity.body.length === 1, 'the signed-in user can read the repaired activity record');
+
     // Regression gate: the provider must accept the same valid credentials on the
     // next login. The previous implementation rewrote the provider password on
     // every attempt; Supabase rejects password reuse, so login worked only once.
@@ -201,6 +238,9 @@ async function main() {
     const repeatMembership = repeatContext.body && repeatContext.body.context && repeatContext.body.context.memberships && repeatContext.body.context.memberships[0];
     check(repeatContext.response.status === 200 && repeatMembership && repeatMembership.roleKey === 'sales', 'repeat login preserves the live canonical role');
   } finally {
+    if (activityRecordId) {
+      await fetch(`${base}/rest/v1/records?id=eq.${encodeURIComponent(activityRecordId)}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
+    }
     if (authUserId) {
       await fetch(`${base}/rest/v1/legacy_identity_links?auth_user_id=eq.${authUserId}`, { method: 'DELETE', headers: serviceHeaders }).catch(() => null);
     }
