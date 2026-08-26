@@ -62,6 +62,9 @@ const acct = read('supabase/functions/accounts/index.ts');
 /version:15/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
   ? ok('accounts v15 fails closed on an ambiguous login instead of selecting an arbitrary role')
   : bad('accounts service can still select an arbitrary duplicate login identity');
+/ALLOWED_ORIGINS\.has\(origin\)/.test(acct) && !/Access-Control-Allow-Origin'\s*:\s*'\*'/.test(acct)
+  ? ok('accounts CORS uses an exact Magnet origin allowlist')
+  : bad('accounts authentication can be called from an untrusted browser origin');
 /per_page=50/.test(acct) && /last_page/.test(acct) && /linkedAuthUserId/.test(acct)
   ? ok('Supabase Auth reconciliation uses confirmed links and paginated discovery')
   : bad('Supabase Auth reconciliation only scans an initial user page');
@@ -92,10 +95,11 @@ console.log('\n[5] dangerous-pattern scan');
 const intakeCore = read('server/public-intake.js');
 const intakeMigration = read('supabase/migrations/20260825203000_transactional_public_intake.sql');
 const runtimeConfig = read('api/runtime-config.js');
-/VERCEL_PROJECT_ID === productionProjectId/.test(runtimeConfig)
-  && /isMagnetProduction \? 'https:\/\/jdylrthffifbhyrrhuqd\.supabase\.co' : ''/.test(runtimeConfig)
-  ? ok('only the exact Production Vercel project may use the Production Supabase fallback')
-  : bad('a non-Production Vercel project can fall back to the Production database');
+!/jdylrthffifbhyrrhuqd/.test(runtimeConfig)
+  && /process\.env\.SUPABASE_URL \|\| ''/.test(runtimeConfig)
+  && /process\.env\.SUPABASE_ANON_KEY \|\| ''/.test(runtimeConfig)
+  ? ok('runtime config fails closed and has no retired Production database fallback')
+  : bad('runtime config can fall back to a retired or unintended database');
 /rpc\/submit_public_intake/.test(intakeCore) && !/rest\/v1\/records/.test(intakeCore)
   ? ok('public intake uses one transactional server command instead of direct record writes')
   : bad('public intake can bypass the transactional database command');

@@ -9,15 +9,33 @@ const REST = URL.replace(/\/$/,'') + '/rest/v1/records';
 const AUTHB = URL.replace(/\/$/,'') + '/auth/v1';
 const RESEND = Deno.env.get('RESEND_API_KEY') || '';
 const FROM = Deno.env.get('FROM_EMAIL') || 'Magnet OS <onboarding@resend.dev>';
-const EMAIL_ENDPOINT = 'https://magnet-op.vercel.app/api/send-email';
+const EMAIL_ENDPOINT = Deno.env.get('EMAIL_ENDPOINT') || 'https://magnet-op.vercel.app/api/send-email';
 const EMAIL_SHARED_SECRET = Deno.env.get('EMAIL_SHARED_SECRET') || '';
 const INITIAL_OWNER_SETUP_SECRET = Deno.env.get('INITIAL_OWNER_SETUP_SECRET') || '';
 const AUTH_V2_REQUIRED_ENV = String(Deno.env.get('AUTH_V2_REQUIRED') || '').toLowerCase()==='true';
 const AUTH_V2_ENABLED_ENV = AUTH_V2_REQUIRED_ENV || String(Deno.env.get('AUTH_V2_ENABLED') || '').toLowerCase()==='true';
 const AUTH_V2_ROLES_ENV = String(Deno.env.get('AUTH_V2_ROLES') || '').split(',').map(x=>x.trim()).filter(Boolean);
 
-const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'authorization,apikey,content-type', 'Access-Control-Allow-Methods':'POST,OPTIONS', 'Content-Type':'application/json' };
-const json = (obj:unknown, status=200)=> new Response(JSON.stringify(obj), { status, headers: CORS });
+const configuredOrigins = String(Deno.env.get('ALLOWED_ORIGINS') || '')
+  .split(',').map((value)=>value.trim()).filter(Boolean);
+const ALLOWED_ORIGINS = new Set(configuredOrigins.length ? configuredOrigins : [
+  'https://magnet-op.vercel.app',
+  'https://magnet-os-staging.vercel.app',
+  'https://magnet-os-v2-staging.vercel.app',
+  'http://127.0.0.1:4175',
+  'http://localhost:4175',
+]);
+function corsHeaders(req:Request){
+  const origin=String(req.headers.get('origin')||'');
+  return {
+    ...(origin&&ALLOWED_ORIGINS.has(origin)?{'Access-Control-Allow-Origin':origin,'Vary':'Origin'}:{}),
+    'Access-Control-Allow-Headers':'authorization,apikey,content-type',
+    'Access-Control-Allow-Methods':'POST,OPTIONS',
+    'Content-Type':'application/json',
+    'Cache-Control':'no-store',
+    'X-Content-Type-Options':'nosniff',
+  };
+}
 const nowISO = ()=> new Date().toISOString();
 const enc = new TextEncoder();
 
@@ -172,7 +190,10 @@ async function logAuthEvent(requestId:string,eventType:string,success:boolean,er
 
 Deno.serve(async (req)=>{
   const requestId=crypto.randomUUID();
-  if(req.method==='OPTIONS') return new Response('ok',{headers:CORS});
+  const origin=String(req.headers.get('origin')||'');
+  const json=(obj:unknown,status=200)=>new Response(JSON.stringify(obj),{status,headers:corsHeaders(req)});
+  if(origin&&!ALLOWED_ORIGINS.has(origin)) return json({ok:false,error:'origin_not_allowed'},403);
+  if(req.method==='OPTIONS') return new Response(null,{status:204,headers:corsHeaders(req)});
   if(req.method!=='POST') return json({error:'POST only'},405);
   let body:any={}; try{ body=await req.json(); }catch{ return json({error:'bad json'},400); }
   const action=body.action;

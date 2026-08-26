@@ -2,16 +2,11 @@
 
 // Public, deployment-scoped browser configuration. SUPABASE_ANON_KEY is a
 // publishable browser key by design; service-role/server secrets are never read
-// or returned here. Preview and Development are configured in Vercel to use the
-// separate Staging project, while Production retains its current defaults.
+// or returned here. Every environment must be configured explicitly in Vercel.
+// Missing variables fail closed instead of reconnecting to a retired database.
 module.exports = function handler(req, res) {
-  const productionProjectId = 'prj_HrxlpYScEnBGgUpFJbNt2mxlIW3x';
-  const isMagnetProduction = process.env.VERCEL_ENV === 'production'
-    && process.env.VERCEL_PROJECT_ID === productionProjectId;
-  const fallbackUrl = isMagnetProduction ? 'https://jdylrthffifbhyrrhuqd.supabase.co' : '';
-  const fallbackKey = isMagnetProduction ? 'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz' : '';
-  const url = String(process.env.SUPABASE_URL || fallbackUrl).trim();
-  const key = String(process.env.SUPABASE_ANON_KEY || fallbackKey).trim();
+  const url = String(process.env.SUPABASE_URL || '').trim();
+  const key = String(process.env.SUPABASE_ANON_KEY || '').trim();
   const validUrl = /^https:\/\/[a-z]{20}\.supabase\.co\/?$/.test(url);
   const validKey = key.startsWith('sb_publishable_') || key.startsWith('eyJ');
   const config = validUrl && validKey ? { url: url.replace(/\/$/, ''), key } : null;

@@ -68,7 +68,8 @@ function writePrivate(file, content) {
 const args = parseArgs(process.argv);
 const projectRef = String(args['project-ref'] || '').trim();
 const outDir = path.resolve(String(args['out-dir'] || ''));
-const cliJs = path.resolve(String(args['cli-js'] || ''));
+const cliJs = args['cli-js'] ? path.resolve(String(args['cli-js'])) : '';
+const cliBin = args['cli-bin'] ? path.resolve(String(args['cli-bin'])) : '';
 
 if (!/^[a-z]{20}$/.test(projectRef)) {
   console.error('ERROR: --project-ref must be a 20-character Supabase project ref.');
@@ -78,8 +79,8 @@ if (!args['out-dir'] || !outDir.includes(`${path.sep}backups${path.sep}`)) {
   console.error('ERROR: --out-dir must be an explicit directory under backups/.');
   process.exit(2);
 }
-if (!args['cli-js'] || !fs.existsSync(cliJs)) {
-  console.error('ERROR: --cli-js must point to the installed Supabase CLI JavaScript entrypoint.');
+if ((!cliJs || !fs.existsSync(cliJs)) && (!cliBin || !fs.existsSync(cliBin))) {
+  console.error('ERROR: supply either --cli-js or --cli-bin pointing to an installed Supabase CLI.');
   process.exit(2);
 }
 
@@ -90,8 +91,10 @@ function query(sql) {
   if (!/^\s*(select|with)\b/i.test(sql)) {
     throw new Error('Backup query rejected because it is not read-only SELECT/WITH SQL.');
   }
-  const result = spawnSync(process.execPath, [
-    cliJs,
+  const executable = cliBin || process.execPath;
+  const prefix = cliBin ? [] : [cliJs];
+  const result = spawnSync(executable, [
+    ...prefix,
     'db', 'query',
     '--linked',
     '--project-ref', projectRef,
