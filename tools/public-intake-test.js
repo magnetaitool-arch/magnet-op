@@ -19,6 +19,7 @@ const previous = {
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_ORGANIZATION_SLUG: process.env.SUPABASE_ORGANIZATION_SLUG,
+  MAGNET_FORM_ALLOWED_ORIGINS: process.env.MAGNET_FORM_ALLOWED_ORIGINS,
   PUBLIC_FORM_ALLOWED_ORIGINS: process.env.PUBLIC_FORM_ALLOWED_ORIGINS,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   SALES_EMAIL: process.env.SALES_EMAIL,
@@ -29,6 +30,7 @@ process.env.SUPABASE_ORGANIZATION_SLUG = 'magnet';
 process.env.RESEND_API_KEY = 'offline-resend-key';
 process.env.SALES_EMAIL = 'sales@example.invalid';
 delete process.env.PUBLIC_FORM_ALLOWED_ORIGINS;
+process.env.MAGNET_FORM_ALLOWED_ORIGINS = 'https://magnetofficial.com';
 
 let calls = [];
 let rpcError = '';
@@ -69,6 +71,10 @@ function callVercel({ origin, body, headers = {}, method = 'POST' }) {
   same(blocked.statusCode, 403, 'rejects an untrusted public-form origin');
   same(calls.length, 0, 'untrusted origin never reaches Supabase');
   same(blocked.headers['access-control-allow-origin'], undefined, 'does not reflect an untrusted origin');
+
+  const websitePreflight = await callVercel({ origin: 'https://magnetofficial.com', method: 'OPTIONS' });
+  same(websitePreflight.statusCode, 200, 'allows the configured Magnet website origin');
+  same(websitePreflight.headers['access-control-allow-origin'], 'https://magnetofficial.com', 'reflects only the configured website origin');
 
   const invalid = await callVercel({ origin: 'https://magnet-os-staging.vercel.app', body: { type: 'candidate', fullName: 'Missing contacts' } });
   same(invalid.statusCode, 400, 'rejects an incomplete candidate');

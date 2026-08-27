@@ -11,7 +11,8 @@ function normalOrigin(value) {
 }
 
 function allowedOrigins(env) {
-  const extra = String(env.PUBLIC_FORM_ALLOWED_ORIGINS || '').split(',').map((item) => normalOrigin(item.trim())).filter(Boolean);
+  const extra = String(env.MAGNET_FORM_ALLOWED_ORIGINS || env.PUBLIC_FORM_ALLOWED_ORIGINS || '')
+    .split(',').map((item) => normalOrigin(item.trim())).filter(Boolean);
   const deployment = env.VERCEL_URL ? normalOrigin('https://' + env.VERCEL_URL) : '';
   return new Set(['https://magnet-op.vercel.app', 'https://magnet-os-staging.vercel.app', deployment, ...extra].filter(Boolean));
 }
