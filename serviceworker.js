@@ -7,7 +7,7 @@
    - Everything cross-origin (Supabase REST/Auth, Resend, APIs) -> NEVER cached,
      always go to the network, so data is never served stale.
    Bump CACHE on each release; old caches are deleted on activate. */
-const CACHE = 'magnet-os-v30';
+const CACHE = 'magnet-os-v31';
 
 self.addEventListener('install', e => self.skipWaiting());
 
@@ -29,8 +29,15 @@ self.addEventListener('fetch', e => {
   let url;
   try { url = new URL(req.url); } catch (_) { return; }
 
-  // Never touch cross-origin requests (Supabase, Resend, any API): always live.
+  // Never touch cross-origin requests (Supabase, Resend): always live.
   if (url.origin !== self.location.origin) return;
+
+  // Same-origin server endpoints are live application state too. In particular,
+  // /api/runtime-config chooses the Supabase project for this deployment. Caching
+  // it can pin one laptop to an old/retired database or the wrong environment.
+  // Let the browser perform these requests normally and honour the endpoint's
+  // own no-store headers; never put an /api response in the app-shell cache.
+  if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
 
   const isNav = req.mode === 'navigate' ||
     (req.headers.get('accept') || '').includes('text/html');
@@ -39,7 +46,9 @@ self.addEventListener('fetch', e => {
     // Network-first for the app shell so deploys are picked up instantly.
     e.respondWith(
       fetch(req).then(res => {
-        try { caches.open(CACHE).then(c => c.put(req, res.clone())); } catch (_) {}
+        if (res && res.ok) {
+          try { caches.open(CACHE).then(c => c.put(req, res.clone())); } catch (_) {}
+        }
         return res;
       }).catch(() => caches.match(req).then(hit => hit || caches.match('/index.html')))
     );
@@ -49,7 +58,10 @@ self.addEventListener('fetch', e => {
   // Static same-origin assets: stale-while-revalidate.
   e.respondWith(
     caches.open(CACHE).then(c => c.match(req).then(hit => {
-      const net = fetch(req).then(res => { try { c.put(req, res.clone()); } catch (_) {} return res; }).catch(() => hit);
+      const net = fetch(req).then(res => {
+        if (res && res.ok) { try { c.put(req, res.clone()); } catch (_) {} }
+        return res;
+      }).catch(() => hit);
       return hit || net;
     }))
   );

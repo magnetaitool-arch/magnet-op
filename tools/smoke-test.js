@@ -95,6 +95,7 @@ console.log('\n[5] dangerous-pattern scan');
 const intakeCore = read('server/public-intake.js');
 const intakeMigration = read('supabase/migrations/20260825203000_transactional_public_intake.sql');
 const runtimeConfig = read('api/runtime-config.js');
+const serviceWorker = read('serviceworker.js');
 !/jdylrthffifbhyrrhuqd/.test(runtimeConfig)
   && /process\.env\.SUPABASE_URL \|\| ''/.test(runtimeConfig)
   && /process\.env\.SUPABASE_ANON_KEY \|\| ''/.test(runtimeConfig)
@@ -110,6 +111,23 @@ const runtimeConfig = read('api/runtime-config.js');
 /sendTaskAssignmentEmail\(created,false\)/.test(html) && /assignmentEmailStatus:result\.status/.test(html)
   ? ok('task assignments trigger tracked email delivery')
   : bad('task assignment email tracking is missing');
+/url\.pathname === '\/api' \|\| url\.pathname\.startsWith\('\/api\/'\)/.test(serviceWorker)
+  ? ok('service worker never caches same-origin API/runtime configuration')
+  : bad('service worker can cache same-origin API/runtime configuration and pin devices to stale environments');
+/(?:if \(res && res\.ok\)|res\.ok)[\s\S]{0,140}c\.put\(req, res\.clone\(\)\)/.test(serviceWorker)
+  ? ok('service worker caches only successful responses')
+  : bad('service worker can persist failed responses in the app shell cache');
+/height:100dvh/.test(html) && /grid-template-columns:208px minmax\(0,1fr\)/.test(html)
+  ? ok('app shell uses dynamic viewport height and matching tablet grid columns')
+  : bad('app shell can be clipped on laptops/tablets');
+/function clearSessionUser\(\)[\s\S]{0,500}sync-pending-chip/.test(html)
+  ? ok('logout and rejected sessions remove stale sync-status chrome')
+  : bad('logged-out screens can retain another session sync-status chrome');
+/mo-save-status'[\s\S]{0,500}right:14px;left:auto/.test(html)
+  && /sync-pending-chip'[\s\S]{0,500}right:14px;left:auto/.test(html)
+  && /window\.innerWidth<=767\?'calc\(126px \+ env\(safe-area-inset-bottom\)\)'/.test(html)
+  ? ok('sync feedback avoids the sidebar footer and mobile bottom navigation')
+  : bad('sync feedback can cover persistent navigation or user controls');
 /payslipEmailStatus/.test(html) && /Confirm the salary was actually paid/.test(html)
   ? ok('payslip delivery is separated from explicit payment confirmation')
   : bad('payslip email may still be conflated with salary payment');

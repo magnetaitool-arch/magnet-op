@@ -67,7 +67,7 @@
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html,body{height:100%;height:100dvh;min-height:0}
 body{
   font-family:var(--sans);
   background:var(--bg);
@@ -92,11 +92,11 @@ input,textarea{font-family:inherit}
 }
 
 /* ===== app frame ===== */
-#root{height:100vh}
+#root{height:100vh;height:100dvh;min-height:0}
 .app{
   display:grid;
-  grid-template-columns:248px 1fr;
-  height:100vh;
+  grid-template-columns:248px minmax(0,1fr);
+  height:100vh;height:100dvh;min-height:0;
   background:
     radial-gradient(1200px 600px at 78% -8%, rgba(200,243,30,.05), transparent 60%),
     radial-gradient(900px 500px at -5% 110%, rgba(120,130,140,.06), transparent 60%),
@@ -164,7 +164,7 @@ input,textarea{font-family:inherit}
 }
 .nav-item.active .badge{background:var(--lime);color:#0a0a0a}
 
-.side-foot{padding:14px 16px;border-top:1px solid var(--line)}
+.side-foot{padding:14px 16px;border-top:1px solid var(--line);flex:0 0 auto}
 .user{
   display:flex;align-items:center;gap:11px;padding:8px;border-radius:var(--r-m);
   transition:.16s;cursor:pointer;
@@ -182,7 +182,7 @@ input,textarea{font-family:inherit}
 .user .ut span{font-size:10.5px;color:var(--ink-3)}
 
 /* ===== main ===== */
-.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;height:100%;overflow:hidden}
 .topbar{
   height:64px;flex:0 0 64px;
   display:flex;align-items:center;gap:18px;
@@ -234,7 +234,7 @@ input,textarea{font-family:inherit}
 .btn-ghost:hover{background:var(--panel-hi);border-color:var(--line-strong)}
 
 /* ===== content scroll ===== */
-.canvas{flex:1;overflow-y:auto;min-height:0;padding:30px 30px 60px;scroll-behavior:smooth;
+.canvas{flex:1;overflow-y:auto;min-height:0;padding:30px 30px max(60px,env(safe-area-inset-bottom));scroll-behavior:smooth;overscroll-behavior:contain;scrollbar-gutter:stable;
   background:
     radial-gradient(900px 480px at 100% -6%, rgba(200,243,30,.07), transparent 60%),
     radial-gradient(760px 460px at -6% 112%, rgba(255,138,61,.05), transparent 58%)}
@@ -807,10 +807,37 @@ a.mini{text-decoration:none;display:inline-block}
 .hamburger,.nav-close,.bottom-nav,.more-scrim{display:none}
 .tbl-wrap{overflow-x:auto}
 
+/* ---- Compact laptops: preserve the canvas and keep the utility bar usable ---- */
+@media (max-width:1365px) and (min-width:1024px){
+  .app{grid-template-columns:220px minmax(0,1fr)}
+  .topbar{padding:0 18px;gap:12px}
+  .top-actions{gap:6px;min-width:0}
+  .top-actions .tb-radio,.top-actions .tb-sound{display:none}
+  .top-actions .sel{max-width:112px}
+  .top-actions .user-chip .uc-role{display:none}
+  .crumbs{min-width:0}
+  .crumbs span:last-child{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .canvas{padding:24px 22px max(56px,env(safe-area-inset-bottom))}
+}
+
 /* ---- Tablet: narrower sidebar ---- */
 @media (max-width:1023px){
-  .sidebar{width:208px}
+  .app{grid-template-columns:208px minmax(0,1fr)}
+  .sidebar{width:auto}
+  .topbar{padding:0 14px;gap:10px}
+  .top-actions{gap:5px;min-width:0}
+  .top-actions .tb-radio,.top-actions .tb-sound,.top-actions .tb-theme,.top-actions .tag{display:none}
+  .top-actions .sel{max-width:96px}
+  .top-actions .user-chip .uc-role{display:none}
   .grid.g-4{grid-template-columns:repeat(2,1fr)}
+}
+
+@media (max-height:760px) and (min-width:768px){
+  .brand{padding-block:13px}
+  .nav{padding-block:8px}
+  .nav-item{padding-block:7px}
+  .side-foot{padding-block:8px}
+  .canvas{padding-top:20px;padding-bottom:max(44px,env(safe-area-inset-bottom))}
 }
 
 /* ---- Mobile: drawer sidebar + bottom nav + cards ---- */
@@ -1259,7 +1286,7 @@ body.theme-light .tbl thead th{background:#fff}
 /* Documents V2 — private object storage with compact metadata-first browsing */
 .documents-v2-shell{display:flex;flex-direction:column;gap:14px;min-width:0}.document-summary{display:grid;grid-template-columns:repeat(4,minmax(135px,1fr));gap:8px}.document-summary>div{padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}.document-summary span{display:block;color:var(--ink-4);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.document-summary b{display:block;margin-top:7px;font:750 17px var(--display)}.document-actions{display:flex;gap:7px;flex-wrap:wrap}.document-toolbar{display:grid;grid-template-columns:minmax(230px,1fr) 180px 180px 170px auto;gap:8px;align-items:center}.document-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.document-card{display:grid;grid-template-columns:46px minmax(0,1fr) auto;gap:11px;align-items:start;padding:13px;border:1px solid var(--line);border-radius:13px;background:var(--panel);cursor:pointer;text-align:start;color:var(--ink)}.document-card:hover{border-color:var(--line-strong);transform:translateY(-1px)}.document-thumb{width:46px;height:54px;border-radius:9px;border:1px solid var(--line);display:grid;place-items:center;background:linear-gradient(145deg,rgba(200,243,30,.12),rgba(63,215,255,.06));overflow:hidden}.document-thumb img{width:100%;height:100%;object-fit:cover}.document-thumb svg{width:20px;height:20px;color:var(--lime)}.document-card b{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.document-card small{display:block;color:var(--ink-4);font-size:9.5px;margin-top:5px;line-height:1.4}.document-card .tag{font-size:8px}.document-upload-zone{padding:20px;border:1px dashed var(--line-strong);border-radius:14px;background:rgba(255,255,255,.015)}.document-upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.document-upload-file{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel)}.document-upload-file svg{width:20px;height:20px;color:var(--lime)}.document-upload-file b{display:block;font-size:11.5px}.document-upload-file span{display:block;color:var(--ink-4);font-size:9.5px;margin-top:4px}.document-progress{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px}.document-progress i{display:block;height:100%;background:var(--lime);transition:width .25s ease}.document-profile-modal{width:1000px!important;max-width:98vw!important}.document-profile-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.document-profile-actions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}.document-preview{min-height:360px;display:grid;place-items:center;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#10120e}.document-preview img{max-width:100%;max-height:65vh;object-fit:contain}.document-preview iframe{width:100%;height:65vh;border:0;background:#fff}.document-preview-fallback{text-align:center;padding:35px;color:var(--ink-4)}.document-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.document-facts>div{padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.document-facts span{display:block;font-size:8.5px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em}.document-facts b{display:block;margin-top:5px;font-size:10.5px;word-break:break-word}.document-generated{overflow-x:auto;border:1px solid var(--line);border-radius:13px}.document-generated .tbl{min-width:700px}
 /* Tasks V2 — accountable work queue, compact detail and status timeline */
-.tasks-v2-shell{display:flex;flex-direction:column;gap:14px;min-width:0}.task-summary{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;overflow-x:auto;scrollbar-width:thin}.task-summary button{min-width:120px;text-align:start;border:1px solid var(--line);border-radius:13px;background:var(--panel);color:var(--ink);padding:12px;cursor:pointer}.task-summary button.on{border-color:rgba(200,243,30,.52);background:var(--lime-glow)}.task-summary span{display:block;color:var(--ink-4);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.task-summary b{display:block;margin-top:6px;font:750 18px var(--display)}.task-toolbar{display:grid;grid-template-columns:minmax(240px,1fr) 180px 150px auto;gap:8px;align-items:center}.task-v2-list{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.task-v2-list .tbl{min-width:900px}.task-title-cell{display:flex;gap:10px;align-items:flex-start;min-width:220px}.task-priority{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:var(--ink-4)}.task-priority.high{background:var(--warn);box-shadow:0 0 8px rgba(255,194,75,.55)}.task-priority.urgent{background:var(--neg);box-shadow:0 0 8px rgba(255,111,116,.55)}.task-title-cell b{display:block;font-size:12px}.task-title-cell small{display:block;color:var(--ink-4);font-size:9.5px;margin-top:4px}.task-status-actions{display:flex;gap:5px;flex-wrap:wrap}.task-profile-modal{width:1040px!important;max-width:98vw!important}.task-profile-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.task-profile-actions{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}.task-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin:14px 0}.task-facts>div{background:var(--panel);padding:11px;min-width:0}.task-facts span{display:block;color:var(--ink-4);font-size:8.5px;text-transform:uppercase;letter-spacing:.06em}.task-facts b{display:block;color:var(--ink-2);font-size:10.5px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-detail-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(270px,.8fr);gap:12px}.task-detail-card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:14px;margin-bottom:10px}.task-detail-card h4{margin:0 0 9px;font:700 12px var(--display)}.task-detail-card p{margin:0;color:var(--ink-2);font-size:12px;line-height:1.7;white-space:pre-wrap}.task-timeline{display:flex;flex-direction:column}.task-event{display:grid;grid-template-columns:10px 1fr;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)}.task-event i{width:7px;height:7px;border-radius:50%;background:var(--lime);margin-top:5px}.task-event b{display:block;font-size:10.5px}.task-event small{display:block;color:var(--ink-4);font-size:9px;margin-top:3px}.task-comment{padding:9px 0;border-bottom:1px solid var(--line)}.task-comment p{font-size:11.5px}.task-comment small{display:block;color:var(--ink-4);font-size:9px;margin-top:5px}.task-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.task-editor-grid .full{grid-column:1/-1}.task-error{padding:10px 12px;border:1px solid rgba(255,111,116,.35);border-radius:10px;background:rgba(255,111,116,.06);color:#ff9498;font-size:11px}.task-loading{min-height:220px;display:grid;place-items:center;color:var(--ink-4);font-size:12px}.cmdk-status{padding:9px 13px;color:var(--ink-4);font-size:11px}
+.tasks-v2-shell{display:flex;flex-direction:column;gap:14px;min-width:0}.task-summary{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;overflow-x:auto;scrollbar-width:thin}.task-summary button{min-width:120px;text-align:start;border:1px solid var(--line);border-radius:13px;background:var(--panel);color:var(--ink);padding:12px;cursor:pointer}.task-summary button.on{border-color:rgba(200,243,30,.52);background:var(--lime-glow)}.task-summary span{display:block;color:var(--ink-4);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.task-summary b{display:block;margin-top:6px;font:750 18px var(--display)}.task-toolbar{display:grid;grid-template-columns:minmax(240px,1fr) 180px 150px auto;gap:8px;align-items:center}.task-month-export{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}.task-month-export>div{flex:1;min-width:220px}.task-month-export b{display:block;font-size:11.5px}.task-month-export small{display:block;color:var(--ink-4);font-size:9.5px;line-height:1.5;margin-top:4px}.task-month-export input{min-width:145px}.task-v2-list{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.task-v2-list .tbl{min-width:900px}.task-title-cell{display:flex;gap:10px;align-items:flex-start;min-width:220px}.task-priority{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:var(--ink-4)}.task-priority.high{background:var(--warn);box-shadow:0 0 8px rgba(255,194,75,.55)}.task-priority.urgent{background:var(--neg);box-shadow:0 0 8px rgba(255,111,116,.55)}.task-title-cell b{display:block;font-size:12px}.task-title-cell small{display:block;color:var(--ink-4);font-size:9.5px;margin-top:4px}.task-status-actions{display:flex;gap:5px;flex-wrap:wrap}.task-profile-modal{width:1040px!important;max-width:98vw!important}.task-profile-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.task-profile-actions{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}.task-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin:14px 0}.task-facts>div{background:var(--panel);padding:11px;min-width:0}.task-facts span{display:block;color:var(--ink-4);font-size:8.5px;text-transform:uppercase;letter-spacing:.06em}.task-facts b{display:block;color:var(--ink-2);font-size:10.5px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-detail-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(270px,.8fr);gap:12px}.task-detail-card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:14px;margin-bottom:10px}.task-detail-card h4{margin:0 0 9px;font:700 12px var(--display)}.task-detail-card p{margin:0;color:var(--ink-2);font-size:12px;line-height:1.7;white-space:pre-wrap}.task-timeline{display:flex;flex-direction:column}.task-event{display:grid;grid-template-columns:10px 1fr;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)}.task-event i{width:7px;height:7px;border-radius:50%;background:var(--lime);margin-top:5px}.task-event b{display:block;font-size:10.5px}.task-event small{display:block;color:var(--ink-4);font-size:9px;margin-top:3px}.task-comment{padding:9px 0;border-bottom:1px solid var(--line)}.task-comment p{font-size:11.5px}.task-comment small{display:block;color:var(--ink-4);font-size:9px;margin-top:5px}.task-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.task-editor-grid .full{grid-column:1/-1}.task-error{padding:10px 12px;border:1px solid rgba(255,111,116,.35);border-radius:10px;background:rgba(255,111,116,.06);color:#ff9498;font-size:11px}.task-loading{min-height:220px;display:grid;place-items:center;color:var(--ink-4);font-size:12px}.cmdk-status{padding:9px 13px;color:var(--ink-4);font-size:11px}
 @media(max-width:1050px){.rec-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-list-head,.rec-row{grid-template-columns:minmax(200px,1.4fr) minmax(120px,.8fr) 110px 112px 70px}.rec-list-head>:nth-child(5),.rec-row>:nth-child(5){display:none}.rec-toolbar{grid-template-columns:minmax(220px,1fr) 145px 165px auto}}
 @media(max-width:767px){.rec-toolbar{grid-template-columns:1fr 1fr}.rec-search{grid-column:1/-1}.rec-view-toggle{justify-self:stretch}.rec-view-toggle button{flex:1}.rec-list-head{display:none}.rec-row{grid-template-columns:1fr auto;padding:13px;gap:9px}.rec-row>:nth-child(2),.rec-row>:nth-child(4),.rec-row>:nth-child(5){display:none}.rec-row>:nth-child(3){grid-column:2;grid-row:1}.rec-row>:nth-child(6){grid-column:2;grid-row:2}.rec-cards{grid-template-columns:1fr}.rec-profile-head{flex-direction:column}.rec-profile-actions{justify-content:flex-start}.rec-facts,.rec-answer-list{grid-template-columns:1fr 1fr}.rec-interview-form{grid-template-columns:1fr}.rec-pagination{align-items:flex-start;flex-direction:column}}
 @media(max-width:430px){.rec-facts,.rec-answer-list{grid-template-columns:1fr}.rec-toolbar{grid-template-columns:1fr}.rec-toolbar>*{grid-column:1}.rec-view-toggle{justify-self:stretch}}
@@ -1274,7 +1301,7 @@ body.theme-light .tbl thead th{background:#fff}
 @media(max-width:430px){.document-upload-grid,.document-facts,.document-summary{grid-template-columns:1fr}}
 @media(max-width:430px){.workspace-hero-metrics{grid-template-columns:1fr}.client-toolbar{grid-template-columns:1fr}.client-count{justify-self:start}.crm-profile-modal{width:100vw!important;max-width:100vw!important;height:100dvh!important;border-radius:0!important}.finance-toolbar{grid-template-columns:1fr}.finance-toolbar>*{grid-column:1}}
 @media(max-width:900px){.task-toolbar{grid-template-columns:1fr 1fr}.task-toolbar .rec-search{grid-column:1/-1}.task-facts{grid-template-columns:repeat(3,1fr)}.task-detail-grid{grid-template-columns:1fr}.task-profile-modal{width:100vw!important;max-width:100vw!important;height:100dvh!important;border-radius:0!important}}
-@media(max-width:600px){.task-toolbar,.task-editor-grid{grid-template-columns:1fr}.task-toolbar>*,.task-editor-grid>*{grid-column:1}.task-profile-head{flex-direction:column}.task-profile-actions{justify-content:flex-start}.task-facts{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.task-toolbar,.task-editor-grid{grid-template-columns:1fr}.task-toolbar>*,.task-editor-grid>*{grid-column:1}.task-month-export{align-items:stretch}.task-month-export>div{min-width:100%}.task-month-export .sel,.task-month-export .btn{width:100%;justify-content:center}.task-profile-head{flex-direction:column}.task-profile-actions{justify-content:flex-start}.task-facts{grid-template-columns:1fr 1fr}}
 
 </style></head>
 <body>
@@ -4646,9 +4673,10 @@ function moSaveStatus(state, n){
     const m=M[state]; if(!m) return;
     let el=document.getElementById('mo-save-status');
     if(!el){ el=document.createElement('div'); el.id='mo-save-status';
-      el.style.cssText='position:fixed;left:14px;bottom:14px;z-index:10000;background:#151713;border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.05em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);user-select:none;transition:opacity .3s';
+      el.style.cssText='position:fixed;right:14px;left:auto;bottom:14px;z-index:10000;max-width:min(360px,calc(100vw - 28px));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#151713;border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.05em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);user-select:none;transition:opacity .3s';
       document.body.appendChild(el);
     }
+    el.style.bottom=window.innerWidth<=767?'calc(84px + env(safe-area-inset-bottom))':'14px';
     el.style.color=m.c; el.style.border='1px solid '+m.b; el.style.opacity='1'; el.textContent=m.t;
     const clickable=(state==='failed'||state==='queued');
     el.style.cursor=clickable?'pointer':'default';
@@ -4796,10 +4824,11 @@ function syncQueueChip(){
     if(!n){ if(el) el.remove(); return; }
     if(!el){
       el=document.createElement('div'); el.id='sync-pending-chip';
-      el.style.cssText='position:fixed;left:14px;bottom:58px;z-index:9999;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
+      el.style.cssText='position:fixed;right:14px;left:auto;bottom:58px;z-index:9999;max-width:min(360px,calc(100vw - 28px));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
       el.onclick=function(){ syncQueueDrain(); };
       document.body.appendChild(el);
     }
+    el.style.bottom=window.innerWidth<=767?'calc(126px + env(safe-area-inset-bottom))':'58px';
     const _arc=(function(){ try{ return (JSON.parse(localStorage.getItem('tia_agency_os_appsettings')||'{}').language)==='ar'; }catch(e){ return false; } })();
     el.title=_arc?'فيه تغييرات مستنية ترفع للسحابة — بتتبعت تلقائيًا، ودوس هنا لو عايز تبعتها دلوقتي.':'Pending cloud writes. They retry automatically; click to retry now.';
     el.textContent=_arc?('في انتظار المزامنة: '+n):('SYNC PENDING: '+n);
@@ -5123,7 +5152,13 @@ function setSessionUser(user, remember){
     else { try{sessionStorage.setItem(AUTH_KEYS.current, data);}catch(e){} store.del(AUTH_KEYS.current); }
   } catch(e){}
 }
-function clearSessionUser(){ store.del(AUTH_KEYS.current); try{sessionStorage.removeItem(AUTH_KEYS.current);}catch(e){} }
+function clearSessionUser(){
+  store.del(AUTH_KEYS.current);
+  try{sessionStorage.removeItem(AUTH_KEYS.current);}catch(e){}
+  // Pending writes remain safely quarantined by identity, but login/setup screens
+  // must never show a previous user's sync state or a permanent retry badge.
+  try{const chip=document.getElementById('sync-pending-chip');if(chip)chip.remove();const status=document.getElementById('mo-save-status');if(status)status.remove();}catch(e){}
+}
 
 /* ---- login (returns {ok, user, token?} or {ok:false, reason}) ---- */
 async function authLogin(identifier, password){
@@ -8996,6 +9031,25 @@ function downloadFinanceCSV(tab,rows){
   const blob=new Blob(['\ufeff'+body],{type:'text/csv;charset=utf-8'}); const href=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=href;a.download='magnet-'+String(tab||'finance').toLowerCase()+'-'+todayISO()+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),1000);
 }
+function taskRowsForMonth(db,period){
+  if(!/^\d{4}-\d{2}$/.test(String(period||'')))return [];
+  const inMonth=value=>String(value||'').slice(0,7)===period;
+  return (db.tasks||[]).filter(task=>!task._del&&[task.completedAt,task.dueDate,task.updatedAt,task.createdAt].some(inMonth))
+    .map(normalizeTask).sort((a,b)=>String(a.dueDate||a.completedAt||'').localeCompare(String(b.dueDate||b.completedAt||'')));
+}
+function downloadTaskMonthCSV(db,period){
+  const tasks=taskRowsForMonth(db,period); if(!tasks.length)return 0;
+  const headers=['Task code','Task','Client','Project','Assignee','Status','Priority','Start date','Due date','Completed at','Estimated hours','Actual hours','Delivery link'];
+  const quote=value=>'"'+String(value==null?'':value).replace(/"/g,'""')+'"';
+  const rows=tasks.map(task=>[
+    task.taskCode,task.title,nameById(db.clients,task.clientId),nameById(db.projects,task.projectId),nameById(db.employees,task.assignedTo),
+    task.status,task.priority,task.startDate,task.dueDate,task.completedAt,task.estimatedHours,task.actualHours,task.deliveryLink
+  ]);
+  const body=[headers,...rows].map(row=>row.map(quote).join(',')).join('\n');
+  const blob=new Blob(['\ufeff'+body],{type:'text/csv;charset=utf-8'});const href=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=href;a.download='magnet-task-archive-'+period+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),1000);
+  return tasks.length;
+}
 function FinanceWorkspaceView({ctx,initialTab,canEdit}){
   const ar=ctx.lang==='ar'; const L=(en,ara)=>ar?ara:en;
   const tabs=['Invoices','Payments','Expenses','Payroll','Contracts'];
@@ -10693,7 +10747,7 @@ function TaskProfileV2({ctx,taskId,onClose,onChanged}){
 }
 
 function TasksWorkspaceV2({ctx,visible,ce}){
-  const ar=ctx.lang==='ar'; const [result,setResult]=useState({items:[],total:0,counts:{},page:1,pages:1}); const [scope,setScope]=useState('ALL'); const [status,setStatus]=useState(''); const [query,setQuery]=useState(''); const [page,setPage]=useState(1); const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [legacyFallback,setLegacyFallback]=useState(false); const [selected,setSelected]=useState(null); const [creating,setCreating]=useState(false); const deepDone=useRef(false);
+  const ar=ctx.lang==='ar'; const [result,setResult]=useState({items:[],total:0,counts:{},page:1,pages:1}); const [scope,setScope]=useState('ALL'); const [status,setStatus]=useState(''); const [query,setQuery]=useState(''); const [page,setPage]=useState(1); const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [legacyFallback,setLegacyFallback]=useState(false); const [selected,setSelected]=useState(null); const [creating,setCreating]=useState(false); const [exportMonth,setExportMonth]=useState(previousMonthISO()); const deepDone=useRef(false);
   const canManage=(ctx.user.capabilities||[]).includes('work.manage')||canCreateTasks(ctx.role);
   const load=async()=>{if(!ctx.organizationId){setError(ar?'اختر المؤسسة أولًا.':'Choose an organization first.');setLoading(false);return;}setLoading(true);setError('');try{const data=await ctx.rpc('list_tasks_v2',{p_organization_id:ctx.organizationId,p_scope:scope,p_status:status||null,p_search:query||null,p_client_account_id:null,p_project_record_id:null,p_page:page,p_page_size:50});setResult(Object.assign({items:[],total:0,counts:{},page:1,pages:1},data||{}));setLegacyFallback(false);}catch(e){const message=String(e.message||e);if(/list_tasks_v2|schema cache|could not find/i.test(message))setLegacyFallback(true);else setError(message);}setLoading(false);};
   useEffect(()=>{const timer=setTimeout(load,query?220:0);return()=>clearTimeout(timer);},[ctx.organizationId,scope,status,query,page]);
@@ -10707,6 +10761,7 @@ function TasksWorkspaceV2({ctx,visible,ce}){
   return html`<div class="view tasks-v2-shell"><${Head} eyebrow=${ar?'التسليم':'Delivery'} title=${ar?'المهام':'Tasks'} desc=${ar?'مسؤول واضح، حالة قابلة للتتبع، وإنهاء مؤكد من الموظف.':'Clear ownership, traceable status and accountable completion.'}>${canManage&&html`<button class="btn btn-pri" onClick=${()=>setCreating(true)}>${React.createElement(Icon.plus)} ${ar?'مهمة جديدة':'New task'}</button>`}<//>
     <div class="task-summary">${summaries.map(s=>html`<button key=${s[0]||'all'} class=${status===s[0]?'on':''} onClick=${()=>{setStatus(s[0]);setPage(1);}}><span>${s[1]}</span><b>${s[2]}</b></button>`)}</div>
     <div class="task-toolbar"><div class="rec-search">${React.createElement(Icon.search)}<input value=${query} placeholder=${ar?'ابحث بالاسم أو كود المهمة…':'Search title or task code…'} onInput=${e=>{setQuery(e.target.value);setPage(1);}}/></div><select class="sel" value=${scope} onChange=${e=>{setScope(e.target.value);setPage(1);}}><option value="ALL">${ar?'كل المهام المتاحة':'All available tasks'}</option><option value="MINE">${ar?'مهامي فقط':'My tasks only'}</option></select><select class="sel" value=${status} onChange=${e=>{setStatus(e.target.value);setPage(1);}}><option value="">${ar?'كل الحالات':'All statuses'}</option>${ST.task.map(s=>html`<option value=${s}>${s}</option>`)}</select><span class="muted mono">${result.total} ${ar?'مهمة':'tasks'}</span></div>
+    ${canManage&&html`<div class="task-month-export"><div><b>${ar?'أرشيف مهام الشهر (Excel / Sheets)':'Monthly task archive (Excel / Sheets)'}</b><small>${ar?'يصدّر مهام الشهر في ملف CSV بدون مسح الأصل؛ تفضل محفوظة للبحث والتقارير والمراجعة.':'Exports the month to CSV without deleting the originals, so history remains searchable and report-ready.'}</small></div><input class="sel" type="month" value=${exportMonth} onChange=${e=>setExportMonth(e.target.value)}/><span class="muted mono">${taskRowsForMonth(ctx.db,exportMonth).length}</span><button class="btn btn-ghost" disabled=${!taskRowsForMonth(ctx.db,exportMonth).length} onClick=${()=>downloadTaskMonthCSV(ctx.db,exportMonth)}>${React.createElement(Icon.download)} ${ar?'تصدير الشهر':'Export month'}</button></div>`}
     ${error&&html`<div class="task-error">${error}</div>`}
     ${loading?html`<div class="task-loading">${ar?'جاري تحميل المهام…':'Loading tasks…'}</div>`:!(result.items||[]).length?html`<${EmptyState} icon="check" title=${ar?'لا توجد مهام في العرض ده':'No tasks in this view'} text=${ar?'غيّر الفلتر أو أنشئ مهمة جديدة.':'Change the filter or create a new task.'}/>`:html`<div class="task-v2-list"><table class="tbl"><thead><tr><th>${ar?'المهمة':'Task'}</th><th>${ar?'العميل / المشروع':'Client / project'}</th><th>${ar?'المسؤول':'Assignee'}</th><th>${ar?'الحالة':'Status'}</th><th>${ar?'التسليم':'Due'}</th><th></th></tr></thead><tbody>${result.items.map(task=>{const delay=calculateTaskDelay(task);return html`<tr key=${task.id} onClick=${()=>open(task.id)} style=${{cursor:'pointer'}}><td><div class="task-title-cell"><i class="task-priority ${String(task.priority||'').toLowerCase()}"></i><div><b>${task.title}</b><small>${task.taskCode} · ${task.priority}</small></div></div></td><td><b>${nameById(ctx.db.clients,task.clientId)}</b><small>${nameById(ctx.db.projects,task.projectId)}</small></td><td>${nameById(ctx.db.employees,task.assignedTo)}${!task.assignedUserId&&html`<small style=${{color:'var(--warn)'}}>${ar?'غير مربوط بحساب':'Login not linked'}</small>`}</td><td><${Tag} type=${task.status==='Done'?'ok':task.status==='Blocked'?'neg':task.status==='Internal Review'?'warn':''}>${task.status}<//></td><td style=${{color:delay.overdue?'var(--neg)':null}}>${fmtDate(task.dueDate)}</td><td class="right">${task.status!=='Done'&&task.canChangeStatus&&html`<button class="mini pri" onClick=${e=>markDone(task,e)}>✓ ${ar?'تم':'Done'}</button>`}<button class="mini" onClick=${e=>{e.stopPropagation();open(task.id);}}>${ar?'فتح':'Open'}</button></td></tr>`;})}</tbody></table></div>`}
     ${result.pages>1&&html`<div class="rec-pagination"><span>${ar?'صفحة':'Page'} ${result.page} / ${result.pages}</span><div class="flex gap8"><button class="mini" disabled=${page<=1} onClick=${()=>setPage(p=>p-1)}>${ar?'السابق':'Prev'}</button><button class="mini" disabled=${page>=result.pages} onClick=${()=>setPage(p=>p+1)}>${ar?'التالي':'Next'}</button></div></div>`}

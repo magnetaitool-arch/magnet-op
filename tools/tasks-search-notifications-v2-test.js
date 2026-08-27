@@ -59,6 +59,8 @@ check(/ASSIGNEE|غير مربوط بحساب|Login not linked/.test(app),'unlink
 check(/magnet:new-task/.test(app),'global quick-create opens Tasks V2');
 check(/open'\)==='tasks'/.test(app),'task deep links are handled');
 check(/@media\(max-width:900px\)[^\n]*task-toolbar/.test(app),'Tasks V2 has a mobile layout');
+check(/function downloadTaskMonthCSV\(/.test(app) && /magnet-task-archive-/.test(app),'monthly tasks export to an Excel/Sheets-compatible archive');
+check(/without deleting the originals|بدون مسح الأصل/.test(app),'monthly export preserves task history instead of deleting it');
 
 console.log('\n[5] actionable notifications and global search UX');
 check(/function CommandPalette\(\{ items, onClose, searchProvider \}\)/.test(app),'command palette accepts server search');
