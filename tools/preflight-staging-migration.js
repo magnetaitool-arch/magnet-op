@@ -10,7 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
+const { PROTECTED_PROJECT_REFS } = require('./project-safety');
 const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
 const ROOT = path.resolve(__dirname, '..');
 
@@ -56,7 +56,7 @@ function main() {
   const sourcePath = path.resolve(ROOT, String(args.file || ''));
   const migrationRoot = path.join(ROOT, 'supabase', 'migrations') + path.sep;
 
-  if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) {
+  if (!/^[a-z]{20}$/.test(projectRef) || PROTECTED_PROJECT_REFS.has(projectRef)) {
     throw new Error('Refused: an explicit non-Production Supabase project ref is required.');
   }
   if (!sourcePath.startsWith(migrationRoot) || !sourcePath.endsWith('.sql') || !fs.existsSync(sourcePath)) {

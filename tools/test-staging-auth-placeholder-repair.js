@@ -9,7 +9,7 @@
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
+const { PROTECTED_PROJECT_REFS } = require('./project-safety');
 const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
 
 function parseArgs(argv) {
@@ -61,7 +61,7 @@ async function jsonFetch(url, init = {}) {
 
 async function main() {
   const projectRef = String(parseArgs(process.argv)['project-ref'] || '').trim();
-  if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) {
+  if (!/^[a-z]{20}$/.test(projectRef) || PROTECTED_PROJECT_REFS.has(projectRef)) {
     throw new Error('Refused: an explicit non-Production project ref is required.');
   }
   const projects = commandJson(['projects', 'list', '--output', 'json']);

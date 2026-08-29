@@ -98,7 +98,7 @@ check(/confirmation_token = coalesce\(auth_user\.confirmation_token, ''\)/.test(
   && /email_change_token_new = coalesce\(auth_user\.email_change_token_new, ''\)/.test(stagingReconciliation)
   && /email_change = coalesce\(auth_user\.email_change, ''\)/.test(stagingReconciliation),
 'restored passwordless identities normalize legacy provider token columns before first login');
-check(/PRODUCTION_REF/.test(restoredAuthTest) && /refused_non_staging|explicit non-Production/.test(restoredAuthTest)
+check(/PROTECTED_PROJECT_REFS/.test(restoredAuthTest) && /refused_non_staging|explicit non-Production/.test(restoredAuthTest)
   && /magnet_auth_repair_canary/.test(restoredAuthTest), 'restored Auth regression test is Staging-only and disposable');
 
 console.log('\n[6] browser cutover contract');

@@ -9,8 +9,10 @@ const BACKUP_VERSION = '1.0';
 const REPO_ROOT = path.resolve(__dirname, '..');
 const BACKUP_DIR = path.join(REPO_ROOT, 'backups');
 
-// The one and only production project, per AUDIT_REPORT.md assumption #1.
-const DEFAULT_SUPABASE_URL = 'https://jdylrthffifbhyrrhuqd.supabase.co';
+// Database targets are deployment configuration, never code defaults. A stale
+// fallback previously kept backup/diagnostic tools pointed at the retired 402
+// project after the V2 cutover. Missing SUPABASE_URL must now fail closed.
+const DEFAULT_SUPABASE_URL = '';
 
 function loadDotEnv() {
   // Minimal .env loader so the tools work without adding the `dotenv` dependency.
@@ -30,7 +32,7 @@ function loadDotEnv() {
 
 function getConfig() {
   loadDotEnv();
-  const url = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/$/, '');
+  const url = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
   // Prefer the service-role key (full read incl. _accounts, RLS-bypass). Fall back
   // to the publishable/anon key, which can still read whatever anon policy allows.
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';

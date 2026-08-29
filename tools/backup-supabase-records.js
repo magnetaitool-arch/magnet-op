@@ -6,7 +6,7 @@
 //   node tools/backup-supabase-records.js --coll=clients
 //
 // Requires (in .env or the environment):
-//   SUPABASE_URL                = https://jdylrthffifbhyrrhuqd.supabase.co
+//   SUPABASE_URL                = https://<explicit-project-ref>.supabase.co
 //   SUPABASE_SERVICE_ROLE_KEY   = <service_role>   (recommended: includes _accounts)
 //   or SUPABASE_KEY / SUPABASE_ANON_KEY            (reads whatever anon may read)
 'use strict';

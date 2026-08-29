@@ -11,7 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
+const { PROTECTED_PROJECT_REFS } = require('./project-safety');
 const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
 const ROOT = path.resolve(__dirname, '..');
 
@@ -271,7 +271,7 @@ function main() {
   const args = parseArgs(process.argv);
   const projectRef = String(args['project-ref'] || '').trim();
   const apply = args.apply === true;
-  if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) {
+  if (!/^[a-z]{20}$/.test(projectRef) || PROTECTED_PROJECT_REFS.has(projectRef)) {
     throw new Error('Refused: an explicit non-Production Supabase project ref is required.');
   }
   const projects = parseJsonOutput(runSupabase(['projects', 'list', '--output', 'json']));

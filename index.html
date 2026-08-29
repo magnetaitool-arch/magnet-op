@@ -498,8 +498,8 @@ body.theme-light .btn{ border-radius:10px; }
 .mini.pri:hover{background:var(--lime-bright)}
 
 /* modal */
-.ovl{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:7vh 20px;animation:fadeUp .18s}
-.modal{background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 22%),var(--bg-2);border:1px solid var(--line-2);border-radius:var(--r-xl);width:480px;max-width:96vw;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 50px 110px -34px rgba(0,0,0,.9);animation:slideUp .24s cubic-bezier(.2,.7,.2,1)}
+.ovl{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:clamp(12px,4vh,36px) 20px;overflow-y:auto;overscroll-behavior:contain;animation:fadeUp .18s}
+.modal{background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 22%),var(--bg-2);border:1px solid var(--line-2);border-radius:var(--r-xl);width:480px;max-width:96vw;max-height:calc(100dvh - 24px);display:flex;flex-direction:column;min-height:0;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 50px 110px -34px rgba(0,0,0,.9);animation:slideUp .24s cubic-bezier(.2,.7,.2,1)}
 .modal.nudge{animation:modalNudge .2s ease}
 @keyframes modalNudge{0%{transform:scale(1)}40%{transform:scale(1.012)}100%{transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){.modal.nudge{animation:none}}
@@ -507,7 +507,7 @@ body.theme-light .btn{ border-radius:10px; }
 @keyframes slideUp{from{transform:translateY(16px);opacity:.5}to{transform:none;opacity:1}}
 .modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
 .modal-h h3{font-family:var(--display);font-size:16px;font-weight:600}
-.modal-b{padding:22px}
+.modal-b{padding:22px;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .fld{display:flex;flex-direction:column;gap:6px}
 .fld.full{grid-column:1/-1}
@@ -3984,22 +3984,70 @@ const AGENT_DEFS = [
 
 /* ============================ WORKFLOW STAGES ============================ */
 const WORKFLOW_STAGES = [
-  { n:1,  name:'New Lead',               role:'Sales',                          action:'Capture and qualify the lead',                next:'Client Brief' },
-  { n:2,  name:'Client Brief',           role:'Account Manager',                action:'Complete client brief and missing info',      next:'Proposal' },
-  { n:3,  name:'Proposal',               role:'Sales / Account Manager',        action:'Prepare and send the proposal',               next:'Contract / Confirmation' },
-  { n:4,  name:'Contract / Confirmation',role:'Owner / Manager',                action:'Confirm scope and sign the contract',         next:'Onboarding' },
-  { n:5,  name:'Onboarding',             role:'Account Manager',                action:'Collect assets and access; set up the client',next:'Task Creation' },
-  { n:6,  name:'Task Creation',          role:'Project Manager',                action:'Create the task checklist',                   next:'Team Execution' },
-  { n:7,  name:'Team Execution',         role:'Designer / Content / Media Buyer',action:'Produce the work',                           next:'Internal Review' },
-  { n:8,  name:'Internal Review',        role:'Project Manager',                action:'Review quality internally',                   next:'Manager Approval' },
-  { n:9,  name:'Manager Approval',       role:'Manager',                        action:'Approve before sending to client',            next:'Client Review' },
-  { n:10, name:'Client Review',          role:'Account Manager',                action:'Send to client and collect feedback',         next:'Final Delivery' },
-  { n:11, name:'Final Delivery',         role:'Project Manager',                action:'Deliver the approved work',                   next:'Invoice' },
-  { n:12, name:'Invoice',                role:'Finance',                        action:'Issue the invoice',                           next:'Payment' },
-  { n:13, name:'Payment',                role:'Finance',                        action:'Collect and record payment',                  next:'Monthly Report' },
-  { n:14, name:'Monthly Report',         role:'Account Manager / Media Buyer',  action:'Prepare the monthly report',                  next:'Renewal / Upsell' },
-  { n:15, name:'Renewal / Upsell',       role:'Sales / Manager',                action:'Discuss renewal and upsell',                  next:null },
+  { n:1,  name:'Qualified Lead',          arName:'ليد مؤهل',                    role:'Sales',                           action:'Confirm the qualified lead and conversion source', arAction:'تأكيد تأهيل الليد ومصدر التحويل', next:'Discovery & Brief', arNext:'الاكتشاف والبريف' },
+  { n:2,  name:'Discovery & Brief',       arName:'الاكتشاف والبريف',             role:'Account Manager',                 action:'Complete contact, service and brief information',   arAction:'استكمال بيانات التواصل والخدمة والبريف', next:'Proposal / Quote', arNext:'العرض / عرض السعر' },
+  { n:3,  name:'Proposal / Quote',        arName:'العرض / عرض السعر',            role:'Sales / Account Manager',         action:'Send and receive acceptance of the commercial offer',arAction:'إرسال العرض التجاري واعتماد العميل', next:'Contract Signed', arNext:'توقيع العقد' },
+  { n:4,  name:'Contract Signed',         arName:'توقيع العقد',                  role:'Owner / Manager',                 action:'Create and activate the signed agreement',          arAction:'إنشاء العقد الموقع وتفعيله', next:'Initial Invoice', arNext:'الفاتورة الأولى' },
+  { n:5,  name:'Initial Invoice',         arName:'الفاتورة الأولى',              role:'Finance',                         action:'Issue the first invoice or payment schedule',       arAction:'إصدار أول فاتورة أو جدول دفعات', next:'Deposit / First Payment', arNext:'العربون / أول دفعة' },
+  { n:6,  name:'Deposit / First Payment', arName:'العربون / أول دفعة',           role:'Finance',                         action:'Record the first real payment before execution',    arAction:'تسجيل أول دفعة فعلية قبل بدء التنفيذ', next:'Onboarding & Access', arNext:'الأونبوردنج والصلاحيات' },
+  { n:7,  name:'Onboarding & Access',     arName:'الأونبوردنج والصلاحيات',       role:'Account Manager',                 action:'Collect assets, access and kickoff information',    arAction:'جمع الأصول والصلاحيات وبيانات البداية', next:'Project Setup', arNext:'إعداد المشروع' },
+  { n:8,  name:'Project Setup',           arName:'إعداد المشروع',                role:'Project Manager',                 action:'Create the linked project with dates and owner',    arAction:'إنشاء المشروع المرتبط بالمواعيد والمسؤول', next:'Task Assignment', arNext:'إسناد التاسكات' },
+  { n:9,  name:'Task Assignment',         arName:'إسناد التاسكات',               role:'Project Manager',                 action:'Create, date and assign the task plan',             arAction:'إنشاء خطة التاسكات وتحديد مواعيدها ومسؤوليها', next:'Team Execution', arNext:'تنفيذ الفريق' },
+  { n:10, name:'Team Execution',          arName:'تنفيذ الفريق',                 role:'Delivery Team',                   action:'Produce the work and keep task status current',     arAction:'تنفيذ الشغل وتحديث حالات التاسكات', next:'Internal Review', arNext:'المراجعة الداخلية' },
+  { n:11, name:'Internal Review',         arName:'المراجعة الداخلية',            role:'Project Manager / Director',      action:'Review a deliverable internally before client view',arAction:'مراجعة التسليم داخليًا قبل عرضه على العميل', next:'Client Review & Revisions', arNext:'مراجعة العميل والتعديلات' },
+  { n:12, name:'Client Review & Revisions',arName:'مراجعة العميل والتعديلات',    role:'Account Manager',                 action:'Collect approval or revisions from the client',     arAction:'استلام موافقة العميل أو طلبات التعديل', next:'Final Delivery', arNext:'التسليم النهائي' },
+  { n:13, name:'Final Delivery',          arName:'التسليم النهائي',              role:'Project Manager',                 action:'Deliver approved work and close the delivery',      arAction:'تسليم الشغل المعتمد وإغلاق التسليم', next:'Monthly Report', arNext:'التقرير الشهري' },
+  { n:14, name:'Monthly Report',          arName:'التقرير الشهري',               role:'Account Manager / Media Buyer',   action:'Create and review the client report',               arAction:'إنشاء تقرير العميل ومراجعته', next:'Renewal / Upsell', arNext:'التجديد / البيع الإضافي' },
+  { n:15, name:'Renewal / Upsell',        arName:'التجديد / البيع الإضافي',      role:'Sales / Manager',                 action:'Renew, expand or close the relationship cleanly',   arAction:'تجديد أو توسيع أو إغلاق العلاقة بشكل منظم', next:null, arNext:null },
 ];
+
+function workflowStageReadiness(db,wf){
+  const clientId=wf&&wf.clientId, stage=Math.max(1,Math.min(WORKFLOW_STAGES.length,Number(wf&&wf.stage)||1));
+  const client=(db.clients||[]).find(x=>x.id===clientId&&!x._del);
+  const proposals=(db.proposals||[]).concat(db.quotations||[]).filter(x=>x.clientId===clientId&&!x._del);
+  const contracts=(db.contracts||[]).filter(x=>x.clientId===clientId&&!x._del);
+  const projects=(db.projects||[]).filter(x=>x.clientId===clientId&&!x._del&&!['Cancelled','Archived'].includes(x.status));
+  const projectIds=new Set(projects.map(x=>x.id));
+  const tasks=(db.tasks||[]).filter(x=>!x._del&&(x.clientId===clientId||projectIds.has(x.projectId)));
+  const deliverables=(db.deliverables||[]).filter(x=>!x._del&&(x.clientId===clientId||projectIds.has(x.projectId)));
+  const invoices=(db.invoices||[]).filter(x=>x.clientId===clientId&&!x._del&&!/cancel/i.test(x.status||''));
+  const invoiceIds=new Set(invoices.map(x=>x.id));
+  const payments=(db.payments||[]).filter(x=>!x._del&&(x.clientId===clientId||invoiceIds.has(x.invoiceId))&&Number(x.amount)>0);
+  const collections=(db.collections||[]).filter(x=>x.clientId===clientId&&!x._del&&x.status==='Collected'&&Number(x.amount)>0);
+  const assets=(db.clientAssets||[]).filter(x=>x.clientId===clientId&&!x._del&&x.accessStatus!=='Missing');
+  const reports=(db.reports||[]).filter(x=>x.clientId===clientId&&!x._del&&(x.reportKind||'Client')==='Client');
+  const onboarding=Array.isArray(client&&client.onboarding)?client.onboarding:[];
+  const hasBrief=!!(client&&(client.mainContactName||client.mainContactEmail||client.mainContactPhone)&&(client.serviceType||(Array.isArray(client.services)&&client.services.length)));
+  const acceptedOffer=proposals.some(x=>/accepted|approved|won/i.test(x.status||''));
+  const signedContract=contracts.some(x=>/signed|active/i.test(x.status||''));
+  const issuedInvoice=invoices.some(x=>!/draft/i.test(x.status||''));
+  const onboardingDone=(onboarding.length>0&&onboarding.every(x=>x.done))||assets.length>0;
+  const assignedTasks=tasks.filter(x=>x.assignedTo&&x.dueDate);
+  const worked=tasks.some(x=>['In Progress','In Review','Done','Delivered','Approved'].includes(x.status))||deliverables.some(x=>/review|approved|delivered|published/i.test(x.status||''));
+  const internalReview=deliverables.some(x=>/internal review|client review|revision|approved|delivered|published/i.test(x.status||''));
+  const clientReview=deliverables.some(x=>/client review|revision|approved|delivered|published/i.test(x.status||''));
+  const approved=deliverables.some(x=>/approved|delivered|published/i.test(x.status||''));
+  const delivered=deliverables.some(x=>/delivered|published/i.test(x.status||''))||projects.some(x=>/delivered|completed/i.test(x.status||''));
+  const checks={
+    1:[!!client,'Client record is missing.','ملف العميل غير موجود.'],
+    2:[hasBrief,'Add the primary contact and selected service to the client brief.','أضف جهة الاتصال الأساسية والخدمة المطلوبة في بريف العميل.'],
+    3:[acceptedOffer,'An accepted proposal or quotation is required.','لازم يوجد عرض أو عرض سعر مقبول.'],
+    4:[signedContract,'A Signed or Active contract is required.','لازم يوجد عقد Signed أو Active.'],
+    5:[issuedInvoice,'Issue the first invoice before asking for payment.','أصدر أول فاتورة قبل طلب الدفعة.'],
+    6:[payments.length>0||collections.length>0,'Record the first real payment before starting delivery.','سجّل أول دفعة فعلية قبل بدء التنفيذ.'],
+    7:[onboardingDone,'Complete the onboarding checklist or add an available client asset.','كمّل قائمة الأونبوردنج أو أضف أصل/صلاحية متاحة للعميل.'],
+    8:[projects.length>0,'Create a linked project with dates and an owner.','أنشئ مشروعًا مرتبطًا بالمواعيد والمسؤول.'],
+    9:[assignedTasks.length>0,'Create at least one dated task assigned to an employee.','أنشئ تاسك واحد على الأقل بموعد ومسند لموظف.'],
+    10:[worked,'Start or complete real work before internal review.','ابدأ أو أكمل شغلًا فعليًا قبل المراجعة الداخلية.'],
+    11:[internalReview,'Move at least one deliverable into internal review.','انقل تسليمًا واحدًا على الأقل للمراجعة الداخلية.'],
+    12:[clientReview,'Send at least one deliverable to client review.','أرسل تسليمًا واحدًا على الأقل لمراجعة العميل.'],
+    13:[approved&&delivered,'Approve and deliver at least one deliverable.','اعتمد وسلّم تسليمًا واحدًا على الأقل.'],
+    14:[reports.length>0,'Create the client monthly report before renewal.','أنشئ تقرير العميل الشهري قبل التجديد.'],
+    15:[true,'',''],
+  };
+  const result=checks[stage]||[false,'Workflow state is invalid.','حالة سير العمل غير صحيحة.'];
+  return {ready:!!result[0],message:result[1],arMessage:result[2],stage,client,contracts,projects,tasks,invoices,reports};
+}
 
 // Future API hook. Today returns null so callers use the local simulator.
 async function callModel(_provider, _system, _user){ return null; }
@@ -5602,7 +5650,56 @@ function PayCalcPanel({ rec, ar }){
     <b class="mono" style=${{fontSize:18,color:'var(--lime)',lineHeight:1}}>${money(pr.net)}</b>
   </div>`;
 }
-function RecordForm({ schema, initial, db, onSave, onClose, role }) {
+function validateRecordForm(collection, rec, db, ar){
+  const fail=(en,arText)=>({ok:false,message:ar?arText:en});
+  const value=(k)=>rec&&rec[k];
+  const present=(v)=>v!==undefined&&v!==null&&String(v).trim()!=='';
+  const emailKeys=Object.keys(rec||{}).filter(k=>/email/i.test(k));
+  const emailRe=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  for(const k of emailKeys){
+    if(present(value(k))&&!emailRe.test(String(value(k)).trim())) return fail('Enter a valid email address.','اكتب بريدًا إلكترونيًا صحيحًا.');
+  }
+  const pairs=[
+    ['startDate','endDate','End date cannot be before start date.','تاريخ النهاية لا يمكن أن يكون قبل البداية.'],
+    ['contractStartDate','contractEndDate','Contract end cannot be before contract start.','نهاية العقد لا يمكن أن تكون قبل بدايته.'],
+    ['issueDate','dueDate','Due date cannot be before issue date.','تاريخ الاستحقاق لا يمكن أن يكون قبل تاريخ الإصدار.'],
+    ['issueDate','validUntil','Validity date cannot be before issue date.','نهاية صلاحية العرض لا يمكن أن تكون قبل تاريخ الإصدار.'],
+    ['periodFrom','periodTo','Period end cannot be before period start.','نهاية الفترة لا يمكن أن تكون قبل بدايتها.'],
+    ['date','endDate','End date cannot be before start date.','تاريخ النهاية لا يمكن أن يكون قبل البداية.'],
+  ];
+  for(const [from,to,en,arText] of pairs){
+    if(present(value(from))&&present(value(to))&&String(value(to))<String(value(from))) return fail(en,arText);
+  }
+  if(present(value('collectionDay'))&&(Number(value('collectionDay'))<1||Number(value('collectionDay'))>28)) return fail('Collection day must be between 1 and 28.','يوم التحصيل لازم يكون من 1 إلى 28.');
+  if(present(value('age'))&&(Number(value('age'))<16||Number(value('age'))>100)) return fail('Age must be between 16 and 100.','العمر لازم يكون من 16 إلى 100 سنة.');
+  if(present(value('rating'))&&(Number(value('rating'))<0||Number(value('rating'))>5)) return fail('Rating must be between 0 and 5.','التقييم لازم يكون من 0 إلى 5.');
+  const pctKeys=['tax','progress','discount','commissionRate','satisfactionScore','qualityScore','communicationScore','attendanceScore','performanceScore','speedScore','teamworkScore','creativityScore'];
+  for(const k of pctKeys){
+    if(present(value(k))&&(Number(value(k))<0||Number(value(k))>100)) return fail('Percentages and scores must be between 0 and 100.','النسب والتقييمات لازم تكون من 0 إلى 100.');
+  }
+  const nonNegative=['amount','price','subtotal','total','value','monthlyRetainer','projectBudget','salary','baseSalary','newSalary','oldSalary','rate','estimatedHours','days','daysInMonth','daysWorked','absentDays','lateMinutes','planPosts','planReels','planCarousels','planStories'];
+  for(const k of nonNegative){
+    if(present(value(k))&&!Number.isFinite(Number(value(k)))) return fail('Enter numbers using digits only.','اكتب الأرقام بصيغة رقمية صحيحة.');
+    if(present(value(k))&&Number(value(k))<0) return fail('Amounts, counts and hours cannot be negative.','المبالغ والأعداد والساعات لا يمكن أن تكون سالبة.');
+  }
+  const relationChecks=[['projectId','projects','project'],['contractId','contracts','contract'],['taskId','tasks','task'],['deliverableId','deliverables','deliverable'],['invoiceId','invoices','invoice']];
+  if(present(value('clientId'))){
+    for(const [key,coll,label] of relationChecks){
+      if(!present(value(key))) continue;
+      const linked=(db[coll]||[]).find(x=>x.id===value(key)&&!x._del);
+      if(linked&&linked.clientId&&linked.clientId!==value('clientId')) return fail('The selected '+label+' belongs to a different client.','العنصر المرتبط المختار تابع لعميل مختلف.');
+    }
+  }
+  const uniqueKeys=['clientCode','employeeCode','invoiceNumber','contractNumber','proposalNumber','quotationNumber','paymentNumber'];
+  for(const k of uniqueKeys){
+    if(!collection||!present(value(k))) continue;
+    const needle=String(value(k)).trim().toLowerCase();
+    const duplicate=(db[collection]||[]).find(x=>!x._del&&x.id!==rec.id&&String(x[k]||'').trim().toLowerCase()===needle);
+    if(duplicate) return fail('This '+k.replace(/([A-Z])/g,' $1').toLowerCase()+' is already in use.','الكود أو الرقم ده مستخدم بالفعل في سجل تاني.');
+  }
+  return {ok:true};
+}
+function RecordForm({ collection, schema, initial, db, onSave, onClose, role }) {
   const [rec, setRec] = useState(initial||{});
   const [err, setErr] = useState('');
   const [step, setStep] = useState(0);
@@ -5645,7 +5742,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
   if(multi){
     const steps=[...ess.map(g=>({key:g,groups:[g],label:gl(g)})), ...(adv.length?[{key:'__more',groups:adv,label:(ar?'تفاصيل إضافية':'More')}]:[])];
     const cur=steps[Math.min(step,steps.length-1)];
-    const doSave=()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); const idx=steps.findIndex(s=>s.groups.some(g=>m.some(f=>(f.group||'Other')===g))); if(idx>=0)setStep(idx); return; } guardSave(rec); };
+    const doSave=()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); const idx=steps.findIndex(s=>s.groups.some(g=>m.some(f=>(f.group||'Other')===g))); if(idx>=0)setStep(idx); return; } const validation=validateRecordForm(collection,rec,db,ar); if(!validation.ok){setErr(validation.message);return;} setErr(''); guardSave(rec); };
     const next=()=>{ const m=missingIn(cur.groups); if(m.length){ setErr(reqLbl(m)); return; } setErr(''); setStep(s=>Math.min(s+1,steps.length-1)); };
     const back=()=>{ setErr(''); setStep(s=>Math.max(s-1,0)); };
     const pct=Math.round(((step+1)/steps.length)*100);
@@ -5669,7 +5766,7 @@ function RecordForm({ schema, initial, db, onSave, onClose, role }) {
       </div></div>`;
   }
   // SINGLE-STEP (small forms) — unchanged behavior
-  const save = ()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); return; } guardSave(rec); };
+  const save = ()=>{ const m=allMissing(); if(m.length){ setErr(reqLbl(m)); return; } const validation=validateRecordForm(collection,rec,db,ar); if(!validation.ok){setErr(validation.message);return;} setErr(''); guardSave(rec); };
   const body = hasGroups
     ? html`<div>${ess.map(renderGroup)}${adv.length?html`<details style=${{marginTop:4}}><summary style=${{cursor:'pointer',fontSize:12,color:'var(--lime)',padding:'8px 0',listStyle:'none'}}>${ar?'▸ تفاصيل إضافية (اختياري)':'▸ More details (optional)'}</summary>${adv.map(renderGroup)}</details>`:''}</div>`
     : html`<div class="form-grid">${allowed.map(f=>html`<${Field} key=${f.k} f=${f} value=${rec[f.k]} onChange=${set} db=${db} rec=${rec}/>`)}</div>`;
@@ -7171,17 +7268,37 @@ function App(){
     return recs;
   };
   const convertLead = (lead) => {
-    const client = createRecord('clients',{ name:lead.company||lead.name, brand:lead.brand, status:'Onboarding', type:'Retainer', ownerId:lead.ownerId, retainer:lead.value, health:'Green' });
-    const ptype = /brand/i.test(lead.serviceInterest)?'Branding': /web/i.test(lead.serviceInterest)?'Website / Landing Page': /ads|media/i.test(lead.serviceInterest)?'Ads Management':'Social Media Management';
-    const project = createRecord('projects',{ name:`${client.name} – ${ptype}`, clientId:client.id, brand:lead.brand, projectType:ptype, status:'Not Started', ownerId:lead.ownerId, assignedTo:lead.ownerId, startDate:todayISO(), budget:lead.value });
-    const tasks = createDefaultTasksForProject(ptype, project.id, client.id);
-    updateRecord('leads', lead.id, { status:'Won', convertedClientId:client.id });
-    addActivity('leads', lead.id, 'won', 'Converted to client + project');
-    addNotification('Project Manager','New client onboarded',`${client.name} → ${ptype} project created`,'projects',project.id);
-    triggerWebhook('leadWonWebhook',{lead,client,project});
-    triggerWebhook('newProjectWebhook',{project});
-    showProPopup('leadWon',lead.name);
-    setRoute('clients');
+    if(!lead||!lead.id)return;
+    // Idempotent conversion: a retry must never create another client, project,
+    // or task tree. The commercial lifecycle now creates work only after an
+    // accepted offer, signed contract and first payment.
+    let client=lead.convertedClientId&&byId(db.clients,lead.convertedClientId);
+    const norm=s=>String(s||'').trim().toLowerCase();
+    if(!client) client=(db.clients||[]).find(c=>c.leadId===lead.id
+      || (norm(lead.email)&&norm(c.mainContactEmail)===norm(lead.email))
+      || (norm(lead.phone)&&norm(c.mainContactPhone)===norm(lead.phone)&&norm(c.brandName||c.name)===norm(lead.company||lead.name)));
+    const services=Array.isArray(lead.serviceInterest)?lead.serviceInterest.filter(Boolean):(lead.serviceInterest?[lead.serviceInterest]:[]);
+    const serviceType=services[0]||'Social Media Management';
+    let created=false;
+    if(!client){
+      const brandName=lead.company||lead.name||'New client';
+      client=createRecord('clients',{
+        brandName,name:brandName,brand:'Magnet',leadId:lead.id,status:'Onboarding',clientType:'Retainer',type:'Retainer',
+        serviceType,services,monthlyRetainer:Number(lead.value)||0,retainer:Number(lead.value)||0,
+        mainContactName:lead.name||'',mainContactEmail:lead.email||'',mainContactPhone:lead.phone||'',mainContactWhatsapp:lead.phone||'',
+        accountManagerId:lead.ownerId||'',salesOwnerId:lead.ownerId||'',source:lead.source||'',health:'Green'
+      });
+      created=true;
+      triggerWebhook('newClientWebhook',{client});
+    }
+    updateRecord('leads', lead.id, { status:'Won', convertedClientId:client.id, convertedAt:nowISO() });
+    const workflow=startWorkflow(client.id,2,lead.id);
+    addActivity('leads', lead.id, 'won', 'Converted to client; commercial workflow opened');
+    addNotification('Account Manager','New client ready for discovery',`${client.brandName||client.name} → brief, proposal, contract and first payment`,'clients',client.id);
+    triggerWebhook('leadWonWebhook',{lead,client,workflow});
+    showProPopup('leadWon',lead.name||client.brandName);
+    setRoute('accounts');
+    return {client,workflow,created};
   };
   const convertCandidate = (cand) => {
     const emp = createRecord('employees',{
@@ -7355,22 +7472,36 @@ function App(){
   };
 
   /* ---- workflow ---- */
-  const startWorkflow = (clientId) => {
+  const startWorkflow = (clientId, initialStage, sourceLeadId) => {
     if(!clientId) return alert(getLang()==='ar'?'اختار عميل الأول.':'Select a client first.');
     const existing=(db.workflows||[]).find(w=>w.clientId===clientId);
-    if(existing){ alert(getLang()==='ar'?'الورك فلو شغال بالفعل للعميل ده.':'Workflow already started for this client.'); return existing; }
-    const wf=createRecord('workflows',{ clientId, stage:1, startedAt:nowISO(), notes:'' });
+    if(existing) return existing;
+    // Workflow is client-scoped, so manually starting it begins at Discovery.
+    // Stage 1 remains as conversion evidence and is already complete once a
+    // client exists. Lead conversion passes its source id for auditability.
+    const stage=Math.max(1,Math.min(WORKFLOW_STAGES.length,Number(initialStage)||2));
+    const wf=createRecord('workflows',{ clientId, sourceLeadId:sourceLeadId||'', stage, startedAt:nowISO(), notes:'', stageHistory:[{stage,at:nowISO(),by:user.id}] });
     addActivity('workflows', wf.id, 'workflow started', nameById(db.clients,clientId));
     showProPopup('automationDone','Workflow started');
     return wf;
   };
   const advanceWorkflow = (wf) => {
+    const readiness=workflowStageReadiness(db,wf);
+    if(!readiness.ready){
+      alert(getLang()==='ar'?readiness.arMessage:readiness.message);
+      return {ok:false,reason:'stage-not-ready',readiness};
+    }
     const next=Math.min(WORKFLOW_STAGES.length, (wf.stage||1)+1);
     const stage=WORKFLOW_STAGES[next-1];
-    updateRecord('workflows', wf.id, { stage:next });
+    if(next===(wf.stage||1)) return {ok:true,complete:true};
+    updateRecord('workflows', wf.id, { stage:next, lastValidatedAt:nowISO(), stageHistory:[...(wf.stageHistory||[]),{stage:next,at:nowISO(),by:user.id}] });
+    if(next===7) updateRecord('clients',wf.clientId,{status:'Onboarding'});
+    if(next===8) updateRecord('clients',wf.clientId,{status:'Active'});
+    if(next===15) updateRecord('clients',wf.clientId,{status:'Renewal Needed'});
     addActivity('workflows', wf.id, 'moved to '+stage.name, nameById(db.clients,wf.clientId));
     addNotification('Project Manager','Workflow advanced', nameById(db.clients,wf.clientId)+' → '+stage.name, 'workflow', wf.id);
     showProPopup('automationDone', stage.name);
+    return {ok:true,stage:next};
   };
 
   /* ---- invoice helpers ---- */
@@ -7701,7 +7832,7 @@ function App(){
       </div></div>`}
 
     ${modal&&html`<${Modal} title=${modal.title||((getLang()==='ar'?'إضافة / تعديل ':'New / Edit ')+(t(modal.coll)!==modal.coll?t(modal.coll):modal.coll))} wide=${true} onClose=${()=>setModal(null)}>
-      <${RecordForm} schema=${modal.schema||[]} initial=${modal.initial} db=${db} role=${role}
+      <${RecordForm} collection=${modal.coll} schema=${modal.schema||[]} initial=${modal.initial} db=${db} role=${role}
         onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; const _prevPay = modal.coll==='payments'?byId(db.payments,rec.id):null; const _prevTask=modal.coll==='tasks'?byId(db.tasks,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='tasks'&&rec.assignedTo&&(!_prevTask||_prevTask.assignedTo!==rec.assignedTo)){ addActivity('tasks',rec.id,'reassigned',nameById(db.employees,rec.assignedTo)); addNotification(rec.assignedTo,'New task assigned',rec.title||rec.name,'tasks',rec.id); triggerWebhook('taskAssignedWebhook',{task:rec}); sendTaskAssignmentEmail(rec,false); } if(modal.coll==='payments'){ const _fresh=(db.payments||[]).map(p=>p.id===rec.id?rec:p); syncInvoiceStatus(rec.invoiceId,_fresh); if(_prevPay&&_prevPay.invoiceId&&_prevPay.invoiceId!==rec.invoiceId) syncInvoiceStatus(_prevPay.invoiceId,_fresh); } if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } if(modal.coll==='salaryChanges') applySalaryChange(rec); if(modal.coll==='employeePayments'){ const pr=computePayrun(rec); updateRecord('employeePayments',rec.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const _dup=findLogicalDuplicate(modal.coll,rec,db); if(_dup){ const _dl=_dup.invoiceNumber||_dup.brandName||_dup.name||_dup.projectName||_dup.company||_dup.title||'record'; if(modal.coll==='invoices'){ alert(getLang()==='ar'?('رقم الفاتورة موجود بالفعل: '+_dl):('Invoice number already exists: '+_dl)); return; } if(modal.coll==='attendance'){ alert(getLang()==='ar'?'الحضور للموظف في التاريخ ده مسجل بالفعل — افتح السجل وعدّله بدل ما تعمل واحد جديد.':'Attendance already exists for this employee and date — edit the existing record instead.'); return; } if(!confirm(getLang()==='ar'?('في حاجة شبهها موجودة بالفعل: '+_dl+'\nأعملها برضه؟'):('A similar record already exists: '+_dl+'\nCreate anyway?'))) return; } const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='salaryChanges') applySalaryChange(created); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks===true&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } if(rec.createInvoice&&Number(rec.projectBudget)>0&&rec.clientId){ const _inv=createRecord('invoices',{invoiceNumber:nextInvoiceNumber(db), clientId:rec.clientId, projectId:created.id, amount:Number(rec.projectBudget)||0, tax:0, status:'Invoice Draft', issueDate:todayISO(), dueDate:rec.deadline||''}); addActivity('invoices',_inv.id,'auto-created from project budget',created.projectName||created.name||''); showProPopup('invoiceCreated', _inv.invoiceNumber); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); sendTaskAssignmentEmail(created,false); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); syncInvoiceStatus(created.invoiceId, [...(db.payments||[]), created]); } if(modal.coll==='employeePayments'){ const pr=computePayrun(created); updateRecord('employeePayments',created.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
         onClose=${()=>setModal(null)}/>
     <//>`}
@@ -8468,6 +8599,20 @@ function AccountsView({ ctx, visible, byBrand, ce }){
   const overdueP=pend.filter(x=>x.dueDate&&x.dueDate<todayISO());
   const upcoming=pend.filter(x=>x.dueDate&&x.dueDate>=todayISO()).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||'')).slice(0,5);
   const items=clients.map(c=>Object.assign({},c,{_pipe:acctPipe(c)}));
+  const moveAccount=(id,status)=>{
+    const wf=(db.workflows||[]).find(x=>x.clientId===id&&!x._del);
+    if(status==='Onboarding'&&(!wf||Number(wf.stage)<7)){
+      alert(ar?'انقل العميل للأونبوردنج من شاشة سير العمل بعد اعتماد العرض والعقد وتسجيل أول دفعة.':'Move this client to Onboarding from Workflow after the offer, signed contract and first payment are recorded.');
+      ctx.go('workflow');
+      return;
+    }
+    if(status==='Active'&&(!wf||Number(wf.stage)<8)){
+      alert(ar?'العميل لا يصبح Active إلا بعد اكتمال الأونبوردنج من شاشة سير العمل.':'A client becomes Active only after onboarding is completed in Workflow.');
+      ctx.go('workflow');
+      return;
+    }
+    ctx.updateRecord('clients',id,{status});
+  };
   return html`<div class="view">
     <${Head} eyebrow=${ar?'إدارة':'Accounts'} title=${ar?'إدارة الحسابات':'Accounts'} desc=${ar?'كل عملية إدارة العملاء في مكان واحد — مصدر واحد للحقيقة.':'The whole client process in one place — single source of truth.'}>
       <div class="seg"><button class=${layout==='board'?'on':''} onClick=${()=>setLayout('board')}>${ar?'بورد':'Board'}</button><button class=${layout==='list'?'on':''} onClick=${()=>setLayout('list')}>${ar?'قائمة':'List'}</button></div>
@@ -8495,7 +8640,7 @@ function AccountsView({ ctx, visible, byBrand, ce }){
     <//></div>`:''}
     ${layout==='board'
       ? html`<${Kanban} items=${items} columns=${['Lead','Onboarding','Active','Paused','Churned']} field="_pipe" canMove=${ce}
-          onMove=${(id,s)=>ctx.updateRecord('clients',id,{status:s})} onCard=${c=>setSel(c)}
+          onMove=${moveAccount} onCard=${c=>setSel(c)}
           render=${c=>html`<div style=${{cursor:'pointer'}}>
             <div class="flex between center"><b style=${{fontSize:12.5,fontWeight:600}}>${cNameOf(c)}</b>
               ${needsFollowup(db,c)?html`<span class="mono" style=${{fontSize:9,color:'var(--warn)'}}>${ar?'متابعة':'follow-up'}</span>`:''}</div>
@@ -10456,14 +10601,15 @@ function ClientsView({ ctx, visible, ce }){
 }
 
 function ScopeAccounts({ ctx, c, ce }){
+  const ar=ctx.lang==='ar';
   const scope = c.scope||[]; const accounts = c.accounts||[];
   const [ni,setNi]=useState({item:'',qty:''});
-  const [na,setNa]=useState({platform:'',username:'',secret:'',link:''});
+  const [na,setNa]=useState({platform:'',username:'',notes:'',link:''});
   const save=(patch)=>ctx.updateRecord('clients',c.id,patch);
   const addItem=()=>{ if(!ni.item.trim())return; save({scope:[...scope,{id:'sc-'+Math.random().toString(36).slice(2,8),item:ni.item.trim(),qty:ni.qty,done:false}]}); setNi({item:'',qty:''}); };
   const toggleItem=(id)=>{ if(ce) save({scope:scope.map(s=>s.id===id?{...s,done:!s.done}:s)}); };
   const delItem=(id)=>save({scope:scope.filter(s=>s.id!==id)});
-  const addAcc=()=>{ if(!na.platform.trim())return; save({accounts:[...accounts,{id:'ac-'+Math.random().toString(36).slice(2,8),...na}]}); setNa({platform:'',username:'',secret:'',link:''}); };
+  const addAcc=()=>{ if(!na.platform.trim())return; if(na.link&&!isUrl(na.link)){alert(ar?'اكتب رابطًا صحيحًا يبدأ بـ https://':'Enter a valid link beginning with https://');return;} save({accounts:[...accounts,{id:'ac-'+Math.random().toString(36).slice(2,8),...na}]}); setNa({platform:'',username:'',notes:'',link:''}); };
   const delAcc=(id)=>save({accounts:accounts.filter(a=>a.id!==id)});
   const presets=['Account creation','Website','Landing page','Logo','Brand identity','Social posts','Reels / Videos','Ad campaign','Monthly report'];
   const doneCount=scope.filter(s=>s.done).length;
@@ -10479,17 +10625,17 @@ function ScopeAccounts({ ctx, c, ce }){
       <datalist id="scope-presets">${presets.map(p=>html`<option key=${p} value=${p}></option>`)}</datalist>
       <input class="sel" type="number" style=${{width:84}} placeholder="Qty" value=${ni.qty} onInput=${e=>setNi({...ni,qty:e.target.value})}/>
       <button class="mini pri" onClick=${addItem}>Add</button></div>`:''}
-    <div class="eyebrow" style=${{margin:'18px 0 8px'}}>Accounts & access</div>
+    <div class="eyebrow" style=${{margin:'18px 0 8px'}}>${ar?'الحسابات والصلاحيات':'Accounts & access'}</div>
     ${accounts.length?accounts.map(a=>html`<div class="lrow" key=${a.id}><div class="li-ic">${React.createElement(Icon.shield)}</div>
-      <div class="li-t"><b>${a.platform}</b><span>${a.username||''}${a.secret?(' · '+a.secret):''}</span></div>
-      ${a.link?html`<a class="mini" href=${a.link} target="_blank" rel="noopener">Open</a>`:''}${ce?html`<button class="mini danger" onClick=${()=>delAcc(a.id)}>Del</button>`:''}</div>`):html`<div class="muted" style=${{fontSize:12.5}}>No accounts saved.</div>`}
+      <div class="li-t"><b>${a.platform}</b><span>${a.username||''}${a.notes?(' · '+a.notes):''}${a.secret?(ar?' · كلمة مرور قديمة مخفية':' · legacy password hidden'):''}</span></div>
+      ${a.link?html`<a class="mini" href=${a.link} target="_blank" rel="noopener">${ar?'فتح':'Open'}</a>`:''}${ce?html`<button class="mini danger" onClick=${()=>delAcc(a.id)}>${ar?'حذف':'Del'}</button>`:''}</div>`):html`<div class="muted" style=${{fontSize:12.5}}>${ar?'لا توجد حسابات محفوظة.':'No accounts saved.'}</div>`}
     ${ce?html`<div class="flex gap8" style=${{marginTop:10,flexWrap:'wrap'}}>
-      <input class="sel" style=${{flex:'1 1 110px'}} placeholder="Platform" value=${na.platform} onInput=${e=>setNa({...na,platform:e.target.value})}/>
-      <input class="sel" style=${{flex:'1 1 110px'}} placeholder="Username" value=${na.username} onInput=${e=>setNa({...na,username:e.target.value})}/>
-      <input class="sel" style=${{flex:'1 1 110px'}} placeholder="Password" value=${na.secret} onInput=${e=>setNa({...na,secret:e.target.value})}/>
-      <input class="sel" style=${{flex:'1 1 110px'}} placeholder="Link" value=${na.link} onInput=${e=>setNa({...na,link:e.target.value})}/>
-      <button class="mini pri" onClick=${addAcc}>Add</button></div>`:''}
-    <div class="muted" style=${{fontSize:11,marginTop:8,display:'flex',alignItems:'center',gap:5}}>${React.createElement(Icon.alert,{width:14,height:14,style:{flex:'0 0 auto'}})} Credentials are stored in your database — share access carefully.</div>
+      <input class="sel" style=${{flex:'1 1 120px'}} placeholder=${ar?'المنصة':'Platform'} value=${na.platform} onInput=${e=>setNa({...na,platform:e.target.value})}/>
+      <input class="sel" style=${{flex:'1 1 120px'}} placeholder=${ar?'اسم المستخدم':'Username'} value=${na.username} onInput=${e=>setNa({...na,username:e.target.value})}/>
+      <input class="sel" style=${{flex:'1 1 160px'}} placeholder=${ar?'ملاحظة غير سرية':'Non-secret note'} value=${na.notes} onInput=${e=>setNa({...na,notes:e.target.value})}/>
+      <input class="sel" style=${{flex:'1 1 160px'}} placeholder=${ar?'رابط الدخول':'Login link'} value=${na.link} onInput=${e=>setNa({...na,link:e.target.value})}/>
+      <button class="mini pri" onClick=${addAcc}>${ar?'إضافة':'Add'}</button></div>`:''}
+    <div class="muted" style=${{fontSize:11,marginTop:8,display:'flex',alignItems:'center',gap:5,lineHeight:1.5}}>${React.createElement(Icon.alert,{width:14,height:14,style:{flex:'0 0 auto'}})} ${ar?'لا تحفظ كلمات المرور هنا. احفظها في 1Password أو Bitwarden، وسجّل الرابط واسم المستخدم فقط. كلمات المرور القديمة مخفية ولم تُحذف.':'Do not store passwords here. Keep them in 1Password or Bitwarden and save only the login link and username. Existing legacy passwords are hidden and were not deleted.'}</div>
   </div>`;
 }
 function ClientProfile({ ctx, client, ce, onClose }){
@@ -11924,39 +12070,74 @@ function WorkflowView({ ctx }){
   const { db, role } = ctx;
   const [clientId,setClientId]=useState((db.clients[0]||{}).id||'');
   const [easy,setEasy]=useState(true);
-  const wf=(db.workflows||[]).find(w=>w.clientId===clientId);
-  const stageNo=wf?wf.stage:0;
+  const wf=(db.workflows||[]).find(w=>w.clientId===clientId&&!w._del);
+  const stageNo=wf?Math.max(1,Math.min(WORKFLOW_STAGES.length,Number(wf.stage)||1)):0;
   const current=stageNo?WORKFLOW_STAGES[stageNo-1]:null;
-  const tr=(s)=>ctx.lang==='ar'? s : s; // stage names kept in English for clarity
+  const ar=ctx.lang==='ar';
+  const readiness=wf?workflowStageReadiness(db,wf):null;
+  const client=(db.clients||[]).find(c=>c.id===clientId&&!c._del)||{};
+  const stageName=(s)=>ar?(s.arName||s.name):s.name;
+  const stageAction=(s)=>ar?(s.arAction||s.action):s.action;
+  const stageNext=(s)=>ar?(s.arNext||s.next):s.next;
+  const dueIn=(days)=>new Date(Date.now()+days*86400000).toISOString().slice(0,10);
+  const workflowActions=()=>{
+    if(!current) return [];
+    const contracts=(db.contracts||[]).filter(x=>x.clientId===clientId&&!x._del);
+    const signed=contracts.find(x=>/signed|active/i.test(x.status||''));
+    const invoices=(db.invoices||[]).filter(x=>x.clientId===clientId&&!x._del&&!/cancel/i.test(x.status||''));
+    const issued=invoices.find(x=>!/draft/i.test(x.status||''));
+    const projects=(db.projects||[]).filter(x=>x.clientId===clientId&&!x._del&&!['Archived','Cancelled'].includes(x.status));
+    const project=projects[0];
+    const actions={
+      2:[{label:ar?'استكمال بريف العميل':'Complete client brief',coll:'clients',run:()=>ctx.openModal('clients',client)}],
+      3:[{label:ar?'إنشاء عرض':'Create proposal',coll:'proposals',run:()=>ctx.openModal('proposals',{clientId,issueDate:todayISO(),validUntil:dueIn(14),status:'Draft',serviceType:client.serviceType,price:client.monthlyRetainer||0,currency:ctx.currency||'EGP'})}],
+      4:[{label:contracts.length?(ar?'فتح العقود وتوقيعها':'Open contracts and sign'):(ar?'إنشاء عقد من قالب':'Create contract from template'),coll:'contracts',run:()=>ctx.go('contracts')}],
+      5:[{label:ar?'إصدار الفاتورة الأولى':'Issue first invoice',coll:'invoices',run:()=>ctx.openModal('invoices',{invoiceNumber:nextInvoiceNumber(db),clientId,contractId:signed&&signed.id,status:'Draft',issueDate:todayISO(),dueDate:dueIn(7),amount:Number(signed&&signed.value)||Number(client.monthlyRetainer)||0,currency:ctx.currency||'EGP',tax:0,discount:0,items:[]})}],
+      6:[{label:ar?'تسجيل أول دفعة':'Record first payment',coll:'payments',run:()=>issued?ctx.openModal('payments',{paymentNumber:'PAY-'+todayISO().replace(/-/g,'')+'-'+String(Date.now()).slice(-4),invoiceId:issued.id,clientId,amount:Math.max(0,ctx.invTotal(issued)-ctx.invPaid(issued)),date:todayISO(),method:'Bank'}):alert(ar?'أصدر الفاتورة الأول.':'Issue the invoice first.')}],
+      7:[{label:ar?'إضافة أصل أو صلاحية':'Add asset / access',coll:'clientAssets',run:()=>ctx.openModal('clientAssets',{clientId,accessStatus:'Requested',visibility:'Internal'})}],
+      8:[{label:ar?'إنشاء المشروع':'Create project',coll:'projects',run:()=>ctx.openModal('projects',{clientId,projectName:(client.brandName||client.name||'Client')+' — '+(client.serviceType||'Project'),projectType:client.serviceType||'',status:'Planning',priority:client.priority||'Normal',projectManagerId:client.projectManagerId||'',accountManagerId:client.accountManagerId||'',startDate:todayISO(),deadline:dueIn(30)})}],
+      9:[{label:ar?'إنشاء وإسناد تاسك':'Create and assign task',coll:'tasks',run:()=>project?ctx.openModal('tasks',{clientId,projectId:project.id,status:'New',priority:'Normal',startDate:todayISO(),dueDate:dueIn(7)}):alert(ar?'أنشئ المشروع الأول.':'Create the project first.')}],
+      10:[{label:ar?'فتح التاسكات':'Open tasks',coll:'tasks',run:()=>ctx.go('tasks')}],
+      11:[{label:ar?'إنشاء تسليم للمراجعة':'Create deliverable for review',coll:'deliverables',run:()=>project?ctx.openModal('deliverables',{clientId,projectId:project.id,status:'Internal Review',priority:'Normal',dueDate:dueIn(3)}):alert(ar?'أنشئ المشروع الأول.':'Create the project first.')}],
+      12:[{label:ar?'فتح التسليمات':'Open deliverables',coll:'deliverables',run:()=>ctx.go('deliverables')}],
+      13:[{label:ar?'اعتماد وتسليم الشغل':'Approve and deliver work',coll:'deliverables',run:()=>ctx.go('deliverables')}],
+      14:[{label:ar?'إنشاء تقرير العميل':'Create client report',coll:'reports',run:()=>ctx.openModal('reports',{reportKind:'Client',clientId,title:(ar?'تقرير عميل — ':'Client report — ')+thisMonth(),period:thisMonth(),type:'Monthly',generationMode:'Manual',status:'Draft'})}],
+      15:[{label:ar?'فتح التجديدات':'Open renewals',coll:'renewals',run:()=>ctx.go('renewals')}],
+    };
+    return (actions[stageNo]||[]).filter(a=>canEdit(a.coll,role)||canView(a.coll,role));
+  };
+  const actions=workflowActions();
   return html`<div class="view">
-    <${Head} eyebrow=${t('Operations')} title=${ctx.lang==='ar'?'سير العمل':'Workflow'} desc=${ctx.lang==='ar'?'عملية الوكالة من العميل المحتمل حتى التجديد.':'The agency process from new lead to renewal.'}>
-      <div class="seg"><button class=${easy?'on':''} onClick=${()=>setEasy(true)}>Easy Mode</button><button class=${!easy?'on':''} onClick=${()=>setEasy(false)}>Full Process</button></div>
+    <${Head} eyebrow=${t('Operations')} title=${ar?'سير العمل':'Workflow'} desc=${ar?'عملية الوكالة من العميل المحتمل حتى التجديد.':'The agency process from new lead to renewal.'}>
+      <div class="seg"><button class=${easy?'on':''} onClick=${()=>setEasy(true)}>${ar?'الوضع السهل':'Easy Mode'}</button><button class=${!easy?'on':''} onClick=${()=>setEasy(false)}>${ar?'العملية كاملة':'Full Process'}</button></div>
     <//>
     <div class="flex gap8 center" style=${{marginBottom:16,flexWrap:'wrap'}}>
       <select class="sel" value=${clientId} onChange=${e=>setClientId(e.target.value)}>${(db.clients||[]).map(c=>html`<option key=${c.id} value=${c.id}>${c.brandName||c.name}</option>`)}</select>
       ${!wf&&html`<button class="btn btn-pri" onClick=${()=>ctx.startWorkflow(clientId)}>${t('Start workflow for client')}</button>`}
-      ${wf&&html`<${Tag} type="ok">${ctx.lang==='ar'?'المرحلة':'Stage'} ${stageNo}/15<//>`}
+      ${wf&&html`<${Tag} type="ok">${ar?'المرحلة':'Stage'} ${stageNo}/${WORKFLOW_STAGES.length}<//>`}
     </div>
-    ${!wf?html`<${Panel}><${EmptyState} title=${ctx.lang==='ar'?'لم يبدأ سير العمل':'Workflow not started'} text=${ctx.lang==='ar'?'اختر عميلاً وابدأ سير العمل.':'Pick a client and start the workflow to track the process.'} icon="target"/><//>`
-    : easy?html`<${Panel} title=${ctx.lang==='ar'?'الخطوة الحالية':'Current step'}>
+    ${!wf?html`<${Panel}><${EmptyState} title=${ar?'لم يبدأ سير العمل':'Workflow not started'} text=${ar?'اختر عميلاً وابدأ سير العمل.':'Pick a client and start the workflow to track the process.'} icon="target"/><//>`
+    : easy?html`<${Panel} title=${ar?'الخطوة الحالية':'Current step'}>
         <div style=${{display:'flex',flexDirection:'column',gap:12}}>
-          <div class="flex between center"><h2 style=${{fontFamily:'var(--display)',fontSize:22,fontWeight:700}}>${current.name}</h2><${Tag}>${current.role}<//></div>
-          <div class="muted" style=${{fontSize:14,lineHeight:1.6}}><b style=${{color:'var(--ink)'}}>${ctx.lang==='ar'?'المطلوب الآن:':'Action needed:'}</b> ${current.action}</div>
-          <div class="muted" style=${{fontSize:13}}><b style=${{color:'var(--ink)'}}>${ctx.lang==='ar'?'العميل:':'Client:'}</b> ${nameById(db.clients,clientId)}</div>
-          ${current.next&&html`<div class="muted" style=${{fontSize:13}}><b style=${{color:'var(--ink)'}}>${ctx.lang==='ar'?'الخطوة التالية:':'Next step:'}</b> ${current.next}</div>`}
+          <div class="flex between center"><h2 style=${{fontFamily:'var(--display)',fontSize:22,fontWeight:700}}>${stageName(current)}</h2><${Tag}>${current.role}<//></div>
+          <div class="muted" style=${{fontSize:14,lineHeight:1.6}}><b style=${{color:'var(--ink)'}}>${ar?'المطلوب الآن:':'Action needed:'}</b> ${stageAction(current)}</div>
+          <div class="muted" style=${{fontSize:13}}><b style=${{color:'var(--ink)'}}>${ar?'العميل:':'Client:'}</b> ${nameById(db.clients,clientId)}</div>
+          ${current.next&&html`<div class="muted" style=${{fontSize:13}}><b style=${{color:'var(--ink)'}}>${ar?'الخطوة التالية:':'Next step:'}</b> ${stageNext(current)}</div>`}
+          <div style=${{padding:'10px 12px',borderRadius:10,border:'1px solid '+(readiness.ready?'rgba(70,211,105,.35)':'rgba(255,165,61,.42)'),background:readiness.ready?'rgba(70,211,105,.08)':'rgba(255,165,61,.08)',fontSize:12.5,color:readiness.ready?'var(--pos)':'var(--warn)'}}>
+            ${readiness.ready?(ar?'جاهز للانتقال للخطوة التالية.':'Ready for the next step.'):(ar?readiness.arMessage:readiness.message)}
+          </div>
           <div class="flex gap8" style=${{marginTop:8,flexWrap:'wrap'}}>
-            ${current.next&&html`<button class="btn btn-pri" onClick=${()=>ctx.advanceWorkflow(wf)}>${t('Move to Next Step')}</button>`}
-            ${/Task/.test(current.name)&&html`<button class="btn btn-ghost" onClick=${()=>ctx.openModal('tasks',{clientId,status:'New',priority:'Normal'})}>Create task</button>`}
-            ${/Proposal/.test(current.name)&&html`<button class="btn btn-ghost" onClick=${()=>ctx.openModal('proposals',{clientId,status:'Draft'})}>Create proposal</button>`}
-            ${/Invoice/.test(current.name)&&html`<button class="btn btn-ghost" onClick=${()=>ctx.openModal('invoices',{clientId,status:'Draft',issueDate:todayISO(),tax:5})}>Create invoice</button>`}
+            ${current.next&&html`<button class="btn btn-pri" disabled=${!readiness.ready} title=${readiness.ready?'':(ar?readiness.arMessage:readiness.message)} onClick=${()=>ctx.advanceWorkflow(wf)}>${t('Move to Next Step')}</button>`}
+            ${actions.map((a,i)=>html`<button key=${i} class="btn btn-ghost" onClick=${a.run}>${a.label}</button>`)}
           </div>
         </div>
       <//>`
     : html`<div class="wf-timeline">${WORKFLOW_STAGES.map(s=>html`<div key=${s.n} class="wf-stage ${s.n<stageNo?'done':s.n===stageNo?'current':''}">
         <div class="wf-num">${s.n}</div>
-        <div class="wf-body"><div class="flex between center"><b>${s.name}</b><${Tag}>${s.role}<//></div>
-          <div class="muted" style=${{fontSize:12.5,marginTop:4}}>${s.action}</div>
-          ${s.n===stageNo&&s.next&&html`<button class="mini pri" style=${{marginTop:8}} onClick=${()=>ctx.advanceWorkflow(wf)}>${t('Move to Next Step')}</button>`}</div>
+        <div class="wf-body"><div class="flex between center"><b>${stageName(s)}</b><${Tag}>${s.role}<//></div>
+          <div class="muted" style=${{fontSize:12.5,marginTop:4}}>${stageAction(s)}</div>
+          ${s.n===stageNo&&!readiness.ready&&html`<div style=${{fontSize:11.5,color:'var(--warn)',marginTop:7}}>${ar?readiness.arMessage:readiness.message}</div>`}
+          ${s.n===stageNo&&s.next&&html`<button class="mini pri" disabled=${!readiness.ready} title=${readiness.ready?'':(ar?readiness.arMessage:readiness.message)} style=${{marginTop:8}} onClick=${()=>ctx.advanceWorkflow(wf)}>${t('Move to Next Step')}</button>`}</div>
       </div>`)}</div>`}
   </div>`;
 }

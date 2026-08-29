@@ -1,6 +1,13 @@
 # Magnet OS production readiness gates
 
-Current decision: **internal stabilization only; external SaaS launch blocked**.
+Current decision (2026-08-29): **Production remains live; the next release is
+blocked until true Staging and email delivery are configured and validated.**
+
+The current environment map is
+[`ENVIRONMENT_TOPOLOGY_2026-08-29.md`](ENVIRONMENT_TOPOLOGY_2026-08-29.md).
+Historical audit evidence below must not be used to infer the current live
+project ref: Production now uses `xqqgbvigfojfydzfguan`, while the public
+Staging URL incorrectly points to the same database.
 
 ## P0 gates
 
@@ -69,12 +76,17 @@ New test identity → profile → organization/membership → correct role → d
 
 ## Evidence recorded for this audit
 
-- Legacy smoke/security checks are green.
-- Public production data exposure was reproduced read-only.
-- `_accounts` base collection was not anonymously visible.
-- `accounts_safe` was anonymously visible.
-- No complete current service-role backup was available.
-- No GitHub Actions workflow or compiled build/typecheck/lint pipeline exists.
-- Supabase admin inspection was blocked by connector permission, so production schema parity is unresolved.
-- Production accounts health reports v11; the locally verified v13 candidate and its server-side Auth rollout contract are not deployed.
-- Phase 1 local implementation and its safe execution order are recorded in `docs/PHASE_1_IMPLEMENTATION.md`.
+- The legacy evidence below was captured before the V2 cutover and is retained
+  only as history: public data exposure, anonymous `accounts_safe`, incomplete
+  backups, unavailable Supabase admin inspection, and the older accounts
+  function version.
+- On 2026-08-29, a fresh read-only Production configuration check reported zero
+  failures: anonymous `records` and `_accounts` access is denied,
+  `accounts_safe` returns no anonymous rows, sampled client/employee/invoice
+  records return no anonymous rows, and the accounts Edge Function responds.
+- The offline application, security, identity, tenancy, workflow, finance,
+  contract, documents, tasks, approvals, and health suites are green.
+- Authenticated role-matrix, cross-tenant, responsive dashboard, and email
+  delivery gates must be rerun against a newly separated Staging project.
+- No compiled build/typecheck/lint pipeline exists while the legacy single-file
+  application remains in place; do not report those gates as passed.

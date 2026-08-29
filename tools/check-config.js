@@ -9,14 +9,18 @@ const lib = require('./_lib');
 
 (async () => {
   lib.loadDotEnv();
-  const url = (process.env.SUPABASE_URL || lib.DEFAULT_SUPABASE_URL).replace(/\/$/, '');
-  const anon = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || 'sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz';
+  const url = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const anon = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || '';
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   let warn = 0, fail = 0;
   const ok = (m) => console.log('  ok   ' + m);
   const w = (m) => { warn++; console.log('  warn ' + m); };
   const f = (m) => { fail++; console.log('  FAIL ' + m); };
 
+  if (!/^https:\/\/[a-z]{20}\.supabase\.co$/.test(url) || !anon) {
+    console.error('Magnet OS config check\nFAIL: set an explicit SUPABASE_URL and SUPABASE_ANON_KEY. No fallback project will be used.');
+    process.exit(1);
+  }
   console.log('Magnet OS config check\nSUPABASE_URL = ' + url);
 
   console.log('\n[env]');

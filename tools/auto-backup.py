@@ -9,8 +9,26 @@ To remove: launchctl unload ~/Library/LaunchAgents/com.magnetos.backup.plist
 """
 import json, os, urllib.request, datetime, glob
 
-URL = "https://jdylrthffifbhyrrhuqd.supabase.co/rest/v1/records?select=id,coll,data&order=id.asc"
-KEY = "sb_publishable_6Qe2KdPIZ13Ij2wvkS12rA_k2ytZQLz"  # public anon key (same one the app ships)
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+def load_local_env():
+    path = os.path.join(ROOT, ".env")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+load_local_env()
+BASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+if not BASE_URL.startswith("https://") or not KEY:
+    raise SystemExit("explicit SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required — backup NOT started")
+URL = BASE_URL + "/rest/v1/records?select=id,coll,data&order=id.asc"
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backups", "auto")
 KEEP = 30
 

@@ -19,11 +19,11 @@ const exists = (p) => fs.existsSync(path.join(ROOT, p));
 
 console.log('[1] node --check on server JS');
 for (const file of ['api/send-email.js', 'api/outbox.js', 'api/intake.js', 'api/public-form.js', 'api/runtime-config.js', 'server/public-intake.js', 'server/outbox.js', 'netlify/functions/intake.js', 'netlify/functions/send-email.js',
-  'serviceworker.js', 'tools/_lib.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
+  'serviceworker.js', 'tools/_lib.js', 'tools/project-safety.js', 'tools/check-environment-separation.js', 'tools/backup-supabase-records.js', 'tools/backup-local-data.js',
   'tools/validate-backup.js', 'tools/restore-supabase-records.js', 'tools/check-config.js',
   'tools/audit-saas-readiness.js', 'tools/diagnose-auth.js', 'tools/saas-foundation-test.js',
   'tools/identity-foundation-test.js', 'tools/tenant-foundation-test.js', 'tools/organization-settings-test.js', 'tools/employee-privacy-test.js', 'tools/public-intake-test.js', 'tools/delivery-outbox-test.js', 'tools/recruitment-v2-test.js', 'tools/sales-client-workspace-v2-test.js', 'tools/finance-v2-test.js', 'tools/contract-v2-test.js', 'tools/document-storage-v2-test.js', 'tools/preflight-staging-migration.js',
-  'tools/reconcile-staging-identity.js', 'tools/test-staging-identity.js',
+  'tools/reconcile-staging-identity.js', 'tools/repair-staging-legacy-links.js', 'tools/test-staging-identity.js',
   'tools/test-staging-app-login.js', 'tools/test-staging-tenant-rls.js', 'tools/test-staging-organization-settings.js', 'tools/test-staging-employee-privacy.js', 'tools/test-staging-public-forms.js', 'tools/test-staging-public-intake.js', 'tools/test-staging-delivery-outbox.js', 'tools/test-staging-recruitment-v2.js', 'tools/test-staging-sales-client-workspace-v2.js', 'tools/test-staging-finance-v2.js', 'tools/test-staging-contract-v2.js', 'tools/test-staging-document-storage-v2.js',
   'tools/m0-logical-backup.js', 'tools/m0-restore-staging.js', 'tools/m0-validate-staging.js',
   'tools/m0-security-baseline.js', 'tools/m0-configure-vercel-preview.js']) {
@@ -120,6 +120,53 @@ const serviceWorker = read('serviceworker.js');
 /height:100dvh/.test(html) && /grid-template-columns:208px minmax\(0,1fr\)/.test(html)
   ? ok('app shell uses dynamic viewport height and matching tablet grid columns')
   : bad('app shell can be clipped on laptops/tablets');
+/\.modal\{[\s\S]{0,700}max-height:calc\(100dvh - 24px\)/.test(html)
+  && /\.modal-b\{[\s\S]{0,500}overflow-y:auto/.test(html)
+  && /\.ovl\{[\s\S]{0,500}overflow-y:auto/.test(html)
+  ? ok('short laptop modals keep their footer reachable with internal scrolling')
+  : bad('short laptop modals can still hide lower fields or save controls');
+/function validateRecordForm\(/.test(html)
+  && /Collection day must be between 1 and 28/.test(html)
+  && /belongs to a different client/.test(html)
+  && /is already in use/.test(html)
+  ? ok('shared forms validate formats, dates, cross-client links, and duplicate business codes')
+  : bad('shared form data-quality validation is incomplete');
+/function workflowStageReadiness\(/.test(html)
+  && /disabled=\$\{!readiness\.ready\}/.test(html)
+  && /A client becomes Active only after onboarding is completed in Workflow/.test(html)
+  && /if\(next===8\) updateRecord\('clients',wf\.clientId,\{status:'Active'\}\)/.test(html)
+  ? ok('client lifecycle is evidence-gated from offer through onboarding and activation')
+  : bad('client lifecycle can still skip commercial or onboarding evidence');
+/legacy password hidden/.test(html) && !/placeholder="Password" value=\$\{na\.secret\}/.test(html)
+  ? ok('client account handover no longer displays or accepts raw passwords')
+  : bad('client account handover still exposes or collects raw passwords');
+/filter\(\(row:any\)=>!\(row&&row\.data&&row\.data\._del===true\)\)/.test(acct)
+  ? ok('deleted account tombstones cannot affect login or account diagnostics')
+  : bad('deleted account tombstones can still affect login or account diagnostics');
+const stagingLinkRepair = read('tools/repair-staging-legacy-links.js');
+const projectSafety = read('tools/project-safety.js');
+const environmentSeparation = read('tools/check-environment-separation.js');
+const packageConfig = JSON.parse(read('package.json'));
+/PROTECTED_PROJECT_REFS\.has\(projectRef\)/.test(stagingLinkRepair)
+  && /CURRENT_PRODUCTION_REF = 'xqqgbvigfojfydzfguan'/.test(projectSafety)
+  && /RETIRED_PRODUCTION_REFS = Object\.freeze\(\['jdylrthffifbhyrrhuqd'\]\)/.test(projectSafety)
+  && /unique_normalized_email/.test(stagingLinkRepair)
+  && /DRY RUN PASS/.test(stagingLinkRepair)
+  && /rollback;/.test(stagingLinkRepair)
+  && !/encrypted_password\s*=/.test(stagingLinkRepair)
+  ? ok('Staging identity-link repair is unique-match-only, dry-run-first, and password-safe')
+  : bad('Staging identity-link repair can target Production, guess identities, or touch credentials');
+/productionRef === stagingRef/.test(environmentSeparation)
+  && /PROTECTED_PROJECT_REFS\.has\(stagingRef\)/.test(environmentSeparation)
+  && packageConfig.scripts['check:env-separation']==='node tools/check-environment-separation.js'
+  && Object.entries(packageConfig.scripts).filter(([name])=>name.endsWith(':staging')||name.includes(':staging:')).every(([,command])=>!/xqqgbvigfojfydzfguan/.test(command))
+  ? ok('release tooling blocks shared Production/Staging databases and uses an explicit Staging ref')
+  : bad('Staging tooling can still target the promoted Production database');
+/const DEFAULT_SUPABASE_URL = ''/.test(read('tools/_lib.js'))
+  && !/sb_publishable_/.test(read('tools/auto-backup.py'))
+  && /SUPABASE_SERVICE_ROLE_KEY/.test(read('tools/auto-backup.py'))
+  ? ok('backup tooling requires an explicit current database and full server-only credentials')
+  : bad('backup tooling can silently target a stale project or create incomplete anonymous backups');
 /function clearSessionUser\(\)[\s\S]{0,500}sync-pending-chip/.test(html)
   ? ok('logout and rejected sessions remove stale sync-status chrome')
   : bad('logged-out screens can retain another session sync-status chrome');

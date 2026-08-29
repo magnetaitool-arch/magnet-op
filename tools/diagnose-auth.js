@@ -9,7 +9,7 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const lib = require('./_lib');
 
-const PRODUCTION_REF = 'jdylrthffifbhyrrhuqd';
+const { PROTECTED_PROJECT_REFS } = require('./project-safety');
 const EXPECTED_STAGING_NAME = 'MAGNET OS STAGING';
 
 function parseArgs(argv) {
@@ -46,7 +46,7 @@ function commandJson(args) {
 }
 
 function stagingConfig(projectRef) {
-  if (!/^[a-z]{20}$/.test(projectRef) || projectRef === PRODUCTION_REF) {
+  if (!/^[a-z]{20}$/.test(projectRef) || PROTECTED_PROJECT_REFS.has(projectRef)) {
     throw new Error('Refused: --project-ref must identify a non-Production Supabase project.');
   }
   const projects = commandJson(['projects', 'list', '--output', 'json']);
@@ -63,6 +63,21 @@ function stagingConfig(projectRef) {
 
 function normalized(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function roleKey(value) {
+  const role = normalized(value);
+  if (role === 'owner') return 'owner';
+  if (role === 'admin') return 'admin';
+  if (role === 'manager' || role === 'project manager') return 'manager';
+  if (role === 'account manager') return 'account_manager';
+  if (role === 'sales') return 'sales';
+  if (role === 'hr') return 'hr';
+  if (role === 'finance' || role === 'accountant') return 'finance';
+  if (role === 'designer' || role === 'graphic designer') return 'designer';
+  if (['content', 'content creator', 'video editor', 'production'].includes(role)) return 'content_creator';
+  if (role === 'client') return 'client';
+  return role;
 }
 
 function ref(kind, value) {
@@ -130,8 +145,11 @@ async function main() {
   }
 
   const records = await lib.fetchAllRecords(cfg);
-  const accountRows = records.filter((row) => row.coll === '_accounts');
-  const employeeRows = records.filter((row) => row.coll === 'employees');
+  // `records` uses tombstones for recoverable deletes. Deleted accounts and
+  // employees are historical data, not active identities, and including them
+  // produces false missing-link alarms and misleading capacity counts.
+  const accountRows = records.filter((row) => row.coll === '_accounts' && !(row.data && row.data._del === true));
+  const employeeRows = records.filter((row) => row.coll === 'employees' && !(row.data && row.data._del === true));
   const accounts = accountRows.map((row) => ({ rowId: row.id, ...(row.data || {}) }));
   const employees = employeeRows.map((row) => ({ rowId: row.id, ...(row.data || {}) }));
   const authUsers = args['project-ref']
@@ -171,7 +189,7 @@ async function main() {
 
     const employee = account.employeeId ? employeeById.get(account.employeeId) : null;
     if (!employee) issues.push({ type: 'legacy_account_missing_employee_link', subject });
-    else if (normalized(employee.appRole || employee.role) !== normalized(account.role)) {
+    else if (roleKey(employee.appRole || employee.role) !== roleKey(account.role)) {
       issues.push({ type: 'legacy_account_employee_role_mismatch', subject });
     }
   }

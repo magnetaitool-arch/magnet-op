@@ -62,7 +62,16 @@ async function makeToken(u:any){ const payload=b64url(JSON.stringify({uid:u.id, 
 async function readToken(token:string){ try{ const [payload,sig]=String(token||'').split('.'); if(!payload||!sig) return null; if((await hmac(payload))!==sig) return null; const p=JSON.parse(unb64url(payload)); if(!p.exp||p.exp<Date.now()) return null; return p; }catch{ return null; } }
 function isAdmin(role:string){ const r=String(role||''); return ['Owner','Admin','Manager'].includes(r); }
 
-async function dbAll(){ const r=await fetch(REST+'?coll=eq._accounts&select=id,data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db read '+r.status); return await r.json(); }
+async function dbAll(){
+  const r=await fetch(REST+'?coll=eq._accounts&select=id,data', { headers:{ apikey:KEY, Authorization:'Bearer '+KEY } });
+  if(!r.ok) throw new Error('db read '+r.status);
+  const rows=await r.json();
+  // Generic record deletion is represented by a tombstone so stale clients do
+  // not resurrect data. A tombstoned account is not an identity: it must not
+  // keep first-owner setup disabled, appear in the roster, collide on login, or
+  // inflate diagnostics.
+  return (Array.isArray(rows)?rows:[]).filter((row:any)=>!(row&&row.data&&row.data._del===true));
+}
 async function dbAuthConfig(){
   // Environment values are a cutover safety belt: once mandatory Auth is enabled
   // there, a missing/malformed legacy flag can never silently downgrade the app.

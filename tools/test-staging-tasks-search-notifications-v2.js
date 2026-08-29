@@ -4,14 +4,14 @@
 // Live M10 canary. Refuses Production and rolls back every synthetic write.
 const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
-const PRODUCTION_REF='jdylrthffifbhyrrhuqd';
+const {PROTECTED_PROJECT_REFS}=require('./project-safety');
 const EXPECTED_STAGING_NAME='MAGNET OS STAGING';
 function argsOf(argv){const out={};for(const item of argv.slice(2)){if(!item.startsWith('--'))continue;const at=item.indexOf('=');out[item.slice(2,at<0?undefined:at)]=at<0?true:item.slice(at+1);}return out;}
 function safe(value){return String(value||'').replace(/sbp_[A-Za-z0-9_-]+/g,'[REDACTED_TOKEN]').replace(/sb_(publishable|secret)_[A-Za-z0-9_-]+/g,'[REDACTED_KEY]').replace(/eyJ[A-Za-z0-9_.-]+/g,'[REDACTED_JWT]').slice(-6000);}
 function cli(args){const result=spawnSync('pnpm',['dlx','supabase@latest',...args],{encoding:'utf8',maxBuffer:64*1024*1024,env:{...process.env,SUPABASE_TELEMETRY_DISABLED:'1'}});if(result.status!==0)throw new Error(safe(result.stderr||result.stdout));return result.stdout;}
 function jsonCli(args){const output=cli(args);const a=output.indexOf('['),o=output.indexOf('{');const start=a>=0&&(o<0||a<o)?a:o;if(start<0)throw new Error('No JSON payload.');return JSON.parse(output.slice(start));}
 const projectRef=String(argsOf(process.argv)['project-ref']||'').trim();
-if(!/^[a-z]{20}$/.test(projectRef)||projectRef===PRODUCTION_REF){console.error('Refused: explicit non-Production project ref required.');process.exit(2);}
+if(!/^[a-z]{20}$/.test(projectRef)||PROTECTED_PROJECT_REFS.has(projectRef)){console.error('Refused: explicit non-Production project ref required.');process.exit(2);}
 const project=jsonCli(['projects','list','--output','json']).find(item=>item.ref===projectRef);
 if(!project||project.name!==EXPECTED_STAGING_NAME||project.status!=='ACTIVE_HEALTHY'){console.error('Refused: target is not healthy MAGNET OS STAGING.');process.exit(2);}
 const suffix=crypto.randomBytes(8).toString('hex');
