@@ -120,11 +120,20 @@ const serviceWorker = read('serviceworker.js');
 /height:100dvh/.test(html) && /grid-template-columns:208px minmax\(0,1fr\)/.test(html)
   ? ok('app shell uses dynamic viewport height and matching tablet grid columns')
   : bad('app shell can be clipped on laptops/tablets');
-/\.modal\{[\s\S]{0,700}max-height:calc\(100dvh - 24px\)/.test(html)
-  && /\.modal-b\{[\s\S]{0,500}overflow-y:auto/.test(html)
-  && /\.ovl\{[\s\S]{0,500}overflow-y:auto/.test(html)
+/\.modal\{[\s\S]{0,900}max-height:calc\(100dvh - var\(--modal-vpad\) - var\(--modal-vpad\)\)/.test(html)
+  && /\.modal\{[\s\S]{0,1000}overflow:hidden/.test(html)
+  && /\.modal-b\{[\s\S]{0,500}flex:1 1 auto[\s\S]{0,300}overflow-y:auto/.test(html)
+  && /\.ovl\{[\s\S]{0,700}height:100dvh[\s\S]{0,500}overflow:hidden/.test(html)
   ? ok('short laptop modals keep their footer reachable with internal scrolling')
   : bad('short laptop modals can still hide lower fields or save controls');
+/requestIdleCallback\(persist,\{timeout:900\}\)/.test(html)
+  && /window\.addEventListener\('pagehide',flush\)/.test(html)
+  ? ok('large offline snapshots persist during idle time and flush safely on page exit')
+  : bad('large offline snapshots can block interactions or be lost on page exit');
+/new MutationObserver\(schedule\)/.test(html)
+  && /matchMedia\('\(max-width:767px\)'\)/.test(html)
+  ? ok('responsive table labels are batched and observed only in the mobile layout')
+  : bad('responsive table labeling can repeatedly scan the full desktop DOM');
 /function validateRecordForm\(/.test(html)
   && /Collection day must be between 1 and 28/.test(html)
   && /belongs to a different client/.test(html)

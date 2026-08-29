@@ -498,16 +498,16 @@ body.theme-light .btn{ border-radius:10px; }
 .mini.pri:hover{background:var(--lime-bright)}
 
 /* modal */
-.ovl{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:clamp(12px,4vh,36px) 20px;overflow-y:auto;overscroll-behavior:contain;animation:fadeUp .18s}
-.modal{background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 22%),var(--bg-2);border:1px solid var(--line-2);border-radius:var(--r-xl);width:480px;max-width:96vw;max-height:calc(100dvh - 24px);display:flex;flex-direction:column;min-height:0;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 50px 110px -34px rgba(0,0,0,.9);animation:slideUp .24s cubic-bezier(.2,.7,.2,1)}
+.ovl{--modal-vpad:clamp(12px,4vh,36px);position:fixed;inset:0;width:100%;height:100vh;height:100dvh;box-sizing:border-box;z-index:80;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding:var(--modal-vpad) 20px;overflow:hidden;overscroll-behavior:contain;animation:fadeUp .18s}
+.modal{background:linear-gradient(180deg,rgba(255,255,255,.04),transparent 22%),var(--bg-2);border:1px solid var(--line-2);border-radius:var(--r-xl);width:480px;max-width:96vw;max-height:calc(100vh - var(--modal-vpad) - var(--modal-vpad));max-height:calc(100dvh - var(--modal-vpad) - var(--modal-vpad));display:flex;flex-direction:column;min-height:0;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 50px 110px -34px rgba(0,0,0,.9);animation:slideUp .24s cubic-bezier(.2,.7,.2,1)}
 .modal.nudge{animation:modalNudge .2s ease}
 @keyframes modalNudge{0%{transform:scale(1)}40%{transform:scale(1.012)}100%{transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){.modal.nudge{animation:none}}
 .modal.wide{width:640px}
 @keyframes slideUp{from{transform:translateY(16px);opacity:.5}to{transform:none;opacity:1}}
-.modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+.modal-h{display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
 .modal-h h3{font-family:var(--display);font-size:16px;font-weight:600}
-.modal-b{padding:22px;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.modal-b{flex:1 1 auto;padding:22px;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch;touch-action:pan-y}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .fld{display:flex;flex-direction:column;gap:6px}
 .fld.full{grid-column:1/-1}
@@ -833,6 +833,9 @@ a.mini{text-decoration:none;display:inline-block}
 }
 
 @media (max-height:760px) and (min-width:768px){
+  .ovl{--modal-vpad:12px}
+  .modal-h{padding:13px 18px}
+  .modal-b{padding:16px 18px}
   .brand{padding-block:13px}
   .nav{padding-block:8px}
   .nav-item{padding-block:7px}
@@ -890,7 +893,7 @@ a.mini{text-decoration:none;display:inline-block}
   .kcol{flex:0 0 80vw}
 
   /* modals full-screen on mobile */
-  .ovl{padding:0;align-items:stretch}
+  .ovl{--modal-vpad:0px;padding:0;align-items:stretch}
   .modal,.modal.wide{width:100% !important;max-width:100% !important;height:100%;border-radius:0;display:flex;flex-direction:column}
   .modal-b{flex:1;max-height:none !important;overflow-y:auto}
   .form-grid{grid-template-columns:1fr}
@@ -5551,7 +5554,7 @@ function Modal({ title, onClose, children, wide }) {
   const [nudge,setNudge]=useState(false);
   const bump=()=>{ setNudge(true); setTimeout(()=>setNudge(false),200); };
   return html`<div class="ovl" onClick=${bump}>
-    <div class="modal ${wide?'wide':''} ${nudge?'nudge':''}" onClick=${e=>e.stopPropagation()}>
+    <div class="modal ${wide?'wide':''} ${nudge?'nudge':''}" role="dialog" aria-modal="true" aria-label=${title} onClick=${e=>e.stopPropagation()}>
       <div class="modal-h"><h3>${title}</h3>
         <button class="icon-btn" onClick=${onClose} title="Close"><span style=${{fontSize:18,lineHeight:1}}>×</span></button></div>
       <div class="modal-b">${children}</div>
@@ -6531,6 +6534,7 @@ function CommandPalette({ items, onClose, searchProvider }){
 }
 function App(){
   const [db, setDb] = useState(loadDB);
+  const dbPersistRef = useRef(db);
   const cfg = useRef(getCfg() || {});
   const [cloudOn, setCloudOn] = useState(cfgComplete(cfg.current));
   const [session, setSession] = useState(()=>{ try { return JSON.parse(store.get(SESSION_KEY)||'null'); } catch(e){ return null; } });
@@ -6888,17 +6892,49 @@ function App(){
     return ()=>{ killed=true; if(npTimer)clearInterval(npTimer); window.removeEventListener('pointerdown', onTap); try{ if(player&&player.destroy) player.destroy(); }catch(e){} ytRef.current=null; const h=document.getElementById('sysmusic'); if(h) h.remove(); };
   },[authUser]);
 
-  useEffect(()=>{ store.set(KEY, JSON.stringify(db)); }, [db]);
-  // Mobile table->card: stamp each cell with its column header as data-label.
-  // Runs after render so every .tbl (DataTable or custom) becomes card-ready.
+  // Keep large local snapshots off the interaction/render path. Rapid edits are
+  // coalesced into one idle write, while pagehide/visibility flushes protect
+  // offline work if the browser closes before the idle callback runs.
+  useEffect(()=>{
+    dbPersistRef.current=db;
+    let completed=false;
+    const persist=()=>{ if(completed)return; completed=true; try{store.set(KEY,JSON.stringify(dbPersistRef.current));}catch(e){} };
+    const hasIdle=typeof window.requestIdleCallback==='function';
+    const handle=hasIdle?window.requestIdleCallback(persist,{timeout:900}):setTimeout(persist,180);
+    return()=>{ if(completed)return; if(hasIdle&&typeof window.cancelIdleCallback==='function')window.cancelIdleCallback(handle); else clearTimeout(handle); };
+  },[db]);
+  useEffect(()=>{
+    const flush=()=>{ try{store.set(KEY,JSON.stringify(dbPersistRef.current));}catch(e){} };
+    const onVisibility=()=>{ if(document.hidden)flush(); };
+    window.addEventListener('pagehide',flush);
+    document.addEventListener('visibilitychange',onVisibility);
+    return()=>{ window.removeEventListener('pagehide',flush); document.removeEventListener('visibilitychange',onVisibility); };
+  },[]);
+  // Mobile table->card labels are a responsive enhancement. Observe only while
+  // the mobile layout is active and coalesce any DOM bursts into one animation
+  // frame instead of scanning every table after every application render.
   useEffect(()=>{ try {
-    document.querySelectorAll('table.tbl').forEach(function(t){
-      var ths=[].slice.call(t.querySelectorAll('thead th')).map(function(h){return h.textContent.trim();});
+    const mq=window.matchMedia('(max-width:767px)');
+    let observer=null,raf=0;
+    const stamp=()=>{ raf=0; document.querySelectorAll('table.tbl').forEach(function(t){
+      const ths=[].slice.call(t.querySelectorAll('thead th')).map(function(h){return h.textContent.trim();});
       t.querySelectorAll('tbody tr').forEach(function(tr){
-        [].slice.call(tr.children).forEach(function(td,i){ if(!td.getAttribute('data-label')) td.setAttribute('data-label', ths[i]||''); });
+        [].slice.call(tr.children).forEach(function(td,i){ if(!td.hasAttribute('data-label'))td.setAttribute('data-label',ths[i]||''); });
       });
-    });
-  } catch(e){} });
+    }); };
+    const schedule=()=>{ if(!raf)raf=requestAnimationFrame(stamp); };
+    const syncObserver=()=>{
+      if(observer){observer.disconnect();observer=null;}
+      if(raf){cancelAnimationFrame(raf);raf=0;}
+      if(!mq.matches)return;
+      observer=new MutationObserver(schedule);
+      observer.observe(document.querySelector('.main')||document.body,{childList:true,subtree:true});
+      schedule();
+    };
+    if(mq.addEventListener)mq.addEventListener('change',syncObserver); else mq.addListener(syncObserver);
+    syncObserver();
+    return()=>{ if(observer)observer.disconnect();if(raf)cancelAnimationFrame(raf);if(mq.removeEventListener)mq.removeEventListener('change',syncObserver);else mq.removeListener(syncObserver); };
+  } catch(e){} },[]);
   useEffect(()=>{ store.set(SESSION_KEY, JSON.stringify(session)); }, [session]);
   // Never download private business data for anonymous visitors or bots. Public
   // campaign/brief routes fetch only their single required record themselves.
