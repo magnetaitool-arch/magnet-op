@@ -3,6 +3,7 @@
 .env.local
 /backups
 /output
+/tmp
 /NoMoreExcuse
 /NoMoreExcusePreview
 /TheForrmaProposal
