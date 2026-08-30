@@ -3957,6 +3957,7 @@ const POPUP_LIB = {
   syncSuccess:{title:'Sync complete', arTitle:'تمت المزامنة', ar:'بياناتك اتزامنت مع السحابة بنجاح.', Professional:'Data synchronized with the cloud successfully.', Direct:'Synced.', Motivational:'Everything is in sync.', Minimal:'Synced'},
   syncFailed:{title:'Sync failed', arTitle:'المزامنة فشلت', ar:'المزامنة مع السحابة ما كملتش — شغلك متسجل محليًا وهنعيد المحاولة تلقائيًا.', Professional:'The cloud sync did not complete. Working locally.', Direct:'Sync failed.', Motivational:'Sync hiccup. Your local data is safe.', Minimal:'Sync failed'},
   backupSuccess:{title:'Backup saved', arTitle:'النسخة الاحتياطية اتحفظت', ar:'تم إنشاء نسخة احتياطية بنجاح.', Professional:'A backup has been created successfully.', Direct:'Backup saved.', Motivational:'Backup saved. Your data is protected.', Minimal:'Backup saved'},
+  passwordChanged:{title:'Password changed', arTitle:'تم تغيير كلمة المرور', ar:'كلمة المرور الجديدة اتفعّلت بنجاح.', Professional:'Your new password is active.', Direct:'Password changed.', Motivational:'Password updated. Your account is secure.', Minimal:'Password changed'},
   agentDone:{title:'Agent analysis generated', arTitle:'التحليل جاهز', ar:'المساعد جهّز مسودة للمراجعة.', Professional:'The agent has produced a draft for your review.', Direct:'Agent output ready.', Motivational:'Draft ready. Review and put it to work.', Minimal:'Agent output ready'},
   automationDone:{title:'Automation completed', arTitle:'الأتمتة اشتغلت', ar:'الأتمتة اتنفذت بنجاح.', Professional:'The automation ran successfully.', Direct:'Automation done.', Motivational:'Automation handled. One less manual step.', Minimal:'Automation complete'},
   taskCreated:{title:'Task created', arTitle:'مهمة جديدة', ar:'تم إنشاء مهمة جديدة.', Professional:'A new task has been created.', Direct:'Task created.', Motivational:'New task created. Momentum keeps building.', Minimal:'Task created'},
@@ -7950,7 +7951,8 @@ function App(){
       required=${!!(authUser&&authUser.isDefaultPassword)}
       onClose=${()=>{ if(!(authUser&&authUser.isDefaultPassword)) setProfileOpen(false); }}
       onChanged=${(u)=>{ setAuthUser(u); }}
-      onComplete=${()=>setProfileOpen(false)}/>`}
+      onComplete=${()=>setProfileOpen(false)}
+      onLogout=${doLogout}/>`}
   </div>`;
 }
 
@@ -12011,9 +12013,10 @@ function InitialSetupScreen({ onSetup, onSignIn, lang, applyAppSettings }){
 }
 
 /* ---------------- Profile modal (self-service) ---------------- */
-function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, required=false }){
+function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, onLogout, required=false }){
   const ar=lang==='ar'; const [tab,setTab]=useState(required?'pw':'profile');
   const [cur,setCur]=useState(''); const [np,setNp]=useState(''); const [cp,setCp]=useState(''); const [msg,setMsg]=useState('');
+  const [pwBusy,setPwBusy]=useState(false); const [passwordChanged,setPasswordChanged]=useState(false);
   const [avatar,setAvatar]=useState(authUser.avatar||''); const [bio,setBio]=useState(authUser.bio||'');
   const onPickAvatar=(file)=>{ if(!file) return; const reader=new FileReader();
     reader.onload=()=>{ const img=new Image(); img.onload=()=>{ const max=256; let w=img.width,h=img.height; const s=Math.min(1,max/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s);
@@ -12024,11 +12027,20 @@ function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, required
     u.avatar=avatar||''; u.bio=bio||''; AUTH.saveUsers(list.map(x=>x.id===u.id?u:x));
     try{ AUTH.setSessionUser(u, true); }catch(e){} if(onChanged) onChanged(u);
     setMsg(ar?'تم حفظ البروفايل.':'Profile saved.'); showProPopup('savedNotes'); };
-  const changePw=async()=>{ setMsg('');
+  const changePw=async()=>{ if(pwBusy)return; setMsg(''); setPasswordChanged(false);
     const u=AUTH.loadUsers().find(x=>x.id===authUser.id); if(!u) return;
     const v=AUTH.validatePassword(np,cp); if(v){ setMsg(v); return; }
     const okMsg=ar?'تم تغيير كلمة المرور بنجاح.':'Password changed successfully.';
     const badMsg=ar?'كلمة المرور الحالية غير صحيحة.':'Current password is incorrect.';
+    const complete=()=>{
+      u.isDefaultPassword=false;
+      AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
+      try{ AUTH.setSessionUser(u, true); }catch(e){}
+      if(onChanged) onChanged(u);
+      setCur('');setNp('');setCp('');setMsg(okMsg);setPasswordChanged(true);setPwBusy(false);
+      showProPopup('passwordChanged');
+    };
+    setPwBusy(true);
     const cfg=getCfg();
     // PRIMARY: server verifies current + stores new hash (hash never leaves the server).
     if(cfg&&cfg.url&&cfg.key){
@@ -12038,36 +12050,36 @@ function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, required
         // crafted request can't inject an arbitrary stored hash.
         const r=await acctApi(cfg,'changepw',{ token:getAcctToken(), currentPassword:cur, newPassword:np });
         if(r&&r.ok){
-          u.isDefaultPassword=false;
-          AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
-          try{ AUTH.setSessionUser(u, true); }catch(e){}
-          if(onChanged) onChanged(u);
-          setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes');
-          if(onComplete) setTimeout(onComplete,350);
+          complete();
           return;
         }
-        if(r&&r.reason==='bad-current'){ setMsg(badMsg); return; }
+        if(r&&r.reason==='bad-current'){ setMsg(badMsg); setPwBusy(false); return; }
       } catch(e){ /* unreachable -> legacy fallback */ }
     }
     if(!isLegacyAuthFallbackAllowed()){
       setMsg(ar?'خدمة تغيير كلمة المرور غير متاحة مؤقتًا. لم يتم حفظ أي تغيير.':'The password service is temporarily unavailable. No change was saved.');
+      setPwBusy(false);
       return;
     }
     // FALLBACK (local development only): legacy local change.
-    if(!(await AUTH.verifyPassword(cur,u.passwordHash))){ setMsg(badMsg); return; }
+    if(!(await AUTH.verifyPassword(cur,u.passwordHash))){ setMsg(badMsg); setPwBusy(false); return; }
     u.passwordHash=await AUTH.hashPassword(np); u.isDefaultPassword=false;
-    AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
-    try{ AUTH.setSessionUser(u, true); }catch(e){}
-    if(onChanged) onChanged(u);
-    setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes');
-    if(onComplete) setTimeout(onComplete,350); };
+    complete(); };
   return html`<${Modal} title=${ar?'الملف الشخصي':'Profile'} onClose=${onClose}>
-    ${required&&html`<div class="login-err" style=${{marginBottom:14}}>${ar?'لازم تغيّر كلمة المرور المؤقتة قبل استخدام النظام. لا يمكن إغلاق هذه الشاشة قبل نجاح التغيير.':'You must replace the temporary password before using Magnet OS. This screen stays locked until the change succeeds.'}</div>`}
-    <div class="emp-tabs" style=${{margin:'0 -22px 16px'}}>
+    ${required&&!passwordChanged&&html`<div class="login-err" style=${{marginBottom:14}}>${ar?'لازم تغيّر كلمة المرور المؤقتة قبل استخدام النظام. لا يمكن إغلاق هذه الشاشة قبل نجاح التغيير.':'You must replace the temporary password before using Magnet OS. This screen stays locked until the change succeeds.'}</div>`}
+    ${!passwordChanged&&html`<div class="emp-tabs" style=${{margin:'0 -22px 16px'}}>
       ${!required&&html`<button class="emp-tab ${tab==='profile'?'on':''}" onClick=${()=>setTab('profile')}>${ar?'الحساب':'Account'}</button>`}
       <button class="emp-tab ${tab==='pw'?'on':''}" onClick=${()=>setTab('pw')}>${ar?'تغيير كلمة المرور':'Change Password'}</button>
-    </div>
-    ${tab==='profile'?html`<div>
+    </div>`}
+    ${passwordChanged?html`<div role="status" aria-live="polite" style=${{textAlign:'center',padding:'18px 8px 8px'}}>
+      <div style=${{width:62,height:62,borderRadius:'50%',display:'grid',placeItems:'center',margin:'0 auto 14px',background:'rgba(200,243,30,.14)',border:'1px solid rgba(200,243,30,.35)',color:'var(--lime)',fontSize:30,fontWeight:900}}>✓</div>
+      <h3 style=${{margin:'0 0 8px',fontSize:20}}>${ar?'تم تغيير كلمة المرور بنجاح':'Password changed successfully'}</h3>
+      <p class="muted" style=${{fontSize:13.5,lineHeight:1.8,maxWidth:430,margin:'0 auto 18px'}}>${ar?'الباسورد الجديد اتفعّل فورًا في نفس التاب — مش محتاج تفتح تاب جديد. تقدر تكمّل شغلك أو تسجّل الدخول بيه من جديد.':'Your new password is active in this tab — you do not need to open a new one. Continue working or sign in again with the new password.'}</p>
+      <div class="flex gap8" style=${{justifyContent:'center',flexWrap:'wrap'}}>
+        <button class="btn btn-pri" onClick=${onComplete}>${ar?'كمّل في النظام':'Continue in Magnet'}</button>
+        <button class="btn btn-ghost" onClick=${onLogout}>${ar?'اخرج وادخل بالباسورد الجديد':'Sign in with new password'}</button>
+      </div>
+    </div>`:tab==='profile'?html`<div>
       <div class="prof-edit">
         <${Avatar} name=${authUser.fullName} size=${72} src=${avatar}/>
         <div class="prof-edit-actions">
@@ -12088,11 +12100,11 @@ function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, required
         <div class="muted" style=${{fontSize:11.5,marginTop:10}}>${ar?'لا يمكنك تغيير دورك أو صلاحياتك. يتولى ذلك المالك/المدير.':'You cannot change your own role or permissions. Only the Owner/Admin can.'}</div>
       </div>
     </div>`:html`<div>
-      <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور الحالية':'Current password'}</span><input type="password" value=${cur} onChange=${e=>setCur(e.target.value)}/></label>
-      <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور الجديدة':'New password'}</span><input type="password" value=${np} onChange=${e=>setNp(e.target.value)}/></label>
-      <label class="fld" style=${{marginBottom:12}}><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" value=${cp} onChange=${e=>setCp(e.target.value)}/></label>
+      <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور الحالية':'Current password'}</span><input type="password" value=${cur} disabled=${pwBusy} autoComplete="current-password" onChange=${e=>setCur(e.target.value)}/></label>
+      <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور الجديدة':'New password'}</span><input type="password" value=${np} disabled=${pwBusy} autoComplete="new-password" onChange=${e=>setNp(e.target.value)}/></label>
+      <label class="fld" style=${{marginBottom:12}}><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" value=${cp} disabled=${pwBusy} autoComplete="new-password" onChange=${e=>setCp(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&changePw()}/></label>
       ${msg&&html`<div class=${/success|نجاح/.test(msg)?'ok':'neg'} style=${{fontSize:12.5,marginBottom:12}}>${msg}</div>`}
-      <button class="btn btn-pri" onClick=${changePw}>${ar?'تغيير كلمة المرور':'Change Password'}</button>
+      <button class="btn btn-pri" disabled=${pwBusy} onClick=${changePw}>${pwBusy?(ar?'جارٍ التغيير…':'Changing…'):(ar?'تغيير كلمة المرور':'Change Password')}</button>
     </div>`}
   <//>`;
 }
@@ -12458,10 +12470,10 @@ function UsersView({ ctx }){
     }catch(e){ alert(accountErr(e)); }
     finally{ setOp(''); }
   };
-  const doReset=async(form)=>{ const v=AUTH.validatePassword(form._pw,form._pw2); if(v){ alert(v); return; }
-    const u=AUTH.loadUsers().find(x=>x.id===reset.id); if(!u)return; setOp('reset-'+u.id);
-    try{ await AUTH.resetUserPasswordConfirmed(u.id,form._pw,false); ctx.addActivity('users',u.id,'password reset','for '+u.fullName+' by '+ctx.user.name); refresh(); setReset(null); showProPopup('savedNotes', ar?'تمت إعادة التعيين على السيرفر وفتح الحساب':'Password reset on the server; login lock cleared'); }
-    catch(e){ alert(accountErr(e)); } finally{ setOp(''); } };
+  const doReset=async(form)=>{ const v=AUTH.validatePassword(form._pw,form._pw2); if(v){ alert(v); return {ok:false}; }
+    const u=AUTH.loadUsers().find(x=>x.id===reset.id); if(!u)return {ok:false}; setOp('reset-'+u.id);
+    try{ await AUTH.resetUserPasswordConfirmed(u.id,form._pw,false); ctx.addActivity('users',u.id,'password reset','for '+u.fullName+' by '+ctx.user.name); refresh(); showProPopup('passwordChanged', ar?'تمت إعادة التعيين على السيرفر وفتح الحساب':'Password reset on the server; login lock cleared'); return {ok:true}; }
+    catch(e){ alert(accountErr(e)); return {ok:false}; } finally{ setOp(''); } };
   // Owner-only: set ONE shared temp password for every active non-owner user at once, then show the sheet.
   const resetAllPw=async()=>{
     const pw=prompt(ar?'كلمة سر مؤقتة مشتركة للفريق (10 أحرف على الأقل، حرف كبير وصغير ورقم):':'One shared temporary password for the team (10+ characters, upper-case, lower-case, and a number):','');
@@ -12551,7 +12563,7 @@ function UsersView({ ctx }){
     <div class="muted" style=${{fontSize:11.5,marginTop:12}}>${ar?'أي تعديل حساس هنا لا يظهر كناجح إلا بعد تأكيده من خادم الحسابات. إعادة كلمة المرور تفتح قفل المحاولات تلقائيًا.':'Sensitive changes show success only after the accounts server confirms them. Resetting a password also clears its login lock.'}</div>
 
     ${edit&&html`<${UserForm} user=${edit} employees=${ctx.db.employees||[]} ar=${ar} busy=${!!op} onClose=${()=>setEdit(null)} onSave=${save}/>`}
-    ${reset&&html`<${PwResetForm} user=${reset} ar=${ar} onClose=${()=>setReset(null)} onSave=${doReset}/>`}
+    ${reset&&html`<${PwResetForm} user=${reset} ar=${ar} busy=${op==='reset-'+reset.id} onClose=${()=>setReset(null)} onSave=${doReset}/>`}
     ${access&&html`<${AccessDrawer} user=${access} ar=${ar} onClose=${()=>setAccess(null)} onSave=${saveAccess}/>`}
     ${bulkResult&&html`<div class="ovl" onClick=${()=>setBulkResult(null)}>
       <div class="modal" style=${{width:560,maxWidth:'96vw'}} onClick=${e=>e.stopPropagation()}>
@@ -12595,13 +12607,21 @@ function UserForm({ user, employees, ar, busy, onClose, onSave }){
     <div class="form-foot"><button class="btn btn-ghost" disabled=${busy} onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button><button class="btn btn-pri" disabled=${busy} onClick=${()=>onSave(f)}>${busy?(ar?'جارٍ الحفظ…':'Saving…'):(ar?'حفظ':'Save')}</button></div>
   <//>`;
 }
-function PwResetForm({ user, ar, onClose, onSave }){
-  const [f,setF]=useState({}); const set=(k,v)=>setF(Object.assign({},f,{[k]:v}));
+function PwResetForm({ user, ar, busy, onClose, onSave }){
+  const [f,setF]=useState({}); const [done,setDone]=useState(false); const set=(k,v)=>setF(Object.assign({},f,{[k]:v}));
+  const save=async()=>{ if(busy)return; const result=await onSave(f); if(result&&result.ok){ setF({}); setDone(true); } };
   return html`<${Modal} title=${(ar?'إعادة تعيين كلمة المرور — ':'Reset Password — ')+user.fullName} onClose=${onClose}>
-    <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور الجديدة':'New password'}</span><input type="password" value=${f._pw||''} onChange=${e=>set('_pw',e.target.value)}/></label>
-    <label class="fld" style=${{marginBottom:12}}><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" value=${f._pw2||''} onChange=${e=>set('_pw2',e.target.value)}/></label>
-    <div class="muted" style=${{fontSize:11.5,marginBottom:12}}>${ar?'لا يؤثر هذا على بيانات المستخدم الأخرى.':'This does not change any other user data.'}</div>
-    <div class="form-foot"><button class="btn btn-ghost" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button><button class="btn btn-pri" onClick=${()=>onSave(f)}>${ar?'إعادة التعيين':'Reset'}</button></div>
+    ${done?html`<div role="status" aria-live="polite" style=${{textAlign:'center',padding:'16px 8px 6px'}}>
+      <div style=${{width:58,height:58,borderRadius:'50%',display:'grid',placeItems:'center',margin:'0 auto 14px',background:'rgba(200,243,30,.14)',border:'1px solid rgba(200,243,30,.35)',color:'var(--lime)',fontSize:28,fontWeight:900}}>✓</div>
+      <h3 style=${{margin:'0 0 8px',fontSize:19}}>${ar?'تمت إعادة تعيين كلمة المرور':'Password reset successfully'}</h3>
+      <p class="muted" style=${{fontSize:13,lineHeight:1.8,margin:'0 auto 16px'}}>${ar?'السيرفر أكد التغيير، وقفل محاولات الدخول اتفتح. المستخدم يقدر يدخل بالباسورد الجديد فورًا.':'The server confirmed the change and cleared the login lock. The user can sign in with the new password now.'}</p>
+      <button class="btn btn-pri" onClick=${onClose}>${ar?'تمام':'Done'}</button>
+    </div>`:html`<div>
+      <label class="fld" style=${{marginBottom:10}}><span>${ar?'كلمة المرور الجديدة':'New password'}</span><input type="password" disabled=${busy} autoComplete="new-password" value=${f._pw||''} onChange=${e=>set('_pw',e.target.value)}/></label>
+      <label class="fld" style=${{marginBottom:12}}><span>${ar?'تأكيد كلمة المرور':'Confirm password'}</span><input type="password" disabled=${busy} autoComplete="new-password" value=${f._pw2||''} onChange=${e=>set('_pw2',e.target.value)} onKeyDown=${e=>e.key==='Enter'&&save()}/></label>
+      <div class="muted" style=${{fontSize:11.5,marginBottom:12}}>${ar?'لا يؤثر هذا على بيانات المستخدم الأخرى.':'This does not change any other user data.'}</div>
+      <div class="form-foot"><button class="btn btn-ghost" disabled=${busy} onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button><button class="btn btn-pri" disabled=${busy} onClick=${save}>${busy?(ar?'جارٍ التعيين…':'Resetting…'):(ar?'إعادة التعيين':'Reset')}</button></div>
+    </div>`}
   <//>`;
 }
 

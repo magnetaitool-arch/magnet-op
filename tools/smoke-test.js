@@ -84,6 +84,12 @@ const html = read('index.html');
 /changepw'?,\s*\{\s*token:getAcctToken\(\),\s*currentPassword:cur,\s*newPassword:np/.test(html.replace(/\s+/g, ' '))
   ? ok('PwResetForm sends newPassword (not a client hash)')
   : (/newHash\s*=\s*await\s+AUTH\.hashPassword/.test(html) ? bad('PwResetForm still computes/sends newHash') : ok('no client-side newHash in change-password'));
+/Password changed successfully/.test(html) && /you do not need to open a new one/.test(html) && !/setTimeout\(onComplete,350\)/.test(html)
+  ? ok('password change stays in-tab and shows a persistent success state')
+  : bad('password change can still close before the user sees confirmation');
+/Password reset successfully/.test(html) && /The server confirmed the change and cleared the login lock/.test(html)
+  ? ok('owner password reset waits for server confirmation and shows success')
+  : bad('owner password reset has no confirmed success state');
 
 console.log('\n[5] dangerous-pattern scan');
 /admin123/.test(html) ? bad('legacy default credential remains in index.html') : ok('no default credential remains in index.html');
