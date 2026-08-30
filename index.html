@@ -3647,6 +3647,9 @@ function _docShell(title, bodyHTML){
     .sec p,.sec div{font-size:13px;line-height:1.7;color:#333;white-space:pre-wrap}
     .sign{display:flex;justify-content:space-between;gap:40px;margin-top:50px}
     .sign div{flex:1;border-top:1px solid #111;padding-top:8px;font-size:12px;color:#555}
+    .brief-section{break-inside:avoid;margin:24px 0}.brief-section h3{display:flex;align-items:center;gap:9px;font-size:14px;margin:0 0 10px;padding-bottom:8px;border-bottom:2px solid #111}.brief-section h3 i{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#c4ff3d;color:#111;font-style:normal;font-size:11px}
+    .brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.brief-field{padding:9px 0;border-bottom:1px solid #eee;min-height:54px}.brief-field b{display:block;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#777;margin-bottom:4px}.brief-field span{font-size:13px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+    .report-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 28px}.report-kpis div{border:1px solid #ddd;border-radius:9px;padding:14px 10px;min-height:78px}.report-kpis b{display:block;font-size:20px;line-height:1.2}.report-kpis span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#777;margin-top:8px}.template-lines{height:70px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 22px,#ddd 23px,#ddd 24px)}
     .foot{margin-top:40px;border-top:1px solid #eee;padding-top:14px;font-size:11px;color:#999;text-align:center}
     .lime{color:#5b7d00;font-weight:700}
     @media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none}.noprint{display:none}}
@@ -3657,6 +3660,7 @@ function _docShell(title, bodyHTML){
 // Print-view label dictionary (English -> Arabic). PL() returns the right one.
 const PRINT_LABELS={
   'INVOICE':'فاتورة','PAYMENT RECEIPT':'إيصال دفع','PROPOSAL':'عرض','QUOTATION':'عرض سعر','SERVICE AGREEMENT':'اتفاقية خدمة',
+  'CLIENT PROJECT BRIEF':'بريف مشروع العميل','MONTHLY CLIENT REPORT':'تقرير العميل الشهري',
   'Billed to':'فاتورة إلى','Details':'التفاصيل','Issue':'تاريخ الإصدار','Due':'تاريخ الاستحقاق','Status':'الحالة',
   'Subtotal':'المجموع الفرعي','Discount':'الخصم','Tax':'الضريبة','Total':'الإجمالي','Paid':'المدفوع','Balance':'المتبقي','Terms':'الشروط',
   'Received from':'مستلم من','Against invoice':'مقابل فاتورة','Amount received':'المبلغ المستلم','Method':'طريقة الدفع','Thank you.':'شكراً لك.',
@@ -3672,6 +3676,12 @@ const PRINT_LABELS={
   'Definitions':'التعريفات','KPIs':'مؤشرات الأداء','Duration':'المدة','Working Hours':'ساعات العمل','Liability':'المسؤولية',
   'Force Majeure':'القوة القاهرة','Official Communications':'المراسلات الرسمية','General Terms':'الشروط العامة',
   'Governing Law':'القانون الواجب التطبيق','Additional Conditions':'شروط إضافية',
+  'Project type':'نوع المشروع','Prepared by':'أعده','Submitted':'تاريخ الإرسال','Internal Notes':'ملاحظات داخلية',
+  'Reporting period':'فترة التقرير','Executive Summary':'الملخص التنفيذي','Goals & Objectives':'الأهداف',
+  'Work Completed':'الأعمال المنجزة','KPI Summary':'ملخص مؤشرات الأداء','Key Wins':'أهم النجاحات',
+  'Challenges & Learnings':'التحديات والدروس','Recommendations':'التوصيات','Next Month Plan':'خطة الشهر القادم',
+  'Client Notes':'ملاحظات العميل','Completed Tasks':'المهام المكتملة','Open Tasks':'المهام المفتوحة',
+  'Invoices Issued':'الفواتير الصادرة','Amount Collected':'المبلغ المحصل','Generated':'تاريخ الإنشاء','Yes':'نعم',
 };
 function PL(en){ return getAppSettings().language==='ar' ? (PRINT_LABELS[en]||en) : en; }
 function _docHead(docTitle, number, dateStr){
@@ -3763,12 +3773,66 @@ function generateContractHTML(ct, db){ _docCur=ct.currency||null;
     <div class="sign"><div>${COMPANY.name}<br>${PL('Date')}: ____________</div><div>${esc(c.legalName||c.brandName||PL('Client'))}<br>${PL('Signature')}: ____________</div></div>
     <div class="foot">${COMPANY.name} · ${COMPANY.email}</div></div>`);
 }
+function generateBriefHTML(brief, db){
+  const answers=brief.answers||{};
+  const client=(db.clients||[]).find(x=>x.id===brief.clientId)||{};
+  const value=(key)=>answers[key]||brief[key]||'';
+  const sections=BRIEF_SECTIONS.map((section,idx)=>{
+    const fields=section.fields.map(field=>{
+      let raw=value(field.k);
+      if(Array.isArray(raw)) raw=raw.join(' · ');
+      if(field.type==='checkbox') raw=raw?PL('Yes'):'—';
+      return `<div class="brief-field"><b>${esc(getAppSettings().language==='ar'?field.ar:field.en)}</b><span>${raw?esc(raw):'—'}</span></div>`;
+    }).join('');
+    return `<section class="brief-section"><h3><i>${idx+1}</i>${esc(getAppSettings().language==='ar'?section.ar:section.en)}</h3><div class="brief-grid">${fields}</div></section>`;
+  }).join('');
+  const clientName=brief.company||answers.company||client.brandName||client.name||PL('Client');
+  return _docShell('Client Project Brief — '+clientName, `<div class="page">
+    ${_docHead('CLIENT PROJECT BRIEF', brief.id||'', fmtDate(brief.submittedAt||brief.createdAt||todayISO()))}
+    <h1 class="doc">${esc(clientName)}</h1><div class="sub">${PL('Project type')}: ${esc(brief.projectType||'—')} · ${PL('Prepared by')}: ${esc(brief.createdBy||COMPANY.name)}</div>
+    ${sections}
+    ${brief.internalNotes?`<h3 class="sec">${PL('Internal Notes')}</h3><div class="sec"><div>${esc(brief.internalNotes)}</div></div>`:''}
+    <div class="sign"><div>${PL('Agency')} — ${COMPANY.name}<br>${PL('Date')}: ____________</div><div>${PL('Client')} — ${esc(clientName)}<br>${PL('Signature')}: ____________</div></div>
+    <div class="foot">${COMPANY.name} · ${COMPANY.email} · ${COMPANY.site}</div></div>`);
+}
+function generateClientReportHTML(report, db){
+  _docCur=report.currency||null;
+  const client=(db.clients||[]).find(x=>x.id===report.clientId)||{};
+  const clientName=client.brandName||client.name||PL('Client');
+  const period=report.period||thisMonth();
+  const periodTasks=(db.tasks||[]).filter(t=>t.clientId===report.clientId&&String(t.createdAt||t.dueDate||'').slice(0,7)===period);
+  const completed=periodTasks.filter(t=>['Done','Delivered','Approved','Completed'].includes(t.status)).length;
+  const open=periodTasks.length-completed;
+  const periodInvoices=(db.invoices||[]).filter(i=>i.clientId===report.clientId&&String(i.issueDate||i.createdAt||'').slice(0,7)===period);
+  const invoiceIds=new Set(periodInvoices.map(i=>i.id));
+  const collected=(db.payments||[]).filter(p=>(p.clientId===report.clientId||invoiceIds.has(p.invoiceId))&&String(p.date||p.createdAt||'').slice(0,7)===period).reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+  const isTemplate=report.id==='TEMPLATE';
+  const section=(labelText,valueText)=>valueText?`<h3 class="sec">${PL(labelText)}</h3><div class="sec"><div>${esc(valueText)}</div></div>`:(isTemplate?`<h3 class="sec">${PL(labelText)}</h3><div class="template-lines"></div>`:'');
+  const defaultWork=periodTasks.filter(t=>['Done','Delivered','Approved','Completed'].includes(t.status)).map(t=>'• '+(t.title||t.name||PL('Completed Tasks'))).join('\n');
+  return _docShell('Monthly Client Report — '+clientName+' — '+period, `<div class="page">
+    ${_docHead('MONTHLY CLIENT REPORT', report.id||'', period)}
+    <h1 class="doc">${esc(report.title||clientName+' — '+period)}</h1><div class="sub">${PL('Prepared for')} ${esc(clientName)} · ${PL('Reporting period')}: ${esc(period)}</div>
+    <div class="report-kpis"><div><b>${completed}</b><span>${PL('Completed Tasks')}</span></div><div><b>${open}</b><span>${PL('Open Tasks')}</span></div><div><b>${periodInvoices.length}</b><span>${PL('Invoices Issued')}</span></div><div><b>${_money(collected)}</b><span>${PL('Amount Collected')}</span></div></div>
+    ${section('Executive Summary',report.executiveSummary||report.managerSummary)}
+    ${section('Goals & Objectives',report.goals)}
+    ${section('Work Completed',report.completedWork||defaultWork)}
+    ${section('KPI Summary',report.kpiSummary)}
+    ${section('Key Wins',report.wins||report.strengths)}
+    ${section('Challenges & Learnings',report.challenges||report.improvements)}
+    ${section('Recommendations',report.recommendations)}
+    ${section('Next Month Plan',report.nextPlan||report.nextGoals)}
+    ${section('Client Notes',report.clientNotes||report.notes)}
+    <div class="sign"><div>${PL('Prepared by')} — ${esc(report.createdByName||COMPANY.name)}<br>${PL('Date')}: ${fmtDate(report.createdAt||todayISO())}</div><div>${PL('Client')} — ${esc(clientName)}<br>${PL('Signature')}: ____________</div></div>
+    <div class="foot">${COMPANY.name} · ${COMPANY.email} · ${COMPANY.site}</div></div>`);
+}
 function _docHTML(type, rec, db){
   if(type==='invoice') return generateInvoiceHTML(rec,db);
   if(type==='receipt') return generateReceiptHTML(rec,db);
   if(type==='proposal') return generateProposalHTML(rec,db);
   if(type==='quotation') return generateQuotationHTML(rec,db);
   if(type==='contract') return generateContractHTML(rec,db);
+  if(type==='brief') return generateBriefHTML(rec,db);
+  if(type==='report') return generateClientReportHTML(rec,db);
   return '<div>Unknown document</div>';
 }
 function printDocument(type, rec, db){
@@ -6415,15 +6479,17 @@ function PublicContractReview({token,cfg}){
   </div>`;
 }
 
-function NewBriefModal({ draft, onClose, onCreate }){
+function NewBriefModal({ draft, clients, ar, onClose, onCreate }){
   const [d,setD]=useState(draft||{}); const set=(k,v)=>setD(x=>({...x,[k]:v}));
+  const selectClient=(id)=>{ const c=(clients||[]).find(x=>x.id===id)||{}; setD(x=>({...x,clientId:id,company:c.brandName||c.name||x.company||'',clientName:c.mainContactName||x.clientName||''})); };
   return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" onClick=${e=>e.stopPropagation()}>
-    <div class="cdrawer-h"><div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>New</div><h3 style=${{margin:'3px 0 0',fontSize:18}}>New client brief</h3></div><button class="mini" onClick=${onClose}>×</button></div>
+    <div class="cdrawer-h"><div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>${ar?'جديد':'New'}</div><h3 style=${{margin:'3px 0 0',fontSize:18}}>${ar?'بريف عميل جديد':'New client brief'}</h3></div><button class="mini" onClick=${onClose}>×</button></div>
     <div class="cdrawer-b">
-      <div class="cd-sec"><label>Client name (optional)</label><input class="inp" value=${d.clientName||''} onInput=${e=>set('clientName',e.target.value)}/></div>
-      <div class="cd-sec"><label>Company (optional)</label><input class="inp" value=${d.company||''} onInput=${e=>set('company',e.target.value)}/></div>
-      <div class="cd-sec"><label>Project type (optional)</label><input class="inp" value=${d.projectType||''} onInput=${e=>set('projectType',e.target.value)} placeholder="Branding / Social / Ads…"/></div>
-      <div class="flex gap8"><button class="btn btn-pri" onClick=${()=>onCreate(d)}>Create & get link</button><button class="btn" onClick=${onClose}>Cancel</button></div>
+      <div class="cd-sec"><label>${ar?'اختر عميل موجود (اختياري)':'Choose an existing client (optional)'}</label><select class="inp" value=${d.clientId||''} onChange=${e=>selectClient(e.target.value)}><option value="">${ar?'— عميل جديد —':'— New client —'}</option>${(clients||[]).filter(c=>!c._del).map(c=>html`<option key=${c.id} value=${c.id}>${c.brandName||c.name}</option>`)}</select></div>
+      <div class="cd-sec"><label>${ar?'اسم الشخص (اختياري)':'Client name (optional)'}</label><input class="inp" value=${d.clientName||''} onInput=${e=>set('clientName',e.target.value)}/></div>
+      <div class="cd-sec"><label>${ar?'الشركة (اختياري)':'Company (optional)'}</label><input class="inp" value=${d.company||''} onInput=${e=>set('company',e.target.value)}/></div>
+      <div class="cd-sec"><label>${ar?'نوع المشروع (اختياري)':'Project type (optional)'}</label><input class="inp" value=${d.projectType||''} onInput=${e=>set('projectType',e.target.value)} placeholder="Branding / Social / Ads…"/></div>
+      <div class="flex gap8"><button class="btn btn-pri" onClick=${()=>onCreate(d)}>${ar?'إنشاء وأخذ اللينك':'Create & get link'}</button><button class="btn" onClick=${onClose}>${ar?'إلغاء':'Cancel'}</button></div>
     </div></div></div>`;
 }
 
@@ -6437,6 +6503,7 @@ function BriefDetail({ ctx, brief, onClose }){
   return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" onClick=${e=>e.stopPropagation()}>
     <div class="cdrawer-h"><div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>Brief · ${brief.status||'pending'}</div><h3 style=${{margin:'3px 0 0',fontSize:18}}>${brief.company||brief.clientName||'Client brief'}</h3></div><button class="mini" onClick=${onClose}>×</button></div>
     <div class="cdrawer-b">
+      <div class="flex gap8" style=${{marginBottom:14,flexWrap:'wrap'}}><button class="btn btn-pri" onClick=${()=>printDocument('brief',brief,ctx.db)}>${ctx.lang==='ar'?'معاينة / حفظ PDF':'Preview / Save PDF'}</button></div>
       <div class="cd-sec"><label>Brief link</label><div class="camp-link"><input readonly value=${briefLink(brief.token)} onClick=${e=>e.target.select()}/><button class="mini" onClick=${()=>copy(briefLink(brief.token))}>${copied?'Copied ✓':'Copy'}</button></div></div>
       ${brief.status!=='submitted'
         ? html`<div class="cd-ro">Not submitted yet — current status: <b>${brief.status||'pending'}</b>. The client's answers will appear here once submitted.</div>`
@@ -6450,6 +6517,7 @@ function BriefDetail({ ctx, brief, onClose }){
 
 function BriefsView({ ctx }){
   const { db, role } = ctx;
+  const ar=ctx.lang==='ar';
   const editable = canEdit('briefs', role);
   const [nw,setNw]=useState(null);
   const [sel,setSel]=useState(null);
@@ -6458,11 +6526,12 @@ function BriefsView({ ctx }){
   const copy=(t,tag)=>{ try{ navigator.clipboard.writeText(t); setCopied(tag); setTimeout(()=>setCopied(''),1500);}catch(e){alert(t);} };
   const wa=(tok,name)=>{ const m='أهلاً'+(name?(' '+name):'')+' من Magnet — ده لينك البريف، لو سمحت املأه عشان نبدأ شغل مشروعك:\n'+briefLink(tok); return 'https://wa.me/?text='+encodeURIComponent(m); };
   const create=(d)=>{ const tok='brf-'+randToken(18);
-    const b=ctx.createRecord('briefs',{ token:tok, status:'pending', clientName:d.clientName||'', company:d.company||'', projectType:d.projectType||'', createdBy:ctx.user.name }); setNw(null); setSel(b); };
+    const b=ctx.createRecord('briefs',{ token:tok, status:'pending', clientId:d.clientId||'', clientName:d.clientName||'', company:d.company||'', projectType:d.projectType||'', createdBy:ctx.user.name }); setNw(null); setSel(b); };
   const badge=(s)=> s==='submitted'?'ok':s==='opened'?'warn':'';
   return html`<div class="view">
     <${Head} eyebrow="Sales" title="Client Briefs" desc="Generate a branded brief link, send it on WhatsApp, and get the full brief back in the system.">
-      ${editable&&html`<button class="btn btn-pri" onClick=${()=>setNw({})}>${React.createElement(Icon.plus)} New Brief</button>`}
+      <button class="btn btn-ghost" onClick=${()=>printDocument('brief',{id:'TEMPLATE',status:'template',answers:{}},db)}>${React.createElement(Icon.print)} ${ar?'قالب PDF فارغ':'Blank PDF template'}</button>
+      ${editable&&html`<button class="btn btn-pri" onClick=${()=>setNw({})}>${React.createElement(Icon.plus)} ${ar?'بريف جديد':'New Brief'}</button>`}
     <//>
     ${briefs.length===0
       ? html`<${EmptyState} title="No briefs yet" text="Create a brief link and send it to a client to collect a detailed project brief." icon="fileText"/>`
@@ -6480,7 +6549,7 @@ function BriefsView({ ctx }){
             <button class="mini pri" onClick=${()=>setSel(b)}>View</button>
             ${ctx.canDelete('briefs')&&html`<button class="mini danger" onClick=${()=>ctx.delRec('briefs',b.id,b.company||b.clientName)}>Delete</button>`}
           </td></tr>`)}</tbody></table></div><//>`}
-    ${nw&&html`<${NewBriefModal} draft=${nw} onClose=${()=>setNw(null)} onCreate=${create}/>`}
+    ${nw&&html`<${NewBriefModal} draft=${nw} clients=${db.clients||[]} ar=${ar} onClose=${()=>setNw(null)} onCreate=${create}/>`}
     ${sel&&html`<${BriefDetail} ctx=${ctx} brief=${(db.briefs||[]).find(x=>x.id===sel.id)||sel} onClose=${()=>setSel(null)}/>`}
   </div>`;
 }
@@ -8081,6 +8150,15 @@ const FORM_SCHEMAS = {
     {k:'language',label:'Report language',type:'select',opts:['Arabic','English'],showIf:r=>r.reportKind==='Employee',group:'Report'},
     {k:'includeSalary',label:'Include salary and payments',type:'checkbox',salary:true,showIf:r=>r.reportKind==='Employee',group:'Report'},
     {k:'status',label:'Status',type:'select',opts:['Draft','In Review','Approved','Sent'],group:'Report'},
+    {k:'executiveSummary',label:'Executive summary',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Client report'},
+    {k:'goals',label:'Goals & objectives',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Client report'},
+    {k:'completedWork',label:'Work completed / deliverables',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Performance'},
+    {k:'kpiSummary',label:'KPI summary (reach, leads, sales, ROAS…)',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Performance'},
+    {k:'wins',label:'Key wins',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Insights'},
+    {k:'challenges',label:'Challenges & learnings',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Insights'},
+    {k:'recommendations',label:'Recommendations',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Next steps'},
+    {k:'nextPlan',label:'Next month plan',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Next steps'},
+    {k:'clientNotes',label:'Client notes / approvals needed',type:'textarea',showIf:r=>(r.reportKind||'Client')==='Client',group:'Next steps'},
     {k:'managerSummary',label:'Manager summary',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
     {k:'strengths',label:'Strengths',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
     {k:'improvements',label:'Areas to improve',type:'textarea',showIf:r=>r.reportKind==='Employee',group:'Narrative'},
@@ -10268,7 +10346,7 @@ function ReportsView({ ctx, visible, ce }){
   const [kind,setKind]=useState('All');
   const all=visible('reports').slice().sort((a,b)=>String(b.createdAt||b.period||'').localeCompare(String(a.createdAt||a.period||'')));
   const rows=kind==='All'?all:all.filter(r=>(r.reportKind||'Client')===kind);
-  const newClient=()=>ctx.openModal('reports',{reportKind:'Client',title:(ar?'تقرير عميل — ':'Client report — ')+thisMonth(),period:thisMonth(),type:'Monthly',generationMode:'Manual',status:'Draft'},FORM_SCHEMAS.reports,ar?'تقرير عميل جديد':'New client report');
+  const newClient=()=>ctx.openModal('reports',{reportKind:'Client',title:(ar?'تقرير عميل — ':'Client report — ')+thisMonth(),period:thisMonth(),type:'Monthly',generationMode:'Manual',status:'Draft',createdByName:ctx.user.name},FORM_SCHEMAS.reports,ar?'تقرير عميل جديد':'New client report');
   const newEmployee=()=>ctx.openModal('reports',{reportKind:'Employee',title:(ar?'تقرير موظف — ':'Employee report — ')+thisMonth(),period:thisMonth(),type:'Monthly',language:ar?'Arabic':'English',includeSalary:false,generationMode:'Manual',status:'Draft',createdByName:ctx.user.name},FORM_SCHEMAS.reports,ar?'تقرير موظف جديد':'New employee report');
   const deleteReport=(r)=>{
     if(!confirm((ar?'حذف ':'Delete ')+(r.title||(ar?'التقرير':'report'))+(ar?'؟ لا يمكن التراجع.':'? This cannot be undone.')))return;
@@ -10280,7 +10358,10 @@ function ReportsView({ ctx, visible, ce }){
   };
   const saveReportEmail=(r,result)=>ctx.updateRecord('reports',r.id,{status:result.ok?'Sent':r.status,emailDeliveryStatus:result.status||(result.ok?'Accepted':'Failed'),emailProviderId:result.id||r.emailProviderId||'',emailTo:result.to||'',emailSentAt:result.at||nowISO(),emailError:result.error||'',sentAt:result.ok?(result.at||nowISO()):(r.sentAt||'')});
   const checkReportEmail=async(r)=>{try{const result=await getEmailStatus(r.emailProviderId);ctx.updateRecord('reports',r.id,{emailDeliveryStatus:result.status,emailCheckedAt:nowISO(),emailError:''});showProPopup('syncSuccess',(ar?'حالة التسليم: ':'Delivery status: ')+result.status);}catch(err){const message=String((err&&err.message)||err);ctx.updateRecord('reports',r.id,{emailError:message,emailCheckedAt:nowISO()});alert(message);}};
-  const extra=(r)=>{ if(r.reportKind!=='Employee')return null; const emp=byId(db.employees,r.employeeId); if(!emp)return html`<span class="muted">${ar?'الموظف غير موجود':'Employee missing'}</span>`; const salaryAllowed=canSeeSalary(ctx.role);
+  const extra=(r)=>{ if((r.reportKind||'Client')==='Client')return html`<span class="flex gap8" style=${{justifyContent:'flex-end',flexWrap:'wrap'}}>
+      <button class="mini pri" onClick=${()=>printDocument('report',r,db)}>${ar?'معاينة / PDF':'Preview / PDF'}</button>
+      ${r.status!=='Approved'&&ce?html`<button class="mini" onClick=${()=>ctx.updateRecord('reports',r.id,{status:'Approved',approvedAt:nowISO()})}>${ar?'اعتماد':'Approve'}</button>`:''}
+    </span>`; const emp=byId(db.employees,r.employeeId); if(!emp)return html`<span class="muted">${ar?'الموظف غير موجود':'Employee missing'}</span>`; const salaryAllowed=canSeeSalary(ctx.role);
     return html`<span class="flex gap8" style=${{justifyContent:'flex-end',flexWrap:'wrap'}}>
       <button class="mini pri" onClick=${()=>printEmployeeReport(r,emp,db,salaryAllowed)}>${ar?'معاينة / PDF':'Preview / PDF'}</button>
       ${r.status!=='Approved'&&ce?html`<button class="mini" onClick=${()=>ctx.updateRecord('reports',r.id,{status:'Approved',approvedAt:nowISO()})}>${ar?'اعتماد':'Approve'}</button>`:''}
@@ -10289,6 +10370,7 @@ function ReportsView({ ctx, visible, ce }){
     </span>`; };
   return html`<div class="view">
     <${Head} eyebrow="Operations" title=${ar?'التقارير':'Reports'} desc=${ar?'تقارير العملاء والموظفين — يدويًا أو مسودات شهرية تلقائية.':'Client and employee reports — manual or automatic monthly drafts.'}>
+      <button class="btn btn-ghost" onClick=${()=>printDocument('report',{id:'TEMPLATE',reportKind:'Client',title:ar?'قالب تقرير عميل شهري':'Monthly client report template',period:thisMonth(),status:'Draft',createdByName:ctx.user.name},db)}>${React.createElement(Icon.print)} ${ar?'قالب PDF فارغ':'Blank PDF template'}</button>
       ${ce&&html`<button class="btn btn-ghost" onClick=${newClient}>${React.createElement(Icon.plus)} ${ar?'تقرير عميل':'Client report'}</button><button class="btn btn-pri" onClick=${newEmployee}>${React.createElement(Icon.plus)} ${ar?'تقرير موظف':'Employee report'}</button>`}<//>
 
     ${(isAdminRole(ctx.role)||aliasRole(ctx.role)==='HR')&&html`<${Panel} className="mb18">

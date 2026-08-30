@@ -59,8 +59,8 @@ const acct = read('supabase/functions/accounts/index.ts');
 /action==='me'/.test(acct) && /refreshCurrentUser/.test(read('index.html')) && /setInterval\(refreshIdentity,60000\)/.test(read('index.html'))
   ? ok('open sessions revalidate live role/status/access and cannot stay on a stale employee role')
   : bad('open sessions can keep a stale role after an account repair or downgrade');
-/version:15/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
-  ? ok('accounts v15 fails closed on an ambiguous login instead of selecting an arbitrary role')
+/version:16/.test(acct) && /identity-conflict/.test(acct) && /uniqueByLogin/.test(acct)
+  ? ok('accounts v16 fails closed on an ambiguous login instead of selecting an arbitrary role')
   : bad('accounts service can still select an arbitrary duplicate login identity');
 /ALLOWED_ORIGINS\.has\(origin\)/.test(acct) && !/Access-Control-Allow-Origin'\s*:\s*'\*'/.test(acct)
   ? ok('accounts CORS uses an exact Magnet origin allowlist')
@@ -126,6 +126,13 @@ const serviceWorker = read('serviceworker.js');
   && /\.ovl\{[\s\S]{0,700}height:100dvh[\s\S]{0,500}overflow:hidden/.test(html)
   ? ok('short laptop modals keep their footer reachable with internal scrolling')
   : bad('short laptop modals can still hide lower fields or save controls');
+/function generateBriefHTML\(/.test(html)
+  && /function generateClientReportHTML\(/.test(html)
+  && /printDocument\('brief'/.test(html)
+  && /printDocument\('report'/.test(html)
+  && /k:'kpiSummary'/.test(html)
+  ? ok('client briefs and monthly reports have editable bilingual PDF workflows')
+  : bad('brief/report PDF templates are missing or not connected to editable records');
 /requestIdleCallback\(persist,\{timeout:900\}\)/.test(html)
   && /window\.addEventListener\('pagehide',flush\)/.test(html)
   ? ok('large offline snapshots persist during idle time and flush safely on page exit')
