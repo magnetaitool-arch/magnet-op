@@ -6582,6 +6582,11 @@ function App(){
   const [showLogin, setShowLogin] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Temporary credentials are an onboarding state, not a dismissible warning.
+  // Keep the password screen open until the server confirms a permanent password.
+  useEffect(()=>{
+    if(authUser&&authUser.isDefaultPassword) setProfileOpen(true);
+  }, [authUser&&authUser.id, authUser&&authUser.isDefaultPassword]);
   useEffect(()=>{ // discover accounts, then choose sign-in vs first-owner setup
     const settle=(accounts,status)=>{ const u=getSessionUser();
       // A cloud browser cache belongs to the identity scope that downloaded it.
@@ -7872,8 +7877,11 @@ function App(){
         onSave=${rec=>{ if(rec.id){ if(modal.coll==='employees'){ const prev=byId(db.employees,rec.id)||{}; if(prev.salary!==rec.salary) addActivity('employees',rec.id,'salary updated',''); if(prev.appRole!==rec.appRole) addActivity('employees',rec.id,'role changed',(prev.appRole||'')+'→'+(rec.appRole||'')); } if(modal.coll==='clients'&&rec.status==='At Risk'){ addActivity('clients',rec.id,'marked at risk',''); } if(modal.coll==='tasks'&&rec.status==='Done'){ const prev=byId(db.tasks,rec.id)||{}; if(prev.status!=='Done') showProPopup('taskCompleted',rec.title||rec.name); } if((modal.coll==='projects')&&rec.status==='Completed'){ const prev=byId(db.projects,rec.id)||{}; if(prev.status!=='Completed') showProPopup('projectCompleted',rec.projectName||rec.name); } const _prevTeam = modal.coll==='teams'?byId(db.teams,rec.id):null; const _prevPay = modal.coll==='payments'?byId(db.payments,rec.id):null; const _prevTask=modal.coll==='tasks'?byId(db.tasks,rec.id):null; updateRecord(modal.coll,rec.id,rec); if(modal.coll==='tasks'&&rec.assignedTo&&(!_prevTask||_prevTask.assignedTo!==rec.assignedTo)){ addActivity('tasks',rec.id,'reassigned',nameById(db.employees,rec.assignedTo)); addNotification(rec.assignedTo,'New task assigned',rec.title||rec.name,'tasks',rec.id); triggerWebhook('taskAssignedWebhook',{task:rec}); sendTaskAssignmentEmail(rec,false); } if(modal.coll==='payments'){ const _fresh=(db.payments||[]).map(p=>p.id===rec.id?rec:p); syncInvoiceStatus(rec.invoiceId,_fresh); if(_prevPay&&_prevPay.invoiceId&&_prevPay.invoiceId!==rec.invoiceId) syncInvoiceStatus(_prevPay.invoiceId,_fresh); } if(modal.coll==='teams'){ addActivity('teams',rec.id,'team updated',rec.name); syncTeam(rec,_prevTeam); } if(modal.coll==='salaryChanges') applySalaryChange(rec); if(modal.coll==='employeePayments'){ const pr=computePayrun(rec); updateRecord('employeePayments',rec.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } } else if(modal.coll==='approvalRequests'){ submitRequest(rec); } else { const _dup=findLogicalDuplicate(modal.coll,rec,db); if(_dup){ const _dl=_dup.invoiceNumber||_dup.brandName||_dup.name||_dup.projectName||_dup.company||_dup.title||'record'; if(modal.coll==='invoices'){ alert(getLang()==='ar'?('رقم الفاتورة موجود بالفعل: '+_dl):('Invoice number already exists: '+_dl)); return; } if(modal.coll==='attendance'){ alert(getLang()==='ar'?'الحضور للموظف في التاريخ ده مسجل بالفعل — افتح السجل وعدّله بدل ما تعمل واحد جديد.':'Attendance already exists for this employee and date — edit the existing record instead.'); return; } if(!confirm(getLang()==='ar'?('في حاجة شبهها موجودة بالفعل: '+_dl+'\nأعملها برضه؟'):('A similar record already exists: '+_dl+'\nCreate anyway?'))) return; } const created=createRecord(modal.coll,rec); if(modal.coll==='leads') triggerWebhook('newLeadWebhook',{lead:created}); if(modal.coll==='salaryChanges') applySalaryChange(created); if(modal.coll==='clients'){ triggerWebhook('newClientWebhook',{client:created}); } if(modal.coll==='projects'){ if(rec.createDefaultTasks===true&&rec.projectType){ const ts=createDefaultTasksForProject(rec.projectType,created.id,rec.clientId); addActivity('projects',created.id,'default tasks generated',ts.length+' tasks'); } if(rec.createInvoice&&Number(rec.projectBudget)>0&&rec.clientId){ const _inv=createRecord('invoices',{invoiceNumber:nextInvoiceNumber(db), clientId:rec.clientId, projectId:created.id, amount:Number(rec.projectBudget)||0, tax:0, status:'Invoice Draft', issueDate:todayISO(), dueDate:rec.deadline||''}); addActivity('invoices',_inv.id,'auto-created from project budget',created.projectName||created.name||''); showProPopup('invoiceCreated', _inv.invoiceNumber); } triggerWebhook('newProjectWebhook',{project:created}); } if(modal.coll==='tasks'){ addNotification('Project Manager','New task created',(created.title||created.name||'')+(created.assignedTo?(' · '+nameById(db.employees,created.assignedTo)):''),'tasks',created.id); if(created.assignedTo){ addActivity('tasks',created.id,'assigned',nameById(db.employees,created.assignedTo)); addNotification(created.assignedTo,'New task assigned',created.title||created.name,'tasks',created.id); triggerWebhook('taskAssignedWebhook',{task:created}); sendTaskAssignmentEmail(created,false); } } if(modal.coll==='payments'){ showProPopup('paymentReceived',money(created.amount)); syncInvoiceStatus(created.invoiceId, [...(db.payments||[]), created]); } if(modal.coll==='employeePayments'){ const pr=computePayrun(created); updateRecord('employeePayments',created.id,{proratedBase:pr.proratedBase,grossSalary:pr.gross,socialInsurance:pr.insuranceEmp,socialInsuranceEmployer:pr.insuranceEmployer,incomeTax:pr.incomeTax,totalDeductions:pr.totalDeductions,netAmount:pr.net}); } if(modal.coll==='leaves'){ addNotification('Project Manager','Leave requested',nameById(db.employees,created.employeeId)+' · '+created.leaveType,'leaves',created.id); } if(modal.coll==='teams'){ addActivity('teams',created.id,'team created',created.name); syncTeam(created,null); } if(modal.coll==='contentCalendar'){ addActivity('contentCalendar',created.id,'content scheduled',created.title); if(created.assignedTo) addNotification(created.assignedTo,'Scheduled content assigned',(created.title||'')+' · '+fmtDate(created.scheduledDate),'calendar',created.id); if(created.scheduledDate===todayISO()) addNotification('Project Manager','Content due today',created.title,'calendar',created.id); } } setModal(null); }}
         onClose=${()=>setModal(null)}/>
     <//>`}
-    ${profileOpen&&html`<${ProfileModal} authUser=${authUser} lang=${lang} onClose=${()=>setProfileOpen(false)}
-      onChanged=${(u)=>{ setAuthUser(u); }}/>`}
+    ${profileOpen&&html`<${ProfileModal} authUser=${authUser} lang=${lang}
+      required=${!!(authUser&&authUser.isDefaultPassword)}
+      onClose=${()=>{ if(!(authUser&&authUser.isDefaultPassword)) setProfileOpen(false); }}
+      onChanged=${(u)=>{ setAuthUser(u); }}
+      onComplete=${()=>setProfileOpen(false)}/>`}
   </div>`;
 }
 
@@ -11921,8 +11929,8 @@ function InitialSetupScreen({ onSetup, onSignIn, lang, applyAppSettings }){
 }
 
 /* ---------------- Profile modal (self-service) ---------------- */
-function ProfileModal({ authUser, lang, onClose, onChanged }){
-  const ar=lang==='ar'; const [tab,setTab]=useState('profile');
+function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, required=false }){
+  const ar=lang==='ar'; const [tab,setTab]=useState(required?'pw':'profile');
   const [cur,setCur]=useState(''); const [np,setNp]=useState(''); const [cp,setCp]=useState(''); const [msg,setMsg]=useState('');
   const [avatar,setAvatar]=useState(authUser.avatar||''); const [bio,setBio]=useState(authUser.bio||'');
   const onPickAvatar=(file)=>{ if(!file) return; const reader=new FileReader();
@@ -11947,7 +11955,15 @@ function ProfileModal({ authUser, lang, onClose, onChanged }){
         // and stores it. The browser never computes or sends a password hash, so a
         // crafted request can't inject an arbitrary stored hash.
         const r=await acctApi(cfg,'changepw',{ token:getAcctToken(), currentPassword:cur, newPassword:np });
-        if(r&&r.ok){ u.isDefaultPassword=false; setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes'); return; }
+        if(r&&r.ok){
+          u.isDefaultPassword=false;
+          AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
+          try{ AUTH.setSessionUser(u, true); }catch(e){}
+          if(onChanged) onChanged(u);
+          setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes');
+          if(onComplete) setTimeout(onComplete,350);
+          return;
+        }
         if(r&&r.reason==='bad-current'){ setMsg(badMsg); return; }
       } catch(e){ /* unreachable -> legacy fallback */ }
     }
@@ -11959,10 +11975,14 @@ function ProfileModal({ authUser, lang, onClose, onChanged }){
     if(!(await AUTH.verifyPassword(cur,u.passwordHash))){ setMsg(badMsg); return; }
     u.passwordHash=await AUTH.hashPassword(np); u.isDefaultPassword=false;
     AUTH.saveUsers(AUTH.loadUsers().map(x=>x.id===u.id?u:x));
-    setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes'); };
+    try{ AUTH.setSessionUser(u, true); }catch(e){}
+    if(onChanged) onChanged(u);
+    setCur('');setNp('');setCp(''); setMsg(okMsg); showProPopup('savedNotes');
+    if(onComplete) setTimeout(onComplete,350); };
   return html`<${Modal} title=${ar?'الملف الشخصي':'Profile'} onClose=${onClose}>
+    ${required&&html`<div class="login-err" style=${{marginBottom:14}}>${ar?'لازم تغيّر كلمة المرور المؤقتة قبل استخدام النظام. لا يمكن إغلاق هذه الشاشة قبل نجاح التغيير.':'You must replace the temporary password before using Magnet OS. This screen stays locked until the change succeeds.'}</div>`}
     <div class="emp-tabs" style=${{margin:'0 -22px 16px'}}>
-      <button class="emp-tab ${tab==='profile'?'on':''}" onClick=${()=>setTab('profile')}>${ar?'الحساب':'Account'}</button>
+      ${!required&&html`<button class="emp-tab ${tab==='profile'?'on':''}" onClick=${()=>setTab('profile')}>${ar?'الحساب':'Account'}</button>`}
       <button class="emp-tab ${tab==='pw'?'on':''}" onClick=${()=>setTab('pw')}>${ar?'تغيير كلمة المرور':'Change Password'}</button>
     </div>
     ${tab==='profile'?html`<div>
