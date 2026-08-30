@@ -88,6 +88,7 @@ check(/legacy_identity_links/.test(edge) && /legacyUserId/.test(edge), 'member d
 check(!/console\.error\([^\n]*(jwt|email|password|token)/i.test(edge), 'Edge logs do not print credentials or personal identity values');
 check(/reconcileLegacyIdentity\(au\.id,rec\.rowId\)/.test(accountsEdge), 'legacy password login must reconcile canonical identity before issuing a session');
 check(/linkedAuthUserId\(rec\.rowId\)/.test(accountsEdge), 'repeat login resolves the immutable identity link before provider email discovery');
+check(/if\(!linkedUserId\)\{[\s\S]{0,220}reconcileLegacyIdentity\(au\.id,rec\.rowId\)/.test(accountsEdge), 'confirmed identity links do not rerun first-login alias reconciliation');
 check(/adminDeleteUser\(au\.id\)/.test(accountsEdge), 'failed new-user reconciliation removes the incomplete Auth identity');
 check(/provider_password_update_failed/.test(accountsEdge), 'failed provider password updates fail closed');
 check(/providerPassword\(pw:string\)[\s\S]{0,220}hmac\('provider-password:'/.test(accountsEdge), 'legacy credentials are converted to a server-derived provider password');

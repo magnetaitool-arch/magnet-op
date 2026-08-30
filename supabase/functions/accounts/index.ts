@@ -229,7 +229,7 @@ Deno.serve(async (req)=>{
 
     // Public startup discovery reveals only whether first-owner setup is required.
     // It never returns the account roster, identities, roles, or password metadata.
-    if(action==='health') return json({ok:true,service:'accounts',version:15,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
+    if(action==='health') return json({ok:true,service:'accounts',version:16,database:'reachable',needsSetup:accounts.length===0,authV2:await dbAuthConfig()});
 
     // Return the CURRENT server-side identity for an existing session. The UI must
     // not keep trusting the role/access snapshot cached at login forever: an Owner
@@ -277,8 +277,15 @@ Deno.serve(async (req)=>{
       let au=linkedUserId?{id:linkedUserId}:await adminFindUserByEmail(email), createdAuthUser=false, session:any=null;
       const upgradedPassword=await providerPassword(body.password||'');
       if(au && au.id){
-        try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
-        catch{ await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
+        // A CONFIRMED immutable link means first-login reconciliation already
+        // completed. Re-running the insert-only alias bootstrap on every login
+        // used to fail after a legitimate username change because the same user
+        // already owned a primary USERNAME alias. Existing sessions/memberships
+        // remain server-authoritative; reconcile only an unlinked identity.
+        if(!linkedUserId){
+          try{ await reconcileLegacyIdentity(au.id,rec.rowId); }
+          catch{ await logAuthEvent(requestId,'session_upgrade_failed',false,'identity_reconciliation_failed',rec.u.id); return json({ok:false,reason:'identity-reconciliation-failed'},409); }
+        }
         // Normal repeat logins must not update the provider password. Supabase may
         // reject setting a password to its current value, which previously made a
         // migrated employee's first login work and every later login fail. Try the
