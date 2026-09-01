@@ -192,11 +192,17 @@ const packageConfig = JSON.parse(read('package.json'));
 /function clearSessionUser\(\)[\s\S]{0,500}sync-pending-chip/.test(html)
   ? ok('logout and rejected sessions remove stale sync-status chrome')
   : bad('logged-out screens can retain another session sync-status chrome');
-/mo-save-status'[\s\S]{0,500}right:14px;left:auto/.test(html)
-  && /sync-pending-chip'[\s\S]{0,500}right:14px;left:auto/.test(html)
-  && /window\.innerWidth<=767\?'calc\(126px \+ env\(safe-area-inset-bottom\)\)'/.test(html)
-  ? ok('sync feedback avoids the sidebar footer and mobile bottom navigation')
-  : bad('sync feedback can cover persistent navigation or user controls');
+/function moSaveStatus\([\s\S]{0,900}document\.getElementById\('sync-pending-chip'\)/.test(html)
+  && /syncQueueDrain\(\{manual:true\}\)/.test(html)
+  && /window\.innerWidth<=767\?'calc\(84px \+ env\(safe-area-inset-bottom\)\)'/.test(html)
+  && /status===401\?'auth':status===402\?'service':status===403\?'permission'/.test(html)
+  ? ok('sync feedback is consolidated, actionable, and clear of persistent navigation')
+  : bad('sync feedback can duplicate failures, hide the cause, or cover navigation');
+/syncRetryDelay/.test(html)
+  && /item\.blocked\|\|\(Number\(item\.nextRetryAt\)>now\)/.test(html)
+  && /syncQueueItemVersion\(item\)!==initialVersions\.get\(key\)/.test(html)
+  ? ok('sync retries back off, permanent failures stop, and concurrent local edits are preserved')
+  : bad('sync retries can loop forever or overwrite a newer queued edit');
 /payslipEmailStatus/.test(html) && /Confirm the salary was actually paid/.test(html)
   ? ok('payslip delivery is separated from explicit payment confirmation')
   : bad('payslip email may still be conflated with salary payment');
@@ -255,7 +261,7 @@ const packageConfig = JSON.parse(read('package.json'));
   ? ok('a successful login carries the server cutover contract and mandatory mode has an environment safety belt')
   : bad('login can race the Auth cutover flag or silently downgrade mandatory mode');
 /function syncQueueScope\(\)/.test(html) && /item=Object\.assign\(\{\},item,scope,\{scopeVersion:1\}\)/.test(html)
-  && /otherScopes=all\.filter\(item=>!syncQueueMatches\(item,scope\)\)/.test(html) && /quarantined:/.test(html)
+  && /otherScopes=latestAll\.filter\(item=>!syncQueueMatches\(item,scope\)\)/.test(html) && /quarantined:/.test(html)
   ? ok('offline writes are isolated by tenant and immutable user identity')
   : bad('a shared browser can replay one user\'s pending writes under another account');
 /function cloudRecordWithAuthorship\(coll, rec, queueAuthUserId\)/.test(html)

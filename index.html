@@ -4772,31 +4772,50 @@ function mergeDB(local, cloud){
   });
   return out;
 }
-// Deploy 4: save-feedback indicator. One small non-React pill (bottom-left) reflects
-// the current cloud-write state — Saving / Saved / Queued(offline) / Retrying / Failed.
-// PURELY VISUAL and fully guarded: it can never throw into or affect a save.
+// One consolidated non-React sync pill reflects both the current write and the
+// durable queue. Older builds rendered two pills for the same failed write,
+// which looked like multiple system failures and invited repeated clicks.
 let _moSaveHide=null;
-function moSaveStatus(state, n){
+function syncFailureCode(value){
+  return String(value||'request_failed').slice(0,80).replace(/[^A-Za-z0-9_.:-]/g,'_');
+}
+function syncRetryDelay(tries){ return Math.min(300000,5000*Math.pow(2,Math.min(6,Math.max(0,(Number(tries)||1)-1)))); }
+function syncFailure(status,code){
+  status=Number(status)||0; code=syncFailureCode(code);
+  const retryable=status===0||status===408||status===425||status===429||status>=500;
+  const category=status===401?'auth':status===402?'service':status===403?'permission':(status===400||status===409||status===422)?'invalid':retryable?'temporary':'rejected';
+  return {status,code,retryable,category,at:nowISO()};
+}
+async function syncFailureFromResponse(res){
+  let code='http_'+String((res&&res.status)||0);
+  try{const body=await res.clone().json();code=body&&(body.error||body.code||body.reason)||code;}catch(e){}
+  return syncFailure(res&&res.status,code);
+}
+function syncNetworkFailure(error){ return syncFailure(0,error&&error.name==='AbortError'?'timeout':'network_error'); }
+function syncWarn(operation,coll,failure){
+  try{console.warn('[magnet-sync] write deferred',{operation,collection:coll||'',status:failure.status,code:failure.code,retryable:failure.retryable});}catch(e){}
+}
+function moSaveStatus(state, n, failure){
   try{
+    if(state==='queued'||state==='retrying'||state==='failed'||state==='blocked'){
+      syncQueueChip(state,failure); return;
+    }
+    if(syncQueueCurrent().length){ syncQueueChip(); return; }
     const ar=(function(){ try{ return (JSON.parse(localStorage.getItem('tia_agency_os_appsettings')||'{}').language)==='ar'; }catch(e){ return false; } })();
     const M={
       saving:  {t:ar?'بيحفظ…':'Saving…',                 c:'#c8f31e', b:'rgba(200,243,30,.40)'},
       saved:   {t:ar?'اتحفظ ✓':'Saved ✓',                 c:'#33d6ac', b:'rgba(51,214,172,.40)'},
-      queued:  {t:(ar?'في الانتظار · أوفلاين':'Queued · offline')+(n?(' · '+n):''), c:'#f5b301', b:'rgba(245,179,1,.40)'},
-      retrying:{t:ar?'بيعيد المحاولة…':'Retrying…',        c:'#6fb0ff', b:'rgba(111,176,255,.40)'},
-      failed:  {t:(ar?'فشل الحفظ — دوس للإعادة':'Failed — click to retry')+(n?(' · '+n):''), c:'#ff5d6c', b:'rgba(255,93,108,.45)'},
     };
     const m=M[state]; if(!m) return;
-    let el=document.getElementById('mo-save-status');
-    if(!el){ el=document.createElement('div'); el.id='mo-save-status';
+    const legacy=document.getElementById('mo-save-status'); if(legacy)legacy.remove();
+    let el=document.getElementById('sync-pending-chip');
+    if(!el){ el=document.createElement('div'); el.id='sync-pending-chip';
       el.style.cssText='position:fixed;right:14px;left:auto;bottom:14px;z-index:10000;max-width:min(360px,calc(100vw - 28px));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#151713;border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.05em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);user-select:none;transition:opacity .3s';
       document.body.appendChild(el);
     }
-    el.style.bottom=window.innerWidth<=767?'calc(84px + env(safe-area-inset-bottom))':'14px';
+    el.style.bottom=window.innerWidth<=767?'calc(84px + env(safe-area-inset-bottom))':'14px'; el.style.display='block';
     el.style.color=m.c; el.style.border='1px solid '+m.b; el.style.opacity='1'; el.textContent=m.t;
-    const clickable=(state==='failed'||state==='queued');
-    el.style.cursor=clickable?'pointer':'default';
-    el.onclick=clickable?function(){ try{ syncQueueDrain(); }catch(e){} }:null;
+    el.style.cursor='default'; el.onclick=null; el.removeAttribute('title');
     if(_moSaveHide){ clearTimeout(_moSaveHide); _moSaveHide=null; }
     if(state==='saved'){ _moSaveHide=setTimeout(function(){ try{ if(el){ el.style.opacity='0'; setTimeout(function(){ try{ if(el&&el.style.opacity==='0') el.remove(); }catch(e){} },350); } }catch(e){} }, 1600); }
   }catch(e){}
@@ -4829,9 +4848,9 @@ async function cloudUpsert(cfg, coll, rec){
     const res = await fetch(_rest(cfg,'records?on_conflict=id'),
       { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify([tenantRecord({ id:cloudRec.id, coll, data:cloudRec })]) });
-    if(!res.ok){ syncQueuePush({ type:'upsert', coll, rec:cloudRec }); moSaveStatus('queued', syncQueueCurrent().length); }  // server rejected -> retry later
+    if(!res.ok){ const failure=await syncFailureFromResponse(res); syncWarn('upsert',coll,failure); syncQueuePush({ type:'upsert', coll, rec:cloudRec },failure); }
     else moSaveStatus('saved');
-  } catch(e){ syncQueuePush({ type:'upsert', coll, rec:cloudRec }); moSaveStatus('queued', syncQueueCurrent().length); }      // offline -> durable queue, retry later
+  } catch(e){ const failure=syncNetworkFailure(e); syncWarn('upsert',coll,failure); syncQueuePush({ type:'upsert', coll, rec:cloudRec },failure); }
 }
 async function cloudDelete(cfg, id){
   if(!cfgComplete(cfg) || !id) return;
@@ -4841,9 +4860,9 @@ async function cloudDelete(cfg, id){
       method:'POST', headers:_headers(cfg,{'Content-Type':'application/json'}),
       body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_record_id:id})
     });
-    if(!res.ok){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueCurrent().length); }
+    if(!res.ok){ const failure=await syncFailureFromResponse(res); syncWarn('delete','',failure); syncQueuePush({ type:'delete', id },failure); }
     else moSaveStatus('saved');
-  } catch(e){ syncQueuePush({ type:'delete', id }); moSaveStatus('queued', syncQueueCurrent().length); }
+  } catch(e){ const failure=syncNetworkFailure(e); syncWarn('delete','',failure); syncQueuePush({ type:'delete', id },failure); }
 }
 async function cloudPushAll(cfg, db){
   if(!cfgComplete(cfg)) return;
@@ -4860,9 +4879,10 @@ async function cloudPushAll(cfg, db){
 }
 
 /* ---- Durable offline sync queue (additive). Failed cloud writes no longer
-   vanish until the next bulk push: they are queued in localStorage and retried
-   automatically (on the browser 'online' event, every 30s while pending, and on
-   startup). Every queued write is bound to the immutable signed-in identity and
+   vanish until the next bulk push: they are queued in localStorage. Temporary
+   failures retry with exponential backoff; permanent auth/permission/validation
+   failures stop automatic retries until the user explicitly retries. Every
+   queued write is bound to the immutable signed-in identity and
    active organization that created it. A later login on the same browser can
    never replay another person's pending work; older unscoped queue entries are
    preserved for diagnostics but quarantined from automatic delivery. Records are
@@ -4870,8 +4890,8 @@ async function cloudPushAll(cfg, db){
    cloud merge keeps the newest copy per id, so draining can never overwrite a
    newer cloud record with a stale one being resurrected: the queued write is
    simply upserted and the usual merge-by-updatedAt rules apply on next load.
-   Diagnostics: window.__syncQueue.{size,list,drain}. A small non-React chip
-   shows the pending count (click = retry now). ---- */
+   Diagnostics: window.__syncQueue.{size,summary,drain}. One non-React chip shows
+   the pending count and never duplicates the transient save indicator. ---- */
 const SYNC_QUEUE_KEY = 'tia_sync_queue';
 function syncQueueLoad(){ try { const l=JSON.parse(store.get(SYNC_QUEUE_KEY)||'[]'); return Array.isArray(l)?l:[]; } catch(e){ return []; } }
 function syncQueueScope(){
@@ -4885,31 +4905,42 @@ function syncQueueScope(){
 function syncQueueMatches(item,scope){return !!(scope&&item&&item.authUserId===scope.authUserId&&item.organizationId===scope.organizationId);}
 function syncQueueCurrent(list){const scope=syncQueueScope();return scope?(list||syncQueueLoad()).filter(item=>syncQueueMatches(item,scope)):[];}
 function syncQueueSave(list){ try { store.set(SYNC_QUEUE_KEY, JSON.stringify(list.slice(-500))); } catch(e){} syncQueueChip(); }
-function syncQueuePush(item){
+function syncQueueItemKey(x){ return [x&&x.organizationId||'',x&&x.authUserId||'',x&&x.type||'',x&&(x.id||(x.rec&&x.rec.id))||''].join(':'); }
+function syncQueueItemVersion(x){ return String(x&&x.queueVersion||0)+':'+String(x&&x.queuedAt||''); }
+function syncQueuePush(item,failure){
   try {
     const scope=syncQueueScope(); if(!scope)return false;
     const list=syncQueueLoad();
     item=Object.assign({},item,scope,{scopeVersion:1});
-    const keyOf=(x)=> [x.organizationId||'',x.authUserId||'',x.type,x.id||(x.rec&&x.rec.id)||''].join(':');
-    const k=keyOf(item); const i=list.findIndex(x=>keyOf(x)===k);
-    item.queuedAt=nowISO(); item.tries=(i>=0?(list[i].tries||0):0);
+    const k=syncQueueItemKey(item); const i=list.findIndex(x=>syncQueueItemKey(x)===k);
+    const previous=i>=0?list[i]:null;
+    item.queuedAt=nowISO(); item.queueVersion=(Number(previous&&previous.queueVersion)||0)+1;
+    item.tries=failure?(Number(previous&&previous.tries)||0)+1:0;
+    item.lastFailure=failure||null;
+    item.blocked=!!(failure&&!failure.retryable);
+    item.nextRetryAt=failure&&failure.retryable?Date.now()+syncRetryDelay(item.tries):0;
     if(i>=0) list[i]=item; else list.push(item);       // newest write per record wins in the queue
     syncQueueSave(list);
     return true;
   } catch(e){return false;}
 }
 let _sqDraining=false;
-async function syncQueueDrain(){
+async function syncQueueDrain(options){
   if(_sqDraining) return; _sqDraining=true;
   try {
+    const manual=!!(options&&options.manual);
     const cfg=getCfg(); if(!cfgComplete(cfg)) return;
-    const all=syncQueueLoad(); const scope=syncQueueScope();
-    const list=syncQueueCurrent(all); if(!scope||!list.length){syncQueueChip();return;}
-    const otherScopes=all.filter(item=>!syncQueueMatches(item,scope));
-    moSaveStatus('retrying');
+    const initialAll=syncQueueLoad(); const scope=syncQueueScope();
+    const list=syncQueueCurrent(initialAll); if(!scope||!list.length){syncQueueChip();return;}
+    const now=Date.now();
+    const attemptable=list.filter(item=>manual||(!item.blocked&&(!Number(item.nextRetryAt)||Number(item.nextRetryAt)<=now)));
+    if(!attemptable.length){syncQueueChip();return;}
+    const initialVersions=new Map(list.map(item=>[syncQueueItemKey(item),syncQueueItemVersion(item)]));
+    syncQueueChip('retrying');
     const keep=[];
     for(const item of list){
-      let ok=false;
+      if(!manual&&(item.blocked||(Number(item.nextRetryAt)>now))){ keep.push(item); continue; }
+      let ok=false, failure=null;
       try {
         if(item.type==='upsert' && item.rec && item.rec.id){
           const queuedRec=cloudRecordWithAuthorship(item.coll,item.rec,item.authUserId);
@@ -4917,40 +4948,78 @@ async function syncQueueDrain(){
           const res=await fetch(_rest(cfg,'records?on_conflict=id'),
             { method:'POST', headers:_headers(cfg,{Prefer:'resolution=merge-duplicates,return=minimal'}),
               body: JSON.stringify([tenantRecord({ id:queuedRec.id, coll:item.coll, data:queuedRec })]) });
-          ok=res.ok;
+          ok=res.ok; if(!ok)failure=await syncFailureFromResponse(res);
         } else if(item.type==='delete' && item.id){
           const res=await fetch(_rest(cfg,'rpc/soft_delete_record'), {
             method:'POST', headers:_headers(cfg,{'Content-Type':'application/json'}),
             body:JSON.stringify({p_organization_id:tenantOrganizationId(),p_record_id:item.id})
           });
-          ok=res.ok;
+          ok=res.ok; if(!ok)failure=await syncFailureFromResponse(res);
         } else { ok=true; } // unknown/corrupt item -> drop rather than retry forever
-      } catch(e){ ok=false; }
-      if(!ok){ item.tries=(item.tries||0)+1; keep.push(item); }
+      } catch(e){ failure=syncNetworkFailure(e); }
+      if(!ok){
+        failure=failure||syncFailure(0,'network_error');
+        item.tries=(Number(item.tries)||0)+1;
+        item.lastFailure=failure;
+        item.blocked=!failure.retryable;
+        item.nextRetryAt=failure.retryable?Date.now()+syncRetryDelay(item.tries):0;
+        syncWarn(item.type,item.coll||'',failure);
+        keep.push(item);
+      }
     }
-    syncQueueSave(otherScopes.concat(keep));
-    if(!keep.length){ window.__moLastSync=Date.now(); moSaveStatus('saved'); }
-    else { const mt=keep.reduce(function(m,x){ return Math.max(m,x.tries||0); },0); moSaveStatus(mt>=3?'failed':'queued', keep.length); }
-  } finally { _sqDraining=false; }
+    // Re-read before saving so a newer local edit made during this drain wins.
+    // A successful response removes only the exact queue version it attempted.
+    const latestAll=syncQueueLoad();
+    const keepByKey=new Map(keep.map(item=>[syncQueueItemKey(item),item]));
+    latestAll.filter(item=>syncQueueMatches(item,scope)).forEach(item=>{
+      const key=syncQueueItemKey(item);
+      if(!initialVersions.has(key)||syncQueueItemVersion(item)!==initialVersions.get(key)) keepByKey.set(key,item);
+    });
+    const otherScopes=latestAll.filter(item=>!syncQueueMatches(item,scope));
+    syncQueueSave(otherScopes.concat(Array.from(keepByKey.values())));
+    if(!syncQueueCurrent().length){ window.__moLastSync=Date.now(); moSaveStatus('saved'); }
+    else syncQueueChip();
+  } finally { _sqDraining=false; if(syncQueueCurrent().length)syncQueueChip(); }
 }
-function syncQueueChip(){
+function syncQueueChip(forcedState,forcedFailure){
   try {
-    const n=syncQueueCurrent().length;
+    const list=syncQueueCurrent(); const n=list.length;
+    const legacy=document.getElementById('mo-save-status'); if(legacy)legacy.remove();
     let el=document.getElementById('sync-pending-chip');
     if(!n){ if(el) el.remove(); return; }
     if(!el){
       el=document.createElement('div'); el.id='sync-pending-chip';
-      el.style.cssText='position:fixed;right:14px;left:auto;bottom:58px;z-index:9999;max-width:min(360px,calc(100vw - 28px));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#151713;color:#c8f31e;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.06em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none';
-      el.onclick=function(){ syncQueueDrain(); };
+      el.style.cssText='position:fixed;right:14px;left:auto;bottom:14px;z-index:10000;max-width:min(420px,calc(100vw - 28px));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#151713;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 13px;font:600 11px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.05em;box-shadow:0 8px 24px -12px rgba(0,0,0,.85);cursor:pointer;user-select:none;transition:opacity .3s';
+      el.onclick=function(){ syncQueueDrain({manual:true}); };
       document.body.appendChild(el);
     }
-    el.style.bottom=window.innerWidth<=767?'calc(126px + env(safe-area-inset-bottom))':'58px';
+    el.style.bottom=window.innerWidth<=767?'calc(84px + env(safe-area-inset-bottom))':'14px'; el.style.display='block'; el.style.opacity='1';
     const _arc=(function(){ try{ return (JSON.parse(localStorage.getItem('tia_agency_os_appsettings')||'{}').language)==='ar'; }catch(e){ return false; } })();
-    el.title=_arc?'فيه تغييرات مستنية ترفع للسحابة — بتتبعت تلقائيًا، ودوس هنا لو عايز تبعتها دلوقتي.':'Pending cloud writes. They retry automatically; click to retry now.';
-    el.textContent=_arc?('في انتظار المزامنة: '+n):('SYNC PENDING: '+n);
+    const permanent=list.find(item=>item.blocked&&item.lastFailure);
+    const failure=forcedFailure||(permanent&&permanent.lastFailure)||null;
+    const state=forcedState==='retrying'?'retrying':permanent?'blocked':'pending';
+    let text='',title='',color='#c8f31e',border='rgba(200,243,30,.38)';
+    if(state==='retrying'){
+      text=_arc?('جاري المزامنة: '+n):('SYNC RETRYING: '+n); color='#6fb0ff'; border='rgba(111,176,255,.42)';
+      title=_arc?'جاري إرسال التغييرات المحفوظة محليًا.':'Sending locally preserved changes.';
+    }else if(state==='blocked'){
+      const category=failure&&failure.category||'rejected'; color='#ff7a86'; border='rgba(255,93,108,.48)';
+      if(category==='auth'){ text=_arc?('المزامنة متوقفة: '+n+' · سجّل دخولك'):('SYNC BLOCKED: '+n+' · SIGN IN'); title=_arc?'سجّل الدخول من جديد ثم اضغط هنا مرة واحدة.':'Sign in again, then click once to retry.'; }
+      else if(category==='permission'){ text=_arc?('المزامنة متوقفة: '+n+' · الصلاحيات'):('SYNC BLOCKED: '+n+' · PERMISSION'); title=_arc?'الحفظ المحلي آمن، لكن الحساب لا يملك صلاحية الرفع.':'Local changes are safe, but this account lacks cloud write permission.'; }
+      else if(category==='service'){ text=_arc?('خدمة السحابة متوقفة: '+n):('CLOUD SERVICE PAUSED: '+n); title=_arc?'التغييرات محفوظة محليًا. أصلح حالة خدمة قاعدة البيانات ثم اضغط هنا.':'Changes are preserved locally. Restore the database service, then click here.'; }
+      else { text=_arc?('المزامنة تحتاج مراجعة: '+n):('SYNC NEEDS REVIEW: '+n); title=_arc?'التغييرات محفوظة محليًا. راجع البيانات أو الإعداد ثم اضغط هنا.':'Changes are preserved locally. Review the data/configuration, then click here.'; }
+    }else{
+      text=_arc?('في انتظار المزامنة: '+n):('SYNC PENDING: '+n); title=_arc?'التغييرات محفوظة محليًا وستُرسل تلقائيًا. اضغط للمحاولة الآن.':'Changes are preserved locally and will retry with backoff. Click to retry now.';
+    }
+    el.style.color=color; el.style.borderColor=border; el.title=title; el.textContent=text;
   } catch(e){}
 }
-window.__syncQueue = { size:()=>syncQueueCurrent().length, list:()=>syncQueueCurrent(), quarantined:()=>{const scope=syncQueueScope();return syncQueueLoad().filter(item=>!syncQueueMatches(item,scope));}, drain:syncQueueDrain };
+window.__syncQueue = {
+  size:()=>syncQueueCurrent().length,
+  summary:()=>{const list=syncQueueCurrent();return {pending:list.length,blocked:list.filter(x=>x.blocked).length,retryable:list.filter(x=>!x.blocked).length,categories:list.reduce((out,x)=>{const k=x&&x.lastFailure&&x.lastFailure.category||'pending';out[k]=(out[k]||0)+1;return out;},{})};},
+  quarantined:()=>{const scope=syncQueueScope();return syncQueueLoad().filter(item=>!syncQueueMatches(item,scope)).length;},
+  drain:()=>syncQueueDrain({manual:true})
+};
 try {
   window.addEventListener('online', function(){ syncQueueDrain(); });          // network came back
   window.addEventListener('focus', function(){ if(syncQueueCurrent().length) syncQueueDrain(); });
