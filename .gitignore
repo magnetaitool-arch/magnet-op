@@ -2,6 +2,7 @@
 .env
 .env.local
 /backups
+/outputs
 node_modules
 .env*
 /supabase/.temp/

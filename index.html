@@ -503,7 +503,7 @@ body.theme-light .btn{ border-radius:10px; }
 .modal.nudge{animation:modalNudge .2s ease}
 @keyframes modalNudge{0%{transform:scale(1)}40%{transform:scale(1.012)}100%{transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){.modal.nudge{animation:none}}
-.modal.wide{width:640px}
+.modal.wide{width:860px}
 @keyframes slideUp{from{transform:translateY(16px);opacity:.5}to{transform:none;opacity:1}}
 .modal-h{display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
 .modal-h h3{font-family:var(--display);font-size:16px;font-weight:600}
@@ -1290,6 +1290,11 @@ body.theme-light .tbl thead th{background:#fff}
 .documents-v2-shell{display:flex;flex-direction:column;gap:14px;min-width:0}.document-summary{display:grid;grid-template-columns:repeat(4,minmax(135px,1fr));gap:8px}.document-summary>div{padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}.document-summary span{display:block;color:var(--ink-4);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.document-summary b{display:block;margin-top:7px;font:750 17px var(--display)}.document-actions{display:flex;gap:7px;flex-wrap:wrap}.document-toolbar{display:grid;grid-template-columns:minmax(230px,1fr) 180px 180px 170px auto;gap:8px;align-items:center}.document-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.document-card{display:grid;grid-template-columns:46px minmax(0,1fr) auto;gap:11px;align-items:start;padding:13px;border:1px solid var(--line);border-radius:13px;background:var(--panel);cursor:pointer;text-align:start;color:var(--ink)}.document-card:hover{border-color:var(--line-strong);transform:translateY(-1px)}.document-thumb{width:46px;height:54px;border-radius:9px;border:1px solid var(--line);display:grid;place-items:center;background:linear-gradient(145deg,rgba(200,243,30,.12),rgba(63,215,255,.06));overflow:hidden}.document-thumb img{width:100%;height:100%;object-fit:cover}.document-thumb svg{width:20px;height:20px;color:var(--lime)}.document-card b{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.document-card small{display:block;color:var(--ink-4);font-size:9.5px;margin-top:5px;line-height:1.4}.document-card .tag{font-size:8px}.document-upload-zone{padding:20px;border:1px dashed var(--line-strong);border-radius:14px;background:rgba(255,255,255,.015)}.document-upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.document-upload-file{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--panel)}.document-upload-file svg{width:20px;height:20px;color:var(--lime)}.document-upload-file b{display:block;font-size:11.5px}.document-upload-file span{display:block;color:var(--ink-4);font-size:9.5px;margin-top:4px}.document-progress{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:10px}.document-progress i{display:block;height:100%;background:var(--lime);transition:width .25s ease}.document-profile-modal{width:1000px!important;max-width:98vw!important}.document-profile-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.document-profile-actions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}.document-preview{min-height:360px;display:grid;place-items:center;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#10120e}.document-preview img{max-width:100%;max-height:65vh;object-fit:contain}.document-preview iframe{width:100%;height:65vh;border:0;background:#fff}.document-preview-fallback{text-align:center;padding:35px;color:var(--ink-4)}.document-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.document-facts>div{padding:11px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.document-facts span{display:block;font-size:8.5px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em}.document-facts b{display:block;margin-top:5px;font-size:10.5px;word-break:break-word}.document-generated{overflow-x:auto;border:1px solid var(--line);border-radius:13px}.document-generated .tbl{min-width:700px}
 /* Tasks V2 — accountable work queue, compact detail and status timeline */
 .tasks-v2-shell{display:flex;flex-direction:column;gap:14px;min-width:0}.task-summary{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;overflow-x:auto;scrollbar-width:thin}.task-summary button{min-width:120px;text-align:start;border:1px solid var(--line);border-radius:13px;background:var(--panel);color:var(--ink);padding:12px;cursor:pointer}.task-summary button.on{border-color:rgba(200,243,30,.52);background:var(--lime-glow)}.task-summary span{display:block;color:var(--ink-4);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.task-summary b{display:block;margin-top:6px;font:750 18px var(--display)}.task-toolbar{display:grid;grid-template-columns:minmax(240px,1fr) 180px 150px auto;gap:8px;align-items:center}.task-month-export{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}.task-month-export>div{flex:1;min-width:220px}.task-month-export b{display:block;font-size:11.5px}.task-month-export small{display:block;color:var(--ink-4);font-size:9.5px;line-height:1.5;margin-top:4px}.task-month-export input{min-width:145px}.task-v2-list{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.task-v2-list .tbl{min-width:900px}.task-title-cell{display:flex;gap:10px;align-items:flex-start;min-width:220px}.task-priority{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:var(--ink-4)}.task-priority.high{background:var(--warn);box-shadow:0 0 8px rgba(255,194,75,.55)}.task-priority.urgent{background:var(--neg);box-shadow:0 0 8px rgba(255,111,116,.55)}.task-title-cell b{display:block;font-size:12px}.task-title-cell small{display:block;color:var(--ink-4);font-size:9.5px;margin-top:4px}.task-status-actions{display:flex;gap:5px;flex-wrap:wrap}.task-profile-modal{width:1040px!important;max-width:98vw!important}.task-profile-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.task-profile-actions{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}.task-facts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin:14px 0}.task-facts>div{background:var(--panel);padding:11px;min-width:0}.task-facts span{display:block;color:var(--ink-4);font-size:8.5px;text-transform:uppercase;letter-spacing:.06em}.task-facts b{display:block;color:var(--ink-2);font-size:10.5px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-detail-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(270px,.8fr);gap:12px}.task-detail-card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:14px;margin-bottom:10px}.task-detail-card h4{margin:0 0 9px;font:700 12px var(--display)}.task-detail-card p{margin:0;color:var(--ink-2);font-size:12px;line-height:1.7;white-space:pre-wrap}.task-timeline{display:flex;flex-direction:column}.task-event{display:grid;grid-template-columns:10px 1fr;gap:9px;padding:8px 0;border-bottom:1px solid var(--line)}.task-event i{width:7px;height:7px;border-radius:50%;background:var(--lime);margin-top:5px}.task-event b{display:block;font-size:10.5px}.task-event small{display:block;color:var(--ink-4);font-size:9px;margin-top:3px}.task-comment{padding:9px 0;border-bottom:1px solid var(--line)}.task-comment p{font-size:11.5px}.task-comment small{display:block;color:var(--ink-4);font-size:9px;margin-top:5px}.task-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.task-editor-grid .full{grid-column:1/-1}.task-error{padding:10px 12px;border:1px solid rgba(255,111,116,.35);border-radius:10px;background:rgba(255,111,116,.06);color:#ff9498;font-size:11px}.task-loading{min-height:220px;display:grid;place-items:center;color:var(--ink-4);font-size:12px}.cmdk-status{padding:9px 13px;color:var(--ink-4);font-size:11px}
+.month-close-panel{border-color:rgba(200,243,30,.25)!important;background:linear-gradient(145deg,rgba(200,243,30,.055),rgba(63,215,255,.018) 46%,var(--panel))!important}.month-close-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.month-close-head h3{font:750 17px var(--display);margin:7px 0 5px}.month-close-head p{max-width:760px;color:var(--ink-3);font-size:11.5px;line-height:1.65;margin:0}.month-close-stats{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:8px;margin:15px 0}.month-close-stats>div{padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.13)}.month-close-stats span{display:block;color:var(--ink-4);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.month-close-stats b{display:block;margin-top:6px;font:750 19px var(--display)}.month-close-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.month-close-actions input{min-width:150px}.month-close-rule{font-size:10.5px;line-height:1.65;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.admin-access-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;counter-reset:admin-step}.admin-access-step{position:relative;min-width:0;padding:14px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}.admin-access-step::before{counter-increment:admin-step;content:counter(admin-step);display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:var(--lime-glow);color:var(--lime);font:750 11px var(--mono);margin-bottom:10px}.admin-access-step b{display:block;font-size:11.5px}.admin-access-step p{margin:5px 0 0;color:var(--ink-4);font-size:10.5px;line-height:1.55}.admin-role-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.admin-role-card{padding:13px;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.12);min-width:0}.admin-role-card b{display:block;color:var(--lime);font-size:11.5px}.admin-role-card span{display:block;color:var(--ink-3);font-size:10.5px;line-height:1.55;margin-top:6px}
+@media(max-width:1050px){.admin-access-steps,.admin-role-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.month-close-head{flex-direction:column}.month-close-stats{grid-template-columns:1fr 1fr}.month-close-actions{align-items:stretch}.month-close-actions>*{width:100%;min-width:0}.admin-access-steps,.admin-role-grid{grid-template-columns:1fr}}
+@media(max-width:430px){.month-close-stats{grid-template-columns:1fr}}
 @media(max-width:1050px){.rec-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-list-head,.rec-row{grid-template-columns:minmax(200px,1.4fr) minmax(120px,.8fr) 110px 112px 70px}.rec-list-head>:nth-child(5),.rec-row>:nth-child(5){display:none}.rec-toolbar{grid-template-columns:minmax(220px,1fr) 145px 165px auto}}
 @media(max-width:767px){.rec-toolbar{grid-template-columns:1fr 1fr}.rec-search{grid-column:1/-1}.rec-view-toggle{justify-self:stretch}.rec-view-toggle button{flex:1}.rec-list-head{display:none}.rec-row{grid-template-columns:1fr auto;padding:13px;gap:9px}.rec-row>:nth-child(2),.rec-row>:nth-child(4),.rec-row>:nth-child(5){display:none}.rec-row>:nth-child(3){grid-column:2;grid-row:1}.rec-row>:nth-child(6){grid-column:2;grid-row:2}.rec-cards{grid-template-columns:1fr}.rec-profile-head{flex-direction:column}.rec-profile-actions{justify-content:flex-start}.rec-facts,.rec-answer-list{grid-template-columns:1fr 1fr}.rec-interview-form{grid-template-columns:1fr}.rec-pagination{align-items:flex-start;flex-direction:column}}
 @media(max-width:430px){.rec-facts,.rec-answer-list{grid-template-columns:1fr}.rec-toolbar{grid-template-columns:1fr}.rec-toolbar>*{grid-column:1}.rec-view-toggle{justify-self:stretch}}
@@ -2445,7 +2450,7 @@ const ALL=['View','Create','Edit','Delete','Approve','Export','Run','Manage'];
 const PERMISSIONS = {
   Owner: Object.fromEntries(PERM_MODULES.map(m=>[m, ALL.slice()])),
   Manager: { Dashboard:['View'], Clients:['View','Create','Edit'], Employees:['View','Create','Edit'], Tasks:['View','Create','Edit','Approve'], Requests:['View','Approve'], Approvals:['View','Approve'], Proposals:['View','Create','Edit','Approve'], Invoices:['View'], Assets:['View','Create','Edit'], Automations:['View','Run'], 'AI Agents':['View','Run'], Workflow:['View','Edit'], Settings:['View'], Reports:['View','Export'], 'Data Export / Import':['Export'] },
-  'Account Manager': { Dashboard:['View'], Clients:['View','Create','Edit'], Tasks:['View','Create','Edit'], Requests:['View','Create'], Proposals:['View','Create','Edit'], Invoices:['View'], Assets:['View','Create'], Workflow:['View','Edit'], 'AI Agents':['View','Run'], Reports:['View'] },
+  'Account Manager': { Dashboard:['View'], Clients:['View','Create','Edit'], Tasks:['View','Create','Edit'], Requests:['View','Create'], Proposals:['View','Create','Edit'], Invoices:['View'], Assets:['View','Create'], Workflow:['View','Edit'], 'AI Agents':['View','Run'], Reports:['View','Create','Edit','Export'] },
   'Project Manager': { Dashboard:['View'], Clients:['View'], Employees:['View'], Tasks:['View','Create','Edit','Approve'], Requests:['View','Approve'], Approvals:['View','Approve'], Assets:['View'], Workflow:['View','Edit'], 'AI Agents':['View','Run'], Reports:['View'] },
   Designer: { Dashboard:['View'], Tasks:['View','Edit'], Assets:['View'], Workflow:['View'] },
   'Content Creator': { Dashboard:['View'], Tasks:['View','Edit'], Assets:['View'], Workflow:['View'] },
@@ -3127,6 +3132,9 @@ function previousMonthISO(ref){
 }
 function employeeReportAutoId(employeeId,period){
   return ('erp-auto-'+String(period||'')+'-'+String(employeeId||'')).replace(/[^a-zA-Z0-9_-]/g,'-');
+}
+function clientReportAutoId(clientId,period){
+  return ('crp-auto-'+String(period||'')+'-'+String(clientId||'')).replace(/[^a-zA-Z0-9_-]/g,'-');
 }
 function employeeReportLanguage(report){
   const l=report&&report.language;
@@ -7277,38 +7285,50 @@ function App(){
     addActivity(coll, rec.id, 'created', rec.name||rec.title||rec.invoiceNumber||'');
     return rec;
   };
-  // Monthly employee-report automation: on the first eligible HR/Admin session
-  // in a new month, create one reviewable DRAFT for every active employee for
-  // the previous month. Nothing is emailed automatically; a human must approve
-  // and send it. Cloud is checked first to protect an already edited draft.
+  // Monthly report automation: on the first eligible session in a new month,
+  // create reviewable DRAFTS for the previous month. HR/Admin covers employees;
+  // Admin/Account Manager covers clients. Nothing is emailed automatically and
+  // cloud is checked first so a reviewed/edited draft is never overwritten.
   useEffect(()=>{
-    if(!authReady||!authUser||appSettings.employeeReportsAuto===false) return;
-    if(!(isAdminRole(role)||aliasRole(role)==='HR') || !userCanEditSection(authUser,'reports',role)) return;
+    if(!authReady||!authUser) return;
+    const canEmployeeAuto=(isAdminRole(role)||aliasRole(role)==='HR')&&appSettings.employeeReportsAuto!==false;
+    const canClientAuto=isAdminRole(role)||role==='Account Manager';
+    if((!canEmployeeAuto&&!canClientAuto)||!userCanEditSection(authUser,'reports',role)) return;
     let cancelled=false;
     const timer=setTimeout(()=>{ (async()=>{
-      const period=previousMonthISO(), active=(db.employees||[]).filter(e=>['Active','Probation','Remote','On Leave'].includes(e.status));
-      if(!active.length) return;
+      const period=previousMonthISO();
       let known=(db.reports||[]).slice();
       const blockedIds=new Set(Array.isArray(appSettings.employeeReportAutoSkipped)?appSettings.employeeReportAutoSkipped:[]);
       if(cloudOn){ try{ const remote=await cloudLoadColl(cfg.current,'reports'); if(Array.isArray(remote)){ remote.forEach(r=>r&&r.id&&blockedIds.add(r.id)); known=mergeColl(known,remote); } }catch(_){ } }
       if(cancelled)return;
       known.forEach(r=>r&&r.id&&blockedIds.add(r.id));
       const reportLanguage=appSettings.employeeReportLanguage||(lang==='ar'?'Arabic':'English');
-      const fresh=active.filter(e=>!blockedIds.has(employeeReportAutoId(e.id,period))).map(e=>({
+      const activeEmployees=canEmployeeAuto?(db.employees||[]).filter(e=>!e._del&&['Active','Probation','Remote','On Leave'].includes(e.status)):[];
+      const employeeDrafts=activeEmployees.filter(e=>!blockedIds.has(employeeReportAutoId(e.id,period))).map(e=>({
         id:employeeReportAutoId(e.id,period), reportKind:'Employee', employeeId:e.id,
         title:(reportLanguage==='Arabic'?'تقرير الموظف':'Employee report')+' — '+(e.fullName||e.name||e.employeeCode||'')+' — '+period,
         period, type:'Monthly', language:reportLanguage, includeSalary:false,
         generationMode:'Automatic', status:'Draft', managerSummary:'', strengths:'', improvements:'', nextGoals:'', notes:'',
         createdAt:nowISO(), updatedAt:nowISO(), createdBy:user.id, createdByName:user.name
       }));
+      const activeClients=canClientAuto?(db.clients||[]).filter(c=>!c._del&&['Active','At Risk','Renewal Needed'].includes(c.status)):[];
+      const clientDrafts=activeClients.filter(c=>!blockedIds.has(clientReportAutoId(c.id,period))).map(c=>({
+        id:clientReportAutoId(c.id,period),reportKind:'Client',clientId:c.id,
+        title:(lang==='ar'?'تقرير العميل':'Client report')+' — '+(c.brandName||c.name||c.clientCode||'')+' — '+period,
+        period,type:'Monthly',language:lang==='ar'?'Arabic':'English',generationMode:'Automatic',status:'Draft',
+        executiveSummary:'',achievements:'',metrics:'',nextSteps:'',notes:'',
+        createdAt:nowISO(),updatedAt:nowISO(),createdBy:user.id,createdByName:user.name
+      }));
+      const fresh=[...employeeDrafts,...clientDrafts];
       if(!fresh.length)return;
       setDb(d=>({...d,reports:[...(d.reports||[]),...fresh.filter(r=>!(d.reports||[]).some(x=>x.id===r.id))]}));
       fresh.forEach(r=>cloudUpsert(cfg.current,'reports',r));
-      triggerWebhook('monthlyReportWebhook',{kind:'Employee',period,reports:fresh});
-      showProPopup('syncSuccess',lang==='ar'?('تم إنشاء '+fresh.length+' تقرير موظف تلقائيًا كمسودات'):('Created '+fresh.length+' employee report draft(s) automatically'));
+      if(employeeDrafts.length) triggerWebhook('monthlyReportWebhook',{kind:'Employee',period,reports:employeeDrafts});
+      if(clientDrafts.length) triggerWebhook('monthlyReportWebhook',{kind:'Client',period,reports:clientDrafts});
+      showProPopup('syncSuccess',lang==='ar'?('تم إنشاء '+fresh.length+' مسودة تقرير للشهر السابق'):('Created '+fresh.length+' previous-month report draft(s)'));
     })(); },1800);
     return ()=>{cancelled=true;clearTimeout(timer);};
-  },[authReady,authUser&&authUser.id,role,appSettings.employeeReportsAuto,appSettings.employeeReportLanguage,appSettings.employeeReportAutoSkipped,db.employees,db.reports.length,cloudOn]); // eslint-disable-line
+  },[authReady,authUser&&authUser.id,role,appSettings.employeeReportsAuto,appSettings.employeeReportLanguage,appSettings.employeeReportAutoSkipped,db.employees,db.clients,db.reports.length,cloudOn]); // eslint-disable-line
   // Collections too high-frequency / system to audit — logging them would flood the trail.
   const NO_AUDIT = new Set(['notifications','activityLogs','chatMessages','comments','gameScores','gameStats','_ratelimit','attendance','availability']);
   // Cross-manager accountability: notify (in-app + email) the OTHER managers when a manager deletes anything
@@ -9388,6 +9408,38 @@ function downloadTaskMonthCSV(db,period){
   a.href=href;a.download='magnet-task-archive-'+period+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),1000);
   return tasks.length;
 }
+function monthArchiveRows(db,period){
+  if(!/^\d{4}-\d{2}$/.test(String(period||'')))return [];
+  const inMonth=value=>String(value||'').slice(0,7)===period;
+  const client=id=>nameById(db.clients,id)||'';
+  const employee=id=>nameById(db.employees,id)||'';
+  const rows=[];
+  const add=(kind,item,values)=>rows.push(Object.assign({
+    type:kind,id:item.id||'',title:item.title||item.name||item.invoiceNumber||item.paymentNumber||item.contractNumber||'',
+    status:item.status||'',date:item.date||item.completedAt||item.dueDate||item.issueDate||item.updatedAt||item.createdAt||'',
+    client:client(item.clientId),employee:employee(item.employeeId||item.assignedTo),amount:item.amount==null?'':item.amount,
+    reference:item.invoiceNumber||item.paymentNumber||item.taskCode||item.contractNumber||'',notes:item.notes||item.description||''
+  },values||{}));
+  taskRowsForMonth(db,period).forEach(item=>add('Task',item,{date:item.completedAt||item.dueDate||item.updatedAt||item.createdAt||'',employee:employee(item.assignedTo),reference:item.taskCode||'',amount:item.actualHours||item.estimatedHours||''}));
+  (db.invoices||[]).filter(item=>!item._del&&[item.issueDate,item.dueDate,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Invoice',item));
+  (db.payments||[]).filter(item=>!item._del&&[item.date,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Payment',item));
+  (db.expenses||[]).filter(item=>!item._del&&[item.date,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Expense',item));
+  (db.collections||[]).filter(item=>!item._del&&[item.dueDate,item.collectedDate,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Collection',item));
+  (db.employeePayments||[]).filter(item=>!item._del&&(item.month===period||[item.date,item.paymentDate,item.updatedAt,item.createdAt].some(inMonth))).forEach(item=>add('Payroll',item,{employee:employee(item.employeeId),amount:item.netAmount==null?item.amount:item.netAmount}));
+  (db.attendance||[]).filter(item=>!item._del&&inMonth(item.date)).forEach(item=>add('Attendance',item,{title:employee(item.employeeId),employee:employee(item.employeeId),amount:item.hours||''}));
+  (db.reports||[]).filter(item=>!item._del&&item.period===period).forEach(item=>add('Report',item,{client:client(item.clientId),employee:employee(item.employeeId)}));
+  return rows.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.type).localeCompare(String(b.type)));
+}
+function downloadMonthArchiveCSV(db,period){
+  const rows=monthArchiveRows(db,period); if(!rows.length)return 0;
+  const headers=['Record type','ID','Title','Status','Date','Client','Employee / assignee','Amount / hours','Reference','Notes'];
+  const quote=value=>'"'+String(value==null?'':value).replace(/"/g,'""')+'"';
+  const body=[headers,...rows.map(row=>[row.type,row.id,row.title,row.status,row.date,row.client,row.employee,row.amount,row.reference,row.notes])]
+    .map(row=>row.map(quote).join(',')).join('\n');
+  const blob=new Blob(['\ufeff'+body],{type:'text/csv;charset=utf-8'}); const href=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=href;a.download='magnet-month-close-'+period+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),1000);
+  return rows.length;
+}
 function FinanceWorkspaceView({ctx,initialTab,canEdit}){
   const ar=ctx.lang==='ar'; const L=(en,ara)=>ar?ara:en;
   const tabs=['Invoices','Payments','Expenses','Payroll','Contracts'];
@@ -10415,7 +10467,10 @@ function LeavesView({ ctx, ce }){
 function ReportsView({ ctx, visible, ce }){
   const { db } = ctx; const ar=ctx.lang==='ar';
   const [kind,setKind]=useState('All');
-  const all=visible('reports').slice().sort((a,b)=>String(b.createdAt||b.period||'').localeCompare(String(a.createdAt||a.period||'')));
+  const [closeMonth,setCloseMonth]=useState(previousMonthISO());
+  const canCreateReports=ce||can(ctx.role,'Reports','Create');
+  const canPrepareClose=isAdminRole(ctx.role)||aliasRole(ctx.role)==='HR'||ctx.role==='Account Manager';
+  const all=visible('reports').filter(r=>r.reportKind!=='MonthClose').slice().sort((a,b)=>String(b.createdAt||b.period||'').localeCompare(String(a.createdAt||a.period||'')));
   const rows=kind==='All'?all:all.filter(r=>(r.reportKind||'Client')===kind);
   const newClient=()=>ctx.openModal('reports',{reportKind:'Client',title:(ar?'تقرير عميل — ':'Client report — ')+thisMonth(),period:thisMonth(),type:'Monthly',generationMode:'Manual',status:'Draft',createdByName:ctx.user.name},FORM_SCHEMAS.reports,ar?'تقرير عميل جديد':'New client report');
   const newEmployee=()=>ctx.openModal('reports',{reportKind:'Employee',title:(ar?'تقرير موظف — ':'Employee report — ')+thisMonth(),period:thisMonth(),type:'Monthly',language:ar?'Arabic':'English',includeSalary:false,generationMode:'Manual',status:'Draft',createdByName:ctx.user.name},FORM_SCHEMAS.reports,ar?'تقرير موظف جديد':'New employee report');
@@ -10429,6 +10484,48 @@ function ReportsView({ ctx, visible, ce }){
   };
   const saveReportEmail=(r,result)=>ctx.updateRecord('reports',r.id,{status:result.ok?'Sent':r.status,emailDeliveryStatus:result.status||(result.ok?'Accepted':'Failed'),emailProviderId:result.id||r.emailProviderId||'',emailTo:result.to||'',emailSentAt:result.at||nowISO(),emailError:result.error||'',sentAt:result.ok?(result.at||nowISO()):(r.sentAt||'')});
   const checkReportEmail=async(r)=>{try{const result=await getEmailStatus(r.emailProviderId);ctx.updateRecord('reports',r.id,{emailDeliveryStatus:result.status,emailCheckedAt:nowISO(),emailError:''});showProPopup('syncSuccess',(ar?'حالة التسليم: ':'Delivery status: ')+result.status);}catch(err){const message=String((err&&err.message)||err);ctx.updateRecord('reports',r.id,{emailError:message,emailCheckedAt:nowISO()});alert(message);}};
+  const closedPeriods=(db.reports||[]).filter(r=>!r._del&&r.reportKind==='MonthClose'&&r.status==='Closed').map(r=>r.period);
+  const closeStats={
+    tasks:taskRowsForMonth(db,closeMonth).length,
+    finance:monthArchiveRows(db,closeMonth).filter(row=>['Invoice','Payment','Expense','Collection','Payroll'].includes(row.type)).length,
+    employees:(db.employees||[]).filter(e=>['Active','Probation','Remote','On Leave'].includes(e.status)).length,
+    clients:(db.clients||[]).filter(c=>['Active','At Risk','Renewal Needed'].includes(c.status)).length,
+    archive:monthArchiveRows(db,closeMonth).length
+  };
+  const prepareMonthClose=()=>{
+    if(!/^\d{4}-\d{2}$/.test(closeMonth))return;
+    const activeEmployees=(db.employees||[]).filter(e=>!e._del&&['Active','Probation','Remote','On Leave'].includes(e.status));
+    const activeClients=(db.clients||[]).filter(c=>!c._del&&['Active','At Risk','Renewal Needed'].includes(c.status));
+    const known=new Set((db.reports||[]).filter(r=>!r._del).map(r=>r.id));
+    const reportLanguage=ctx.appSettings.employeeReportLanguage||(ar?'Arabic':'English');
+    const employeeDrafts=activeEmployees.filter(e=>!known.has(employeeReportAutoId(e.id,closeMonth))).map(e=>({
+      id:employeeReportAutoId(e.id,closeMonth),reportKind:'Employee',employeeId:e.id,
+      title:(reportLanguage==='Arabic'?'تقرير الموظف':'Employee report')+' — '+(e.fullName||e.name||e.employeeCode||'')+' — '+closeMonth,
+      period:closeMonth,type:'Monthly',language:reportLanguage,includeSalary:false,generationMode:'Automatic',status:'Draft',
+      managerSummary:'',strengths:'',improvements:'',nextGoals:'',notes:'',createdByName:ctx.user.name
+    }));
+    const clientDrafts=activeClients.filter(c=>!known.has(clientReportAutoId(c.id,closeMonth))).map(c=>({
+      id:clientReportAutoId(c.id,closeMonth),reportKind:'Client',clientId:c.id,
+      title:(ar?'تقرير العميل':'Client report')+' — '+(c.brandName||c.name||c.clientCode||'')+' — '+closeMonth,
+      period:closeMonth,type:'Monthly',language:ar?'Arabic':'English',generationMode:'Automatic',status:'Draft',
+      executiveSummary:'',achievements:'',metrics:'',nextSteps:'',notes:'',createdByName:ctx.user.name
+    }));
+    const total=employeeDrafts.length+clientDrafts.length;
+    if(!confirm(ar
+      ?('إغلاق '+closeMonth+' بأمان؟\n\nسيتم إنشاء '+total+' مسودة تقرير ناقصة فقط، وتثبيت الشهر كمغلق. لن يتم مسح أي مهمة أو فاتورة أو حضور، والمهام المفتوحة ستستمر للشهر الجديد.')
+      :('Close '+closeMonth+' safely?\n\nThis creates '+total+' missing report draft(s) and marks the period closed. Nothing is deleted; open tasks carry into the new month.')))return;
+    employeeDrafts.forEach(report=>ctx.createRecord('reports',report));
+    clientDrafts.forEach(report=>ctx.createRecord('reports',report));
+    const closeMarker={
+      reportKind:'MonthClose',title:'Month close — '+closeMonth,period:closeMonth,type:'MonthClose',generationMode:'Manual',status:'Closed',
+      closedAt:nowISO(),closedByName:ctx.user.name,archiveRowCount:closeStats.archive,
+      notes:'No records deleted. Open work carries forward; completed records remain available in history and exports.'
+    };
+    const existingClose=(db.reports||[]).find(r=>!r._del&&r.id==='month-close-'+closeMonth);
+    if(existingClose)ctx.updateRecord('reports',existingClose.id,closeMarker);else ctx.createRecord('reports',{id:'month-close-'+closeMonth,...closeMarker});
+    ctx.addActivity('reports','month-close-'+closeMonth,'month closed safely',total+' report drafts · '+closeStats.archive+' archive rows');
+    showProPopup('syncSuccess',ar?('تم إغلاق '+closeMonth+' بدون مسح أي بيانات'):('Closed '+closeMonth+' without deleting history'));
+  };
   const extra=(r)=>{ if((r.reportKind||'Client')==='Client')return html`<span class="flex gap8" style=${{justifyContent:'flex-end',flexWrap:'wrap'}}>
       <button class="mini pri" onClick=${()=>printDocument('report',r,db)}>${ar?'معاينة / PDF':'Preview / PDF'}</button>
       ${r.status!=='Approved'&&ce?html`<button class="mini" onClick=${()=>ctx.updateRecord('reports',r.id,{status:'Approved',approvedAt:nowISO()})}>${ar?'اعتماد':'Approve'}</button>`:''}
@@ -10442,14 +10539,24 @@ function ReportsView({ ctx, visible, ce }){
   return html`<div class="view">
     <${Head} eyebrow="Operations" title=${ar?'التقارير':'Reports'} desc=${ar?'تقارير العملاء والموظفين — يدويًا أو مسودات شهرية تلقائية.':'Client and employee reports — manual or automatic monthly drafts.'}>
       <button class="btn btn-ghost" onClick=${()=>printDocument('report',{id:'TEMPLATE',reportKind:'Client',title:ar?'قالب تقرير عميل شهري':'Monthly client report template',period:thisMonth(),status:'Draft',createdByName:ctx.user.name},db)}>${React.createElement(Icon.print)} ${ar?'قالب PDF فارغ':'Blank PDF template'}</button>
-      ${ce&&html`<button class="btn btn-ghost" onClick=${newClient}>${React.createElement(Icon.plus)} ${ar?'تقرير عميل':'Client report'}</button><button class="btn btn-pri" onClick=${newEmployee}>${React.createElement(Icon.plus)} ${ar?'تقرير موظف':'Employee report'}</button>`}<//>
+      ${canCreateReports&&html`<button class="btn btn-ghost" onClick=${newClient}>${React.createElement(Icon.plus)} ${ar?'تقرير عميل':'Client report'}</button><button class="btn btn-pri" onClick=${newEmployee}>${React.createElement(Icon.plus)} ${ar?'تقرير موظف':'Employee report'}</button>`}<//>
 
-    ${(isAdminRole(ctx.role)||aliasRole(ctx.role)==='HR')&&html`<${Panel} className="mb18">
+    ${canPrepareClose&&html`<${Panel} className="mb18 month-close-panel">
+      <div class="month-close-head"><div><span class="eyebrow">${ar?'إغلاق الشهر':'MONTH CLOSE'}</span><h3>${ar?'ابدأ الشهر الجديد من غير ما تضيع تاريخ القديم':'Start the new month without losing the old one'}</h3><p>${ar?'المهام والفواتير والحضور يفضلوا محفوظين. السيستم ينشئ مسودات تقارير، ويصدر أرشيف Sheets، ويُبقي المهام المفتوحة شغالة.':'Tasks, finance and attendance stay preserved. MAGNET creates report drafts, exports a Sheets-ready archive and carries open work forward.'}</p></div><${Tag} type=${closedPeriods.includes(closeMonth)?'ok':'warn'}>${closedPeriods.includes(closeMonth)?(ar?'مغلق ومؤرشف':'Closed & archived'):(ar?'جاهز للإغلاق':'Ready to close')}<//></div>
+      <div class="month-close-stats">${[
+        [ar?'المهام':'Tasks',closeStats.tasks],[ar?'الحسابات':'Finance',closeStats.finance],[ar?'الموظفون':'Employees',closeStats.employees],[ar?'العملاء':'Clients',closeStats.clients]
+      ].map(item=>html`<div key=${item[0]}><span>${item[0]}</span><b>${item[1]}</b></div>`)}</div>
+      <div class="month-close-actions"><input class="sel" type="month" value=${closeMonth} onChange=${e=>setCloseMonth(e.target.value)}/><button class="btn btn-pri" onClick=${prepareMonthClose}>${React.createElement(Icon.check)} ${closedPeriods.includes(closeMonth)?(ar?'فحص وإكمال الناقص':'Check & repair close'):(ar?'إغلاق الشهر بأمان':'Close month safely')}</button><button class="btn btn-ghost" disabled=${!closeStats.archive} onClick=${()=>downloadMonthArchiveCSV(db,closeMonth)}>${React.createElement(Icon.download)} ${ar?'تنزيل أرشيف Sheets':'Download Sheets archive'} · ${closeStats.archive}</button></div>
+      <div class="muted month-close-rule">${ar?'قاعدة ثابتة: لا يتم حذف أي سجل مع بداية الشهر. المكتمل يظل في الأرشيف، والمفتوح ينتقل تلقائيًا، والجديد يظهر في الشهر الحالي.':'Permanent rule: monthly rollover never deletes records. Completed work remains archived, open work carries forward, and new work starts in the current period.'}</div>
+    <//>`}
+
+    ${(isAdminRole(ctx.role)||aliasRole(ctx.role)==='HR'||ctx.role==='Account Manager')&&html`<${Panel} className="mb18">
       <div class="flex between center" style=${{gap:16,flexWrap:'wrap'}}>
-        <div><b>${ar?'التقارير الشهرية التلقائية':'Automatic monthly employee reports'}</b><div class="muted" style=${{fontSize:11.5,marginTop:4}}>${ar?'في أول دخول كل شهر، ينشئ السيستم مسودة للشهر السابق لكل موظف نشط. لا يتم إرسال أي شيء قبل المراجعة.':'On the first eligible login each month, the system creates a previous-month draft for every active employee. Nothing is sent before review.'}</div></div>
-        <div class="flex center gap8">
+        <div><b>${ar?'مسودات التقارير الشهرية التلقائية':'Automatic monthly report drafts'}</b><div class="muted" style=${{fontSize:11.5,marginTop:4}}>${ar?'في أول دخول مؤهل كل شهر، ينشئ السيستم مسودات الشهر السابق للموظفين والعملاء المفعّلين. لا يتم إرسال أي شيء قبل المراجعة.':'On the first eligible login each month, the system creates previous-month drafts for active employees and clients. Nothing is sent before review.'}</div></div>
+        <div class="flex center gap8" style=${{flexWrap:'wrap'}}>
           <select class="sel" disabled=${!ce} value=${ctx.appSettings.employeeReportLanguage||(ar?'Arabic':'English')} onChange=${e=>ctx.applyAppSettings({employeeReportLanguage:e.target.value})}><option>Arabic</option><option>English</option></select>
-          <label class="ver-toggle" style=${{margin:0}}><input type="checkbox" disabled=${!ce} checked=${ctx.appSettings.employeeReportsAuto!==false} onChange=${e=>ctx.applyAppSettings({employeeReportsAuto:e.target.checked})}/> ${ar?'تفعيل':'Enabled'}</label>
+          ${(isAdminRole(ctx.role)||aliasRole(ctx.role)==='HR')&&html`<label class="ver-toggle" style=${{margin:0}}><input type="checkbox" disabled=${!ce} checked=${ctx.appSettings.employeeReportsAuto!==false} onChange=${e=>ctx.applyAppSettings({employeeReportsAuto:e.target.checked})}/> ${ar?'الموظفون':'Employees'}</label>`}
+          ${(isAdminRole(ctx.role)||ctx.role==='Account Manager')&&html`<span class="tag">${ar?'العملاء: تلقائي':'Clients: automatic'}</span>`}
         </div>
       </div><//>`}
 
@@ -10645,16 +10752,24 @@ function SettingsView({ ctx, x }){
       <//>
     </div>
 
-    <${Panel} title="People & access — how to add someone" className="mb18" style=${{marginTop:18}}>
-      <ol class="muted" style=${{fontSize:13,lineHeight:1.9,paddingLeft:18,margin:0}}>
-        <li><b>Staff:</b> open <a class="lime" style=${{cursor:'pointer'}} onClick=${()=>ctx.go('employees')}>Employees</a> → New employee. Set their <b>Login email</b> and <b>App role</b> (Admin / Project Manager / Designer / Video Editor / Accountant / Sales) in the Access section.</li>
-        <li><b>Clients:</b> open <a class="lime" style=${{cursor:'pointer'}} onClick=${()=>ctx.go('contacts')}>Contacts</a> → add the client contact and enable <b>Portal access</b>. They get the Client portal automatically.</li>
-        <li>In <b>Supabase → Authentication → Users → Add user</b>, create a login with the <b>same email</b> and a temporary password. Share it with them.</li>
-        <li>They open your site, sign in, and land in their role automatically. Any unmatched login gets the least-privilege Client role until you link it.</li>
-      </ol>
-      <div class="flex gap8" style=${{marginTop:14}}>
-        <button class="btn btn-ghost" onClick=${()=>ctx.go('employees')}>Open Employees</button>
-        <button class="btn btn-ghost" onClick=${()=>ctx.go('contacts')}>Open Contacts</button>
+    <${Panel} title=${arr?'دليل الأدمن — إضافة شخص وتشغيله من داخل السيستم':'Admin launch guide — add a person inside MAGNET'} className="mb18" style=${{marginTop:18}}>
+      <div class="warn-note" style=${{marginBottom:12}}>${arr?'اعمل المستخدم من MAGNET فقط. لا تنشئ موظفًا عاديًا مباشرة من Supabase؛ السيستم هو المسؤول عن ربط ملف الموظف بحساب الدخول والرول الصحيح.':'Create people inside MAGNET only. Do not add normal staff directly in Supabase; MAGNET links the employee profile, login account and correct role safely.'}</div>
+      <div class="admin-access-steps">
+        <div class="admin-access-step"><b>${arr?'أنشئ ملف الموظف':'Create employee profile'}</b><p>${arr?'Employees ← New employee. اكتب الاسم، البريد الصحيح، الوظيفة وApp role.':'Employees → New employee. Enter the correct name, email, job title and App role.'}</p></div>
+        <div class="admin-access-step"><b>${arr?'أنشئ حساب الدخول':'Create login account'}</b><p>${arr?'Users & Permissions ← Create User. اربطه بنفس الموظف واستخدم باسورد مؤقت قوي.':'Users & Permissions → Create User. Link the same employee and use a strong temporary password.'}</p></div>
+        <div class="admin-access-step"><b>${arr?'افحص الربط والرول':'Verify link and role'}</b><p>${arr?'شغّل «فحص وإصلاح الربط والرولز». لازم Role mismatches وUnlinked يكونوا صفر.':'Run “Repair links & roles”. Role mismatches and unlinked accounts must be zero.'}</p></div>
+        <div class="admin-access-step"><b>${arr?'سلّم الدخول بأمان':'Hand off securely'}</b><p>${arr?'ابعت رابط السيستم والباسورد المؤقت للشخص وحده. أول ما يدخل يغيّره؛ لو نسيه استخدم Reset Password.':'Privately send the site link and temporary password. They change it after login; use Reset Password if it is lost.'}</p></div>
+      </div>
+      <div class="admin-role-grid">
+        <div class="admin-role-card"><b>${arr?'الحسابات / Finance':'Finance / Accounting'}</b><span>${arr?'يفتح Invoices وPayments وExpenses وPayroll، يسجل التحصيل والمصروف ويقفل أرقام الشهر. لا يحتاج HR أو Users.':'Runs invoices, payments, expenses and payroll; records collections and closes monthly finance. No HR or user administration.'}</span></div>
+        <div class="admin-role-card"><b>HR</b><span>${arr?'يدير Employees وAttendance وLeaves وPayroll وتقارير الموظفين. حسابات الدخول ينشئها Owner/Admin فقط.':'Manages employees, attendance, leave, payroll and employee reports. Owner/Admin creates login accounts.'}</span></div>
+        <div class="admin-role-card"><b>Account Manager</b><span>${arr?'يدير العملاء والمشاريع والتاسكات والموافقات وتقارير العملاء الشهرية، ويتابع التسليم والتحصيل المطلوب.':'Runs clients, projects, tasks, approvals and monthly client reports; follows delivery and required collection.'}</span></div>
+        <div class="admin-role-card"><b>Sales</b><span>${arr?'يستقبل Leads من الفورم، يحدّث مراحل CRM، يحوّل المؤهل لعميل/عرض/عقد ويسجل المتابعة.':'Receives web leads, advances CRM stages, converts qualified leads to client/proposal/contract and records follow-ups.'}</span></div>
+      </div>
+      <div class="flex gap8" style=${{marginTop:14,flexWrap:'wrap'}}>
+        <button class="btn btn-pri" onClick=${()=>ctx.go('users')}>${arr?'فتح المستخدمين والصلاحيات':'Open Users & Permissions'}</button>
+        <button class="btn btn-ghost" onClick=${()=>ctx.go('employees')}>${arr?'فتح الموظفين':'Open Employees'}</button>
+        <button class="btn btn-ghost" onClick=${()=>ctx.go('rolesPermissions')}>${arr?'مراجعة الأدوار':'Review Roles'}</button>
       </div>
     <//>
 

@@ -215,6 +215,25 @@ const packageConfig = JSON.parse(read('package.json'));
 /emailDeliveryStatus/.test(html) && /employeeReportsAuto/.test(html)
   ? ok('employee reports support automation and tracked delivery')
   : bad('employee report automation/delivery tracking is missing');
+/function clientReportAutoId\(/.test(html)
+  && /const canClientAuto=isAdminRole\(role\)\|\|role==='Account Manager'/.test(html)
+  && /generationMode:'Automatic'/.test(html)
+  ? ok('client monthly reports are generated as reviewable drafts')
+  : bad('client monthly report automation is missing');
+/function monthArchiveRows\(/.test(html)
+  && /magnet-month-close-/.test(html)
+  && /reportKind:'MonthClose'/.test(html)
+  && /monthly rollover never deletes records/i.test(html)
+  ? ok('month close preserves history, carries open work, and exports a Sheets archive')
+  : bad('month close can lose history or lacks an exportable archive');
+/Create people inside MAGNET only/.test(html)
+  && /Do not add normal staff directly in Supabase/.test(html)
+  && /Repair links & roles/.test(html)
+  ? ok('admin onboarding keeps employee, login, and role setup inside MAGNET')
+  : bad('admin onboarding still depends on manual Supabase user creation');
+/'Account Manager': \{[^}]*Reports:\['View','Create','Edit','Export'\]/.test(html)
+  ? ok('Account Manager can create and export monthly client reports')
+  : bad('Account Manager report permissions are incomplete');
 /saveUsersConfirmed/.test(html) && /The server did not confirm the change/.test(html)
   ? ok('account administration waits for a confirmed server write')
   : bad('role/password changes can still claim success before cloud persistence');
