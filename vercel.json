@@ -1,10 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://magnet-efzte238g-magnetaitool-archs-projects.vercel.app/api/:path*"
-    },
     { "source": "/((?!api/|.*\\.).*)", "destination": "/index.html" }
   ],
   "headers": [
