@@ -36,6 +36,7 @@
     "test:approvals-v2": "node tools/approvals-v2-test.js",
     "test:system-health-v2": "node tools/system-health-v2-test.js",
     "test:employee-requests-v3": "node tools/employee-requests-v3-test.js",
+    "test:finance-month-cycle": "node tools/finance-month-cycle-test.js",
     "test:identity:staging": "node tools/test-staging-identity.js --project-ref=$MAGNET_STAGING_PROJECT_REF",
     "test:login:staging": "node tools/test-staging-app-login.js --project-ref=$MAGNET_STAGING_PROJECT_REF",
     "test:auth-repair:staging": "node tools/test-staging-auth-placeholder-repair.js --project-ref=$MAGNET_STAGING_PROJECT_REF",
@@ -54,7 +55,7 @@
     "test:approvals-v2:staging": "node tools/test-staging-approvals-v2.js --project-ref=$MAGNET_STAGING_PROJECT_REF",
     "test:system-health-v2:staging": "node tools/test-staging-system-health-v2.js --project-ref=$MAGNET_STAGING_PROJECT_REF",
     "check:env-separation": "node tools/check-environment-separation.js",
-    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js && node tools/recruitment-v2-test.js && node tools/sales-client-workspace-v2-test.js && node tools/finance-v2-test.js && node tools/contract-v2-test.js && node tools/document-storage-v2-test.js && node tools/tasks-search-notifications-v2-test.js && node tools/approvals-v2-test.js && node tools/system-health-v2-test.js && node tools/employee-requests-v3-test.js",
+    "test": "node tools/smoke-test.js && node tools/security-test.js && node tools/saas-foundation-test.js && node tools/identity-foundation-test.js && node tools/tenant-foundation-test.js && node tools/organization-settings-test.js && node tools/employee-privacy-test.js && node tools/public-intake-test.js && node tools/delivery-outbox-test.js && node tools/recruitment-v2-test.js && node tools/sales-client-workspace-v2-test.js && node tools/finance-v2-test.js && node tools/contract-v2-test.js && node tools/document-storage-v2-test.js && node tools/tasks-search-notifications-v2-test.js && node tools/approvals-v2-test.js && node tools/system-health-v2-test.js && node tools/employee-requests-v3-test.js && node tools/finance-month-cycle-test.js",
     "verify:security": "python3 tools/verify-security.py"
   },
   "engines": {

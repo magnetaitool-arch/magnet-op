@@ -2281,6 +2281,48 @@ const fmtDate = (d) => { if(!d) return '—'; const x = _isBareDate(d) ? new Dat
 const fmtDateTime = (d) => { if(!d) return '—'; const x=new Date(d); return isNaN(x)? d : x.toLocaleString(undefined,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
 const monthOf = (d) => (d||'').slice(0,7);
 const thisMonth = () => todayISO().slice(0,7);
+const isMonthISO = (value) => /^\d{4}-\d{2}$/.test(String(value||''));
+function shiftMonthISO(ref,delta){
+  const value=isMonthISO(ref)?String(ref):thisMonth();
+  const parts=value.split('-').map(Number), d=new Date(parts[0],parts[1]-1+(Number(delta)||0),1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function monthLabelISO(period,lang){
+  if(!isMonthISO(period))return String(period||'');
+  const parts=period.split('-').map(Number);
+  return new Date(parts[0],parts[1]-1,1).toLocaleDateString(lang==='ar'?'ar-EG':'en-US',{month:'long',year:'numeric'});
+}
+const dateForPeriod = (period) => period===thisMonth()?todayISO():(isMonthISO(period)?period+'-01':todayISO());
+const recordInMonth = (record,period,fields=['date','updatedAt','createdAt']) => fields.some(field=>monthOf(record&&record[field])===period);
+function fixedCostSettledInMonth(item,period){
+  if((item&&item.settledMonths||[]).includes(period))return true;
+  return !!(item&&item.settled&&monthOf(item.settledAt)===period);
+}
+function fixedCostSettlementNote(item,period){
+  if(item&&item.settledNotes&&item.settledNotes[period])return item.settledNotes[period];
+  return fixedCostSettledInMonth(item,period)?(item.settledNote||''):'';
+}
+function fixedCostAppliesToMonth(item,period){
+  if(!item||item._del||!isMonthISO(period))return false;
+  const start=monthOf(item.startDate||item.createdAt), end=monthOf(item.endDate);
+  if(start&&start>period)return false;
+  if(end&&end<period)return false;
+  if(item.cycle==='One-time')return start===period;
+  if((item.status||'Active')==='Active')return true;
+  return (item.paidMonths||[]).includes(period)||fixedCostSettledInMonth(item,period);
+}
+function fixedCostDueInMonth(item,period){
+  if(!fixedCostAppliesToMonth(item,period))return false;
+  const start=monthOf(item.startDate||item.createdAt)||period;
+  const a=start.split('-').map(Number), b=period.split('-').map(Number);
+  const elapsed=(b[0]-a[0])*12+(b[1]-a[1]);
+  if(elapsed<0)return false;
+  if(item.cycle==='Yearly')return elapsed%12===0;
+  if(item.cycle==='Quarterly')return elapsed%3===0;
+  if(item.cycle==='One-time')return elapsed===0;
+  return true;
+}
+const settlementMonth = (row) => (row&&row.period)||monthOf(row&&(row.date||row.createdAt));
 // Auto invoice number: INV-YYYYMM-<n>, n = highest existing suffix this month + 1 (no hand-typed collisions).
 const nextInvoiceNumber = (db) => { const ym=todayISO().slice(0,7).replace('-',''); let mx=0; ((db&&db.invoices)||[]).forEach(iv=>{ const m=String(iv.invoiceNumber||'').match(/^INV-(\d{6})-(\d+)$/); if(m&&m[1]===ym) mx=Math.max(mx,+m[2]); }); return 'INV-'+ym+'-'+String(mx+1).padStart(3,'0'); };
 // Logical duplicate detection at CREATE time. Returns an existing record that
@@ -2709,7 +2751,7 @@ const EXPENSE_CATS = ['Salaries','Freelancers','Ads Spend','Tools','Office','Pro
 const PARTNERS_DEFAULT = [{id:'p1',name:'Mohamed Hassan Kamel',share:50},{id:'p2',name:'Mohamed Tarek',share:50}];
 const getPartners = (appSettings)=>{ const p=appSettings&&appSettings.partners; return (Array.isArray(p)&&p.length>=2)?p:PARTNERS_DEFAULT; };
 const PAID_BY_OPTS = ['Company','Mohamed Hassan Kamel','Mohamed Tarek'];
-const FIXED_CYCLES = ['Monthly','Quarterly','Yearly'];
+const FIXED_CYCLES = ['Monthly','Quarterly','Yearly','One-time'];
 const FIXED_KINDS = ['Fixed expense','Subscription'];
 const PLAN_TIMEFRAMES = ['Weekly','Monthly','Quarterly','Yearly'];
 const PLAN_QUARTERS = ['Q1','Q2','Q3','Q4'];
@@ -3134,9 +3176,7 @@ async function emailPayslip(p, emp, onResult){
 // Automatic reports use a deterministic id, so opening the app on two devices can
 // never create duplicates for the same employee/month.
 function previousMonthISO(ref){
-  const p=String(ref||thisMonth()).split('-').map(Number);
-  const d=new Date(p[0]||new Date().getFullYear(),(p[1]||1)-2,1);
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  return shiftMonthISO(ref||thisMonth(),-1);
 }
 function employeeReportAutoId(employeeId,period){
   return ('erp-auto-'+String(period||'')+'-'+String(employeeId||'')).replace(/[^a-zA-Z0-9_-]/g,'-');
@@ -6141,6 +6181,17 @@ function Head({ eyebrow, title, desc, children }) {
     ${children&&html`<div class="view-actions">${children}</div>`}</div>`;
 }
 
+function MonthPeriodControl({ period, onChange }){
+  const ar=getLang()==='ar', current=thisMonth();
+  const set=value=>{ if(isMonthISO(value)&&value<=current)onChange(value); };
+  return html`<div class="flex gap8" role="group" aria-label=${ar?'اختيار الشهر':'Select accounting month'} style=${{alignItems:'center',flexWrap:'wrap'}}>
+    <button class="mini" onClick=${()=>set(shiftMonthISO(period,-1))} aria-label=${ar?'الشهر السابق':'Previous month'}>‹</button>
+    <input class="sel mono" type="month" max=${current} value=${period} onChange=${e=>set(e.target.value)} style=${{width:152}}/>
+    <button class="mini" disabled=${period>=current} onClick=${()=>set(shiftMonthISO(period,1))} aria-label=${ar?'الشهر التالي':'Next month'}>›</button>
+    ${period!==current&&html`<button class="mini pri" onClick=${()=>onChange(current)}>${ar?'الشهر الحالي':'Current month'}</button>`}
+  </div>`;
+}
+
 // Clean empty state
 function EmptyState({ title, text, actionLabel, onAction, icon }){
   return html`<div class="empty-state">
@@ -8200,7 +8251,7 @@ const FORM_SCHEMAS = {
   ],
   expenses:[{k:'title',label:'Title',req:true},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'date',label:'Date',type:'date',req:true},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'vendor',label:'Vendor'},{k:'projectId',label:'Project',type:'ref',coll:'projects'},{k:'clientId',label:'Client',type:'ref',coll:'clients'},{k:'status',label:'Status',type:'select',opts:ST.expense},{k:'notes',label:'Notes',type:'textarea'}],
   plans:[{k:'title',label:'Plan / goal',req:true},{k:'timeframe',label:'Timeframe',type:'select',opts:PLAN_TIMEFRAMES},{k:'quarter',label:'Quarter (if quarterly)',type:'select',opts:PLAN_QUARTERS},{k:'period',label:'Period (e.g. Jun 2026 / Q3 2026)'},{k:'owner',label:'Owner',type:'select',opts:[...PARTNERS_DEFAULT.map(p=>p.name),'Both partners','Team']},{k:'status',label:'Status',type:'select',opts:PLAN_STATUS},{k:'progress',label:'Progress %',type:'number'},{k:'dueDate',label:'Due date',type:'date'},{k:'notes',label:'Notes',type:'textarea'}],
-  fixedCosts:[{k:'name',label:'Name',req:true},{k:'kind',label:'Type',type:'select',opts:FIXED_KINDS},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'cycle',label:'Cycle',type:'select',opts:FIXED_CYCLES},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'startDate',label:'Start date',type:'date',req:true},{k:'status',label:'Status',type:'select',opts:['Active','Paused']},{k:'notes',label:'Notes',type:'textarea'}],
+  fixedCosts:[{k:'name',label:'Name',req:true},{k:'kind',label:'Type',type:'select',opts:FIXED_KINDS},{k:'category',label:'Category',type:'select',opts:EXPENSE_CATS},{k:'amount',label:'Amount',type:'number',req:true},{k:'cycle',label:'Cycle',type:'select',opts:FIXED_CYCLES},{k:'paidBy',label:'Paid by',type:'select',opts:PAID_BY_OPTS},{k:'startDate',label:'Start date',type:'date',req:true},{k:'endDate',label:'Stop after (optional)',type:'date'},{k:'status',label:'Status',type:'select',opts:['Active','Paused']},{k:'notes',label:'Notes',type:'textarea'}],
   employees:[
     {k:'fullName',label:'Full name',req:true,group:'Basic'},{k:'displayName',label:'Display name',group:'Basic'},{k:'employeeCode',label:'Employee code',group:'Basic'},
     {k:'jobTitle',label:'Job title',req:true,group:'Basic'},{k:'departmentId',label:'Department',type:'ref',coll:'departments',group:'Basic'},
@@ -9430,6 +9481,9 @@ function monthArchiveRows(db,period){
   (db.invoices||[]).filter(item=>!item._del&&[item.issueDate,item.dueDate,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Invoice',item));
   (db.payments||[]).filter(item=>!item._del&&[item.date,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Payment',item));
   (db.expenses||[]).filter(item=>!item._del&&[item.date,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Expense',item));
+  (db.fixedCosts||[]).filter(item=>fixedCostAppliesToMonth(item,period)).forEach(item=>add('Fixed cost',item,{date:period+'-01',amount:cycleToMonthly(item.amount,item.cycle),status:fixedCostDueInMonth(item,period)?((item.paidMonths||[]).includes(period)?'Paid':'Due'):'Accrued — not due',notes:item.notes||''}));
+  (db.partnerTx||[]).filter(item=>!item._del&&[item.date,item.createdAt].some(inMonth)).forEach(item=>add('Partner transaction',item,{title:(item.partnerName||'Partner')+' · '+(item.txType||'Transaction'),amount:item.amount||0}));
+  (db.partnerSettlements||[]).filter(item=>!item._del&&settlementMonth(item)===period).forEach(item=>add('Partner settlement',item,{date:item.date||period+'-01',title:(item.fromName||'')+' → '+(item.toName||''),amount:item.amount||0}));
   (db.collections||[]).filter(item=>!item._del&&[item.dueDate,item.collectedDate,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Collection',item));
   (db.employeePayments||[]).filter(item=>!item._del&&(item.month===period||[item.date,item.paymentDate,item.updatedAt,item.createdAt].some(inMonth))).forEach(item=>add('Payroll',item,{employee:employee(item.employeeId),amount:item.netAmount==null?item.amount:item.netAmount}));
   (db.attendance||[]).filter(item=>!item._del&&inMonth(item.date)).forEach(item=>add('Attendance',item,{title:employee(item.employeeId),employee:employee(item.employeeId),amount:item.hours||''}));
@@ -9577,24 +9631,31 @@ function ReviewDrawer({ ctx, coll, rec, fields, canApprove, onClose }){
     </div>
   </div></div>`;
 }
-function SettleForm({ ctx, item, coll, onClose }){
+function SettleForm({ ctx, item, coll, period, onClose }){
   const partners=getPartners(ctx.appSettings);
   const payer=item.paidBy;
   const other=(partners.find(p=>p.name!==payer && p.name!=='Company')||partners.find(p=>p.name!==payer)||{}).name||'';
-  const base = coll==='fixedCosts' ? cycleToMonthly(item.amount,item.cycle) : (Number(item.amount)||0);
+  const accountingPeriod=isMonthISO(period)?period:(coll==='fixedCosts'?thisMonth():(monthOf(item.date)||thisMonth()));
+  const base = Number(item.amount)||0;
   const payerShare=(partners.find(p=>p.name===payer)||{}).share; const payerPct=(payerShare==null?50:Number(payerShare))/100;
   const [amount,setAmount]=useState(Math.round(base*(1-payerPct))); // the other partner's share
   const [note,setNote]=useState('');
   const confirmSettle=()=>{
-    ctx.updateRecord(coll, item.id, {settled:true, settledNote:note, settledAt:todayISO()});
-    ctx.createRecord('partnerSettlements',{ fromName:other, toName:payer, amount:Math.round(Number(amount)||0), note, date:todayISO(), items:[{coll, id:item.id}] });
+    if(coll==='fixedCosts'){
+      const settledMonths=Array.from(new Set([...(item.settledMonths||[]),accountingPeriod])).sort();
+      const settledNotes=Object.assign({},item.settledNotes||{},note?{[accountingPeriod]:note}:{});
+      ctx.updateRecord(coll,item.id,{settledMonths,settledNotes,lastSettledAt:nowISO()});
+    }else{
+      ctx.updateRecord(coll,item.id,{settled:true,settledNote:note,settledAt:todayISO()});
+    }
+    ctx.createRecord('partnerSettlements',{ fromName:other, toName:payer, amount:Math.round(Number(amount)||0), note, date:todayISO(), period:accountingPeriod, items:[{coll,id:item.id,period:accountingPeriod}] });
     showProPopup('savedNotes','Settled — marked Paid by Both'); onClose();
   };
   return html`<div class="cdrawer-ov" onClick=${onClose}><div class="cdrawer" onClick=${e=>e.stopPropagation()}>
     <div class="cdrawer-h"><div><div class="muted" style=${{fontSize:11,textTransform:'uppercase',letterSpacing:'.05em'}}>Settle</div>
       <h3 style=${{margin:'3px 0 0',fontSize:18}}>${item.name||item.title||'Settlement'}</h3></div><button class="mini" onClick=${onClose}>×</button></div>
     <div class="cdrawer-b">
-      <div class="cd-ro">Paid by <b>${payer}</b>. <b>${other}</b> reimburses their share. After settling, this item becomes <b>Paid by Both</b>.</div>
+      <div class="cd-ro">${monthLabelISO(accountingPeriod,getLang())} · Paid by <b>${payer}</b>. <b>${other}</b> reimburses their share. Only this accounting month becomes <b>Paid by Both</b>.</div>
       <div class="cd-sec"><label>Amount (${other} pays ${payer})</label><input class="inp" type="number" value=${amount} onInput=${e=>setAmount(e.target.value)}/></div>
       <div class="cd-sec"><label>Reason / note</label><textarea class="inp" rows=${2} value=${note} onInput=${e=>setNote(e.target.value)} placeholder="e.g. Reimbursed in cash on 30 Jun"></textarea></div>
       <button class="btn btn-pri" onClick=${confirmSettle}>Confirm — mark Paid by Both</button>
@@ -9605,16 +9666,18 @@ function ExpensesView({ ctx, ce }){
   const { db, role } = ctx;
   const ar=getLang()==='ar'; // follow the app language
   const [settle,setSettle]=useState(null);
+  const [period,setPeriod]=useState(thisMonth());
   const partners=getPartners(ctx.appSettings);
   const [rev,setRev]=useState(null);
   const canApprove = aliasRole(role)==='Admin' || aliasRole(role)==='Accountant';
-  const rows=(db.expenses||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const rows=(db.expenses||[]).filter(e=>recordInMonth(e,period,['date','createdAt'])).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const pending=rows.filter(e=>(e.status||'Pending')==='Pending');
   const total=rows.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const fields=[{k:'title',label:ar?'البند':'Title'},{k:'category',label:ar?'التصنيف':'Category'},{k:'amount',label:ar?'المبلغ':'Amount',money:true},{k:'date',label:ar?'التاريخ':'Date'},{k:'paidBy',label:ar?'دفعها':'Paid by'},{k:'vendor',label:ar?'الجهة':'Vendor'},{k:'status',label:ar?'الحالة':'Status'},{k:'notes',label:ar?'ملاحظات':'Notes'}];
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Expenses" desc="Daily expenses — review and approve without editing.">
-      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('expenses',{status:'Pending',date:todayISO(),paidBy:'Company'})}>${React.createElement(Icon.plus)} New expense</button>`}<//>
+      <${MonthPeriodControl} period=${period} onChange=${setPeriod}/>
+      ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('expenses',{status:'Pending',date:dateForPeriod(period),paidBy:'Company'})}>${React.createElement(Icon.plus)} New expense</button>`}<//>
     <div class="grid g-3 stagger" style=${{marginBottom:16}}>
       <${KPI} label=${ar?'إجمالي المصاريف':'Total'} value=${money(total)} icon="trendDown"/>
       <${KPI} label=${ar?'بانتظار المراجعة':'Pending review'} value=${pending.length} icon="alert"/>
@@ -9626,7 +9689,7 @@ function ExpensesView({ ctx, ce }){
       extraActions=${r=>html`<button class="mini" onClick=${()=>setRev(r)}>Review</button>${(ce&&!r.settled&&partners.some(p=>p.name===r.paidBy))?html`<button class="mini" onClick=${()=>setSettle(r)}>Settle</button>`:''}`}
       cols=${[{k:'title',label:'Title'},{k:'category',label:'Category'},{k:'amount',label:'Amount',num:true,money:true},{k:'date',label:'Date',date:true},{k:'paidBy',label:'Paid by',render:r=>r.settled?html`<span class="vpill ok">Both ✓</span>`:(r.paidBy||'—')},{k:'status',label:'Status',tag:true}]}/>
     ${rev&&html`<${ReviewDrawer} ctx=${ctx} coll="expenses" rec=${(db.expenses||[]).find(x=>x.id===rev.id)||rev} fields=${fields} canApprove=${canApprove} onClose=${()=>setRev(null)}/>`}
-    ${settle&&html`<${SettleForm} ctx=${ctx} item=${(db.expenses||[]).find(x=>x.id===settle.id)||settle} coll="expenses" onClose=${()=>setSettle(null)}/>`}
+    ${settle&&html`<${SettleForm} ctx=${ctx} item=${(db.expenses||[]).find(x=>x.id===settle.id)||settle} coll="expenses" period=${period} onClose=${()=>setSettle(null)}/>`}
   </div>`;
 }
 function PlansView({ ctx, ce }){
@@ -9734,44 +9797,47 @@ function CollectionsView({ ctx, ce }){
 function FixedCostsView({ ctx, ce }){
   const { db } = ctx;
   const [settle,setSettle]=useState(null);
+  const [period,setPeriod]=useState(thisMonth());
   const partners=getPartners(ctx.appSettings);
   const rows=(db.fixedCosts||[]);
-  const active=rows.filter(f=>(f.status||'Active')==='Active');
+  const active=rows.filter(f=>fixedCostAppliesToMonth(f,period));
+  const dueRows=active.filter(f=>fixedCostDueInMonth(f,period));
+  const displayRows=period===thisMonth()?rows:active;
   const monthlyTotal=active.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   const subs=active.filter(f=>f.kind==='Subscription');
   const subsTotal=subs.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   const canDel = ctx.canDelete ? ctx.canDelete('fixedCosts') : ce;
-  // Manual "paid ✓" tracking per month (paidMonths:['2026-07',…]). Pure checklist:
-  // profit math is untouched (fixed costs already count monthly by themselves) —
-  // this only shows which bills were ACTUALLY paid this month and which are due.
+  // A recurring cost is one definition with a separate paid/settled state per
+  // accounting month. Changing the month never duplicates or deletes the item.
   const arf=getLang()==='ar';
-  const mNow=thisMonth();
-  const isPaidNow=(f)=>(f.paidMonths||[]).includes(mNow);
-  const paidCount=active.filter(isPaidNow).length;
-  const markPaid=(f)=>{ ctx.updateRecord('fixedCosts',f.id,{paidMonths:[...(f.paidMonths||[]),mNow],lastPaidAt:todayISO()}); showProPopup('fixedPaid',f.name); };
-  const unmarkPaid=(f)=>{ if(confirm(arf?'إلغاء علامة الدفع للشهر ده؟':'Unmark paid for this month?')) ctx.updateRecord('fixedCosts',f.id,{paidMonths:(f.paidMonths||[]).filter(x=>x!==mNow)}); };
+  const isPaidNow=(f)=>(f.paidMonths||[]).includes(period);
+  const paidCount=dueRows.filter(isPaidNow).length;
+  const markPaid=(f)=>{ ctx.updateRecord('fixedCosts',f.id,{paidMonths:Array.from(new Set([...(f.paidMonths||[]),period])).sort(),lastPaidAt:nowISO()}); showProPopup('fixedPaid',f.name); };
+  const unmarkPaid=(f)=>{ if(confirm(arf?'إلغاء علامة الدفع للشهر المختار؟':'Unmark paid for the selected month?')) ctx.updateRecord('fixedCosts',f.id,{paidMonths:(f.paidMonths||[]).filter(x=>x!==period)}); };
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Fixed Costs & Subscriptions" desc="Recurring fixed costs and subscriptions in one place.">
+      <${MonthPeriodControl} period=${period} onChange=${setPeriod}/>
       ${ce&&html`<button class="btn btn-pri" onClick=${()=>ctx.openModal('fixedCosts',{kind:'Fixed expense',cycle:'Monthly',status:'Active',startDate:todayISO(),paidBy:'Company'})}>${React.createElement(Icon.plus)} New fixed cost</button>`}
     <//>
     <div class="grid g-4 stagger" style=${{marginBottom:16}}>
       <${KPI} label="Monthly fixed total" value=${money(monthlyTotal)} icon="trendDown" sub=${arf?'محسوب شهريًا':'normalized monthly'}/>
       <${KPI} label="Subscriptions" value=${subs.length} icon="refresh" sub=${money(subsTotal)+(arf?' / شهر':' / mo')}/>
       <${KPI} label="Active items" value=${active.length} icon="check"/>
-      <${KPI} label=${arf?'اتدفع الشهر ده':'Paid this month'} value=${paidCount+' / '+active.length} icon="wallet" sub=${paidCount<active.length?(arf?('فاضل '+(active.length-paidCount)):((active.length-paidCount)+' still due')):(arf?'كله اتدفع ✓':'all paid ✓')}/>
+      <${KPI} label=${arf?'اتدفع في الشهر المختار':'Paid in selected month'} value=${paidCount+' / '+dueRows.length} icon="wallet" sub=${dueRows.length===0?(arf?'لا توجد دفعات مستحقة':'no payments due'):paidCount<dueRows.length?(arf?('فاضل '+(dueRows.length-paidCount)):((dueRows.length-paidCount)+' still due')):(arf?'كله اتدفع ✓':'all paid ✓')}/>
     </div>
-    <${DataTable} db=${db} rows=${rows.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))} canEditFlag=${ce}
+    <${DataTable} db=${db} rows=${displayRows.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))} canEditFlag=${ce}
       onEdit=${ce?(r=>ctx.openModal('fixedCosts',r)):null}
       onDelete=${canDel?(r=>ctx.delRec('fixedCosts',r.id,r.name)):null}
       extraActions=${r=>html`<${React.Fragment}>
-        ${ce&&(r.status||'Active')==='Active'&&(isPaidNow(r)
+        ${ce&&fixedCostDueInMonth(r,period)&&(isPaidNow(r)
           ? html`<button class="mini" style=${{color:'var(--pos)',borderColor:'var(--pos)'}} title=${arf?'اضغط للتراجع':'Click to undo'} onClick=${()=>unmarkPaid(r)}>${arf?'اتدفع ✓':'Paid ✓'}</button>`
-          : html`<button class="mini pri" onClick=${()=>markPaid(r)}>${arf?'اتدفع الشهر ده':'Mark paid'}</button>`)}
-        ${(ce&&!r.settled&&partners.some(p=>p.name===r.paidBy))?html`<button class="mini" onClick=${()=>setSettle(r)}>${arf?'تسوية':'Settle'}</button>`:''}
+          : html`<button class="mini pri" onClick=${()=>markPaid(r)}>${arf?'تسجيل الدفع':'Mark paid'}</button>`)}
+        ${fixedCostAppliesToMonth(r,period)&&!fixedCostDueInMonth(r,period)?html`<span class="vpill">${arf?'غير مستحق':'Not due'}</span>`:''}
+        ${(ce&&fixedCostDueInMonth(r,period)&&!fixedCostSettledInMonth(r,period)&&partners.some(p=>p.name===r.paidBy))?html`<button class="mini" onClick=${()=>setSettle(r)}>${arf?'تسوية':'Settle'}</button>`:''}
       <//>`}
-      cols=${[{k:'name',label:'Name'},{k:'kind',label:'Type',tag:true},{k:'category',label:'Category'},{k:'amount',label:'Amount',num:true,money:true},{k:'cycle',label:'Cycle'},{k:'startDate',label:'Start date',date:true},{k:'paidBy',label:'Paid by',render:r=>r.settled?html`<span class="vpill ok">Both ✓</span>`:(r.paidBy||'—')},{k:'status',label:'Status',tag:true}]}
+      cols=${[{k:'name',label:'Name'},{k:'kind',label:'Type',tag:true},{k:'category',label:'Category'},{k:'amount',label:'Amount',num:true,money:true},{k:'cycle',label:'Cycle'},{k:'startDate',label:'Start date',date:true},{k:'paidBy',label:'Paid by',render:r=>fixedCostSettledInMonth(r,period)?html`<span class="vpill ok">Both ✓</span>`:(r.paidBy||'—')},{k:'status',label:'Status',tag:true}]}
       empty=${{title:'No fixed costs yet',text:'Add rent, subscriptions and fixed costs so they appear in the partner accounting.',icon:'finance'}}/>
-    ${settle&&html`<${SettleForm} ctx=${ctx} item=${(db.fixedCosts||[]).find(x=>x.id===settle.id)||settle} coll="fixedCosts" onClose=${()=>setSettle(null)}/>`}
+    ${settle&&html`<${SettleForm} ctx=${ctx} item=${(db.fixedCosts||[]).find(x=>x.id===settle.id)||settle} coll="fixedCosts" period=${period} onClose=${()=>setSettle(null)}/>`}
   </div>`;
 }
 
@@ -9781,30 +9847,35 @@ function PartnersView({ ctx }){
   const partners = getPartners(appSettings);
   const [p1,p2] = partners;
   const [edit,setEdit] = useState(false);
+  const [period,setPeriod] = useState(thisMonth());
   const [draft,setDraft] = useState(()=>partners.map(p=>({...p})));
-  const income = (db.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0),0);
-  const expOneoff = (db.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
-  const expFixed = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active').reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const paymentRows=(db.payments||[]).filter(p=>recordInMonth(p,period,['date','paidAt','createdAt']));
+  const expenseRows=(db.expenses||[]).filter(e=>recordInMonth(e,period,['date','createdAt']));
+  const fixedRows=(db.fixedCosts||[]).filter(f=>fixedCostAppliesToMonth(f,period));
+  const payrollRows=(db.employeePayments||[]).filter(p=>p.month===period&&p.paymentStatus==='Paid');
+  const income = paymentRows.reduce((s,p)=>s+(Number(p.amount)||0),0);
+  const expOneoff = expenseRows.reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const expFixed = fixedRows.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   // Paid payroll counts as a cost here too, so this net (the profit that gets
   // split between partners) always matches the Profitability screen's net.
-  const paidPayroll = (db.employeePayments||[]).filter(p=>p.paymentStatus==='Paid').reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
+  const paidPayroll = payrollRows.reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
   const expenses = expOneoff + expFixed + paidPayroll;
   const net = income - expenses;
   const sharePct = (p)=> (p.share==null ? 50 : Number(p.share))/100;
   // What each partner PERSONALLY paid out of pocket (paidBy === their name).
-  const paidByName = (name)=> (db.expenses||[]).filter(e=>e.paidBy===name&&!e.settled).reduce((s,e)=>s+(Number(e.amount)||0),0)
-    + (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active'&&f.paidBy===name&&!f.settled).reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const paidByName = (name)=> expenseRows.filter(e=>e.paidBy===name&&!e.settled).reduce((s,e)=>s+(Number(e.amount)||0),0)
+    + fixedRows.filter(f=>fixedCostDueInMonth(f,period)&&f.paidBy===name&&!fixedCostSettledInMonth(f,period)).reduce((s,f)=>s+(Number(f.amount)||0),0);
   // Partner ledger: withdrawals (draws) and deposits. Draws are profit
   // distributions, NOT expenses — net profit above is untouched. Balance shown
   // per partner = profit share + deposits − withdrawals.
-  const ptx = (db.partnerTx||[]).filter(t=>!t._del);
+  const ptx = (db.partnerTx||[]).filter(t=>!t._del&&recordInMonth(t,period,['date','createdAt']));
   const drawsOf    = (name)=> ptx.filter(t=>t.partnerName===name && t.txType!=='Deposit').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const depositsOf = (name)=> ptx.filter(t=>t.partnerName===name && t.txType==='Deposit').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const totalDraws = partners.reduce((s,p)=>s+drawsOf(p.name),0);
   // Dynamic form schema so the Partner dropdown always shows the CURRENT partner
   // names from Settings (the static schema falls back to the defaults).
   const ptxSchema = (FORM_SCHEMAS.partnerTx||[]).map(f=> f.k==='partnerName' ? {...f, opts:partners.map(p=>p.name)} : f);
-  const openTx = (type)=> ctx.openModal('partnerTx', { txType:type, date:todayISO() }, ptxSchema,
+  const openTx = (type)=> ctx.openModal('partnerTx', { txType:type, date:dateForPeriod(period) }, ptxSchema,
     getLang()==='ar' ? (type==='Deposit'?'تسجيل إيداع من شريك':'تسجيل سحب لشريك') : (type==='Deposit'?'New partner deposit':'New partner withdrawal'));
   const ptxRows = [...ptx].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const personal1=paidByName(p1.name), personal2=paidByName(p2.name);
@@ -9812,8 +9883,7 @@ function PartnersView({ ctx }){
   const fair1=totalPersonal*sharePct(p1);
   const rawBal1=personal1-fair1; // >0 => p1 overpaid (owed back)
   // Net out reimbursements already recorded (a settlement: fromName paid toName an amount).
-  const settlements=[...(db.partnerSettlements||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const settledNet=(name)=> settlements.reduce((s,r)=>s+((r.toName===name?1:0)-(r.fromName===name?1:0))*(Number(r.amount)||0),0);
+  const settlements=(db.partnerSettlements||[]).filter(r=>settlementMonth(r)===period).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   // Settled items are already excluded from paidByName/rawBal1, so the open-item imbalance
   // IS the outstanding balance — do NOT subtract settledNet again (that double-counts).
   const outstanding1 = rawBal1;
@@ -9824,20 +9894,21 @@ function PartnersView({ ctx }){
   const settleUp=()=>{ if(settleAmt<1) return;
     if(partners.length!==2){ window.alert('Settlement currently supports exactly 2 partners. Edit partners to 2, or settle manually.'); return; }
     const items=[];
-    (db.expenses||[]).forEach(e=>{ if(!e.settled && partners.some(p=>p.name===e.paidBy)){ ctx.updateRecord('expenses',e.id,{settled:true,settledAt:todayISO()}); items.push({coll:'expenses',id:e.id}); }});
-    (db.fixedCosts||[]).forEach(f=>{ if(!f.settled && (f.status||'Active')==='Active' && partners.some(p=>p.name===f.paidBy)){ ctx.updateRecord('fixedCosts',f.id,{settled:true,settledAt:todayISO()}); items.push({coll:'fixedCosts',id:f.id}); }});
-    ctx.createRecord('partnerSettlements',{ fromName:payer.name, toName:receiver.name, amount:Math.round(settleAmt), date:todayISO(), note:'Settled all', items }); showProPopup('savedNotes','Marked as settled'); };
-  const unsettleRow=(r)=>{ (r.items||[]).forEach(it=>{ try{ ctx.updateRecord(it.coll,it.id,{settled:false}); }catch(e){} }); ctx.deleteRecord('partnerSettlements', r.id); };
+    expenseRows.forEach(e=>{ if(!e.settled&&partners.some(p=>p.name===e.paidBy)){ ctx.updateRecord('expenses',e.id,{settled:true,settledAt:todayISO()}); items.push({coll:'expenses',id:e.id,period}); }});
+    fixedRows.forEach(f=>{ if(fixedCostDueInMonth(f,period)&&!fixedCostSettledInMonth(f,period)&&partners.some(p=>p.name===f.paidBy)){ const settledMonths=Array.from(new Set([...(f.settledMonths||[]),period])).sort(); ctx.updateRecord('fixedCosts',f.id,{settledMonths,lastSettledAt:nowISO()}); items.push({coll:'fixedCosts',id:f.id,period}); }});
+    ctx.createRecord('partnerSettlements',{ fromName:payer.name, toName:receiver.name, amount:Math.round(settleAmt), date:todayISO(), period, note:'Settled all', items }); showProPopup('savedNotes','Marked as settled'); };
+  const unsettleRow=(r)=>{ const rowPeriod=settlementMonth(r)||period; (r.items||[]).forEach(it=>{ try{ if(it.coll==='fixedCosts'){ const f=(db.fixedCosts||[]).find(x=>x.id===it.id)||{}; const target=it.period||rowPeriod; const patch={settledMonths:(f.settledMonths||[]).filter(x=>x!==target)}; if(f.settled&&monthOf(f.settledAt)===target)Object.assign(patch,{settled:false,settledAt:''}); ctx.updateRecord(it.coll,it.id,patch); }else ctx.updateRecord(it.coll,it.id,{settled:false,settledAt:''}); }catch(e){} }); ctx.deleteRecord('partnerSettlements', r.id); };
   // Raw out-of-pocket imbalance (before recorded settlements) — for the breakdown line.
   const rawOwer = rawBal1>0 ? p2 : p1; const rawOwed = rawBal1>0 ? p1 : p2; const rawAmt = Math.abs(rawBal1);
   const undoLast = ()=>{ const last=settlements[0]; if(last && confirm('Undo last settlement? The related items go back to their original payer.')) unsettleRow(last); };
   // Detailed list of every shared item paid by a partner (for transparency).
   const sharedItems = [
-    ...(db.expenses||[]).filter(e=>partners.some(p=>p.name===e.paidBy)).map(e=>({id:e.id,name:e.title||'Expense',kind:'Expense',paidBy:e.paidBy,amount:Number(e.amount)||0,date:e.date,settled:!!e.settled,note:e.settledNote})),
-    ...(db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active'&&partners.some(p=>p.name===f.paidBy)).map(f=>({id:f.id,name:f.name||'Fixed cost',kind:'Fixed',paidBy:f.paidBy,amount:cycleToMonthly(f.amount,f.cycle),date:f.startDate,settled:!!f.settled,note:f.settledNote}))
+    ...expenseRows.filter(e=>partners.some(p=>p.name===e.paidBy)).map(e=>({id:e.id,name:e.title||'Expense',kind:'Expense',paidBy:e.paidBy,amount:Number(e.amount)||0,date:e.date,settled:!!e.settled,note:e.settledNote})),
+    ...fixedRows.filter(f=>fixedCostDueInMonth(f,period)&&partners.some(p=>p.name===f.paidBy)).map(f=>({id:f.id,name:f.name||'Fixed cost',kind:'Fixed',paidBy:f.paidBy,amount:Number(f.amount)||0,date:period+'-01',settled:fixedCostSettledInMonth(f,period),note:fixedCostSettlementNote(f,period)}))
   ].sort((a,b)=>(a.settled?1:0)-(b.settled?1:0));
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Partners & Settlement" desc="Split income and expenses between partners, and settle who paid what.">
+      <${MonthPeriodControl} period=${period} onChange=${setPeriod}/>
       ${canManage&&html`<button class="mini" onClick=${()=>{ setDraft(partners.map(p=>({...p}))); setEdit(e=>!e); }}>${edit?'Close':'Edit partners'}</button>`}
     <//>
     ${edit&&html`<${Panel} title="Partners & shares">
@@ -9915,39 +9986,46 @@ function PartnersView({ ctx }){
 
 function ProfitabilityView({ ctx, asDashboard }){
   const { db } = ctx;
-  const invTotalAll = (db.invoices||[]).reduce((s,i)=>s+ctx.invTotal(i),0);
-  const paid = (db.payments||[]).reduce((s,p)=>s+(+p.amount||0),0);
-  const outstanding = (db.invoices||[]).filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
-  const expOneoff = (db.expenses||[]).reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const [period,setPeriod]=useState(thisMonth());
+  const invoices=(db.invoices||[]).filter(i=>recordInMonth(i,period,['issueDate','dueDate','createdAt']));
+  const payments=(db.payments||[]).filter(p=>recordInMonth(p,period,['date','paidAt','createdAt']));
+  const oneoffRows=(db.expenses||[]).filter(e=>recordInMonth(e,period,['date','createdAt']));
+  const fixedRows=(db.fixedCosts||[]).filter(f=>fixedCostAppliesToMonth(f,period));
+  const invTotalAll = invoices.reduce((s,i)=>s+ctx.invTotal(i),0);
+  const paid = payments.reduce((s,p)=>s+(+p.amount||0),0);
+  const outstanding = invoices.filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
+  const expOneoff = oneoffRows.reduce((s,e)=>s+(Number(e.amount)||0),0);
   // Include active monthly fixed costs so this matches the Partners screen's net.
-  const expFixed = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active').reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const expFixed = fixedRows.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   // AUTO payroll: every pay run marked Paid counts as a cost by itself.
   // MANUAL salaries (paid outside the Payroll screen) are normal Expenses and
   // flow through expOneoff — record a salary in ONE of the two places, never both.
-  const paidPayroll = (db.employeePayments||[]).filter(p=>p.paymentStatus==='Paid').reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
+  const paidPayroll = (db.employeePayments||[]).filter(p=>p.month===period&&p.paymentStatus==='Paid').reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
   // Display-only: salaries living as Fixed Cost lines (category 'Salaries') so the
   // KPI reflects the agency's actual salary model. Already inside expFixed —
   // NOT added to expenses again.
-  const fixedSalaries = (db.fixedCosts||[]).filter(f=>(f.status||'Active')==='Active'&&/salar/i.test(f.category||'')).reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const fixedSalaries = fixedRows.filter(f=>/salar/i.test(f.category||'')).reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
   const expenses = expOneoff + expFixed + paidPayroll;
   const net = paid-expenses;
-  const overdueCount = (db.invoices||[]).filter(i=>isOverdue(i.dueDate)&&ctx.invTotal(i)-ctx.invPaid(i)>0).length;
+  const overdueCount = invoices.filter(i=>isOverdue(i.dueDate)&&ctx.invTotal(i)-ctx.invPaid(i)>0).length;
   const perClient = (db.clients||[]).map(c=>{
-    const rev=(db.payments||[]).filter(p=>p.clientId===c.id).reduce((s,p)=>s+(+p.amount||0),0);
-    const exp=(db.expenses||[]).filter(e=>e.clientId===c.id).reduce((s,e)=>s+(+e.amount||0),0);
+    const rev=payments.filter(p=>p.clientId===c.id).reduce((s,p)=>s+(+p.amount||0),0);
+    const exp=oneoffRows.filter(e=>e.clientId===c.id).reduce((s,e)=>s+(+e.amount||0),0);
     // Partner withdrawals attributed to THIS client's money ("taken from") —
     // they don't change profit (they're distributions) but they do reduce how
     // much of this client's cash is still in the company.
-    const draws=(db.partnerTx||[]).filter(x=>!x._del&&x.txType!=='Deposit'&&x.sourceClientId===c.id).reduce((s,x)=>s+(+x.amount||0),0);
-    const owed=(db.invoices||[]).filter(i=>i.clientId===c.id&&!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+Math.max(0,ctx.invTotal(i)-ctx.invPaid(i)),0);
+    const draws=(db.partnerTx||[]).filter(x=>!x._del&&recordInMonth(x,period,['date','createdAt'])&&x.txType!=='Deposit'&&x.sourceClientId===c.id).reduce((s,x)=>s+(+x.amount||0),0);
+    const owed=invoices.filter(i=>i.clientId===c.id&&!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+Math.max(0,ctx.invTotal(i)-ctx.invPaid(i)),0);
     return {id:c.id,name:c.brandName||c.name,rev,exp,draws,owed,profit:rev-exp,cashLeft:rev-exp-draws};
   }).filter(r=>r.rev||r.exp||r.draws).sort((a,b)=>b.profit-a.profit);
   const perProject = (db.projects||[]).map(p=>{
-    const exp=(db.expenses||[]).filter(e=>e.projectId===p.id).reduce((s,e)=>s+(+e.amount||0),0);
+    const exp=oneoffRows.filter(e=>e.projectId===p.id).reduce((s,e)=>s+(+e.amount||0),0);
     return {id:p.id,name:p.name,budget:+p.budget||0,exp,margin:(+p.budget||0)-exp};
   }).filter(r=>r.budget||r.exp);
   return html`<div class="view">
-    <${Head} eyebrow="Finance" title=${asDashboard?'Finance Dashboard':'Profitability'} desc="Revenue, expenses, and margins."/>
+    <${Head} eyebrow="Finance" title=${asDashboard?'Finance Dashboard':'Profitability'} desc="Revenue, expenses, and margins.">
+      <${MonthPeriodControl} period=${period} onChange=${setPeriod}/>
+    <//>
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
       <${KPI} label="Total invoiced" value=${money(invTotalAll)} icon="finance"/>
       <${KPI} label="Total paid" value=${money(paid)} icon="wallet"/>
