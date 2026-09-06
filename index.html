@@ -2281,6 +2281,7 @@ const fmtDate = (d) => { if(!d) return '—'; const x = _isBareDate(d) ? new Dat
 const fmtDateTime = (d) => { if(!d) return '—'; const x=new Date(d); return isNaN(x)? d : x.toLocaleString(undefined,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); };
 const monthOf = (d) => (d||'').slice(0,7);
 const thisMonth = () => todayISO().slice(0,7);
+// MAGNET_FINANCE_MONTH_CORE_START
 const isMonthISO = (value) => /^\d{4}-\d{2}$/.test(String(value||''));
 function shiftMonthISO(ref,delta){
   const value=isMonthISO(ref)?String(ref):thisMonth();
@@ -2294,6 +2295,36 @@ function monthLabelISO(period,lang){
 }
 const dateForPeriod = (period) => period===thisMonth()?todayISO():(isMonthISO(period)?period+'-01':todayISO());
 const recordInMonth = (record,period,fields=['date','updatedAt','createdAt']) => fields.some(field=>monthOf(record&&record[field])===period);
+const firstRecordValue = (record,fields) => { for(const field of fields){ const value=record&&record[field]; if(value)return String(value); } return ''; };
+const accountingDate = (record,fields) => firstRecordValue(record,fields).slice(0,10);
+const accountingMonth = (record,fields) => monthOf(firstRecordValue(record,fields));
+const invoiceAccountingMonth = (invoice) => accountingMonth(invoice,['issueDate','createdAt','dueDate','updatedAt']);
+const paymentAccountingDate = (payment) => accountingDate(payment,['date','paidAt','createdAt','updatedAt']);
+const paymentAccountingMonth = (payment) => monthOf(paymentAccountingDate(payment));
+const expenseAccountingMonth = (expense) => accountingMonth(expense,['date','paidAt','createdAt','updatedAt']);
+const partnerTxAccountingMonth = (row) => accountingMonth(row,['date','createdAt','updatedAt']);
+function periodEndISO(period){
+  if(!isMonthISO(period))return '';
+  const parts=period.split('-').map(Number), end=new Date(parts[0],parts[1],0);
+  return end.getFullYear()+'-'+String(end.getMonth()+1).padStart(2,'0')+'-'+String(end.getDate()).padStart(2,'0');
+}
+function invoicePaidThroughPeriod(db,invoice,period){
+  const end=periodEndISO(period); if(!invoice||!end)return 0;
+  return ((db&&db.payments)||[]).filter(payment=>!payment._del&&payment.invoiceId===invoice.id&&paymentAccountingDate(payment)&&paymentAccountingDate(payment)<=end)
+    .reduce((sum,payment)=>sum+(Number(payment.amount)||0),0);
+}
+function invoiceOutstandingAtPeriodEnd(db,invoice,period,totalFn){
+  const total=typeof totalFn==='function'?(Number(totalFn(invoice))||0):(Number(invoice&&invoice.amount)||0);
+  return Math.max(0,total-invoicePaidThroughPeriod(db,invoice,period));
+}
+function invoiceIssuedByPeriod(invoice,period){ const month=invoiceAccountingMonth(invoice); return !!(month&&isMonthISO(period)&&month<=period); }
+function invoiceOverdueAtPeriodEnd(db,invoice,period,totalFn){
+  const due=String(invoice&&invoice.dueDate||'').slice(0,10), end=periodEndISO(period);
+  return !!(due&&end&&due<end&&invoiceOutstandingAtPeriodEnd(db,invoice,period,totalFn)>0.009);
+}
+function fixedCostSnapshot(item,period){ return item&&item.monthlySnapshots&&item.monthlySnapshots[period]||null; }
+function fixedCostStateForMonth(item,period){ const snapshot=fixedCostSnapshot(item,period); return snapshot?Object.assign({},item,snapshot):item; }
+function fixedCostValueForMonth(item,period,key){ const state=fixedCostStateForMonth(item,period)||{}; return state[key]; }
 function fixedCostSettledInMonth(item,period){
   if((item&&item.settledMonths||[]).includes(period))return true;
   return !!(item&&item.settled&&monthOf(item.settledAt)===period);
@@ -2303,26 +2334,65 @@ function fixedCostSettlementNote(item,period){
   return fixedCostSettledInMonth(item,period)?(item.settledNote||''):'';
 }
 function fixedCostAppliesToMonth(item,period){
-  if(!item||item._del||!isMonthISO(period))return false;
-  const start=monthOf(item.startDate||item.createdAt), end=monthOf(item.endDate);
+  if(!item||!isMonthISO(period))return false;
+  const snapshot=fixedCostSnapshot(item,period);
+  if(snapshot)return snapshot.applies!==false;
+  if(item._del)return false;
+  const start=monthOf(item.startDate||item.createdAt), explicitEnd=monthOf(item.endDate);
+  const pausedEnd=(item.status==='Paused')?monthOf(item.pausedAt||item.updatedAt):'';
+  const end=explicitEnd||pausedEnd;
   if(start&&start>period)return false;
   if(end&&end<period)return false;
   if(item.cycle==='One-time')return start===period;
-  if((item.status||'Active')==='Active')return true;
+  if((item.status||'Active')==='Active'||(end&&period<=end))return true;
   return (item.paidMonths||[]).includes(period)||fixedCostSettledInMonth(item,period);
 }
 function fixedCostDueInMonth(item,period){
   if(!fixedCostAppliesToMonth(item,period))return false;
-  const start=monthOf(item.startDate||item.createdAt)||period;
+  const state=fixedCostStateForMonth(item,period)||item;
+  const start=monthOf(state.startDate||item.startDate||item.createdAt)||period;
   const a=start.split('-').map(Number), b=period.split('-').map(Number);
   const elapsed=(b[0]-a[0])*12+(b[1]-a[1]);
   if(elapsed<0)return false;
-  if(item.cycle==='Yearly')return elapsed%12===0;
-  if(item.cycle==='Quarterly')return elapsed%3===0;
-  if(item.cycle==='One-time')return elapsed===0;
+  if(state.cycle==='Yearly')return elapsed%12===0;
+  if(state.cycle==='Quarterly')return elapsed%3===0;
+  if(state.cycle==='One-time')return elapsed===0;
   return true;
 }
+function fixedCostMonthlyAmount(item,period){
+  const state=fixedCostStateForMonth(item,period)||{}; const amount=Number(state.amount)||0;
+  return state.cycle==='Yearly'?amount/12:state.cycle==='Quarterly'?amount/3:amount;
+}
+function fixedCostDueAmount(item,period){ const state=fixedCostStateForMonth(item,period)||{}; return fixedCostDueInMonth(item,period)?(Number(state.amount)||0):0; }
+function fixedCostSnapshotFields(item,period,version,capturedAt){
+  const state=fixedCostStateForMonth(item,period)||{};
+  return {applies:true,name:state.name||'',kind:state.kind||'Fixed expense',category:state.category||'',amount:Number(state.amount)||0,cycle:state.cycle||'Monthly',paidBy:state.paidBy||'Company',status:'Active',startDate:state.startDate||item.startDate||'',endDate:state.endDate||'',definitionVersion:version,capturedAt};
+}
+function prepareFixedCostUpdate(previous,next,currentPeriod,stamp){
+  const current=isMonthISO(currentPeriod)?currentPeriod:thisMonth(), capturedAt=stamp||nowISO();
+  const version=(Number(previous&&previous.definitionVersion)||0)+1;
+  const snapshots=Object.assign({},previous&&previous.monthlySnapshots||{});
+  let cursor=monthOf(previous&&(previous.startDate||previous.createdAt))||current, guard=0;
+  while(cursor<current&&guard++<240){
+    if(!snapshots[cursor])snapshots[cursor]=Object.assign(fixedCostSnapshotFields(previous,cursor,version-1,capturedAt),{applies:fixedCostAppliesToMonth(previous,cursor)});
+    cursor=shiftMonthISO(cursor,1);
+  }
+  const output=Object.assign({},next,{monthlySnapshots:snapshots,definitionVersion:version});
+  const wasPaused=previous&&previous.status==='Paused', becomesPaused=output.status==='Paused';
+  if(!wasPaused&&becomesPaused){
+    output.pausedAt=capturedAt;
+    if(!output.endDate){ output.endDate=periodEndISO(current); output.pauseAutoEnd=true; }
+  }else if(wasPaused&&becomesPaused&&!output.pausedAt){
+    output.pausedAt=previous.updatedAt||capturedAt;
+  }else if(wasPaused&&!becomesPaused){
+    output.pausedAt='';
+    if(previous.pauseAutoEnd&&output.endDate===previous.endDate)output.endDate='';
+    output.pauseAutoEnd=false;
+  }
+  return output;
+}
 const settlementMonth = (row) => (row&&row.period)||monthOf(row&&(row.date||row.createdAt));
+// MAGNET_FINANCE_MONTH_CORE_END
 // Auto invoice number: INV-YYYYMM-<n>, n = highest existing suffix this month + 1 (no hand-typed collisions).
 const nextInvoiceNumber = (db) => { const ym=todayISO().slice(0,7).replace('-',''); let mx=0; ((db&&db.invoices)||[]).forEach(iv=>{ const m=String(iv.invoiceNumber||'').match(/^INV-(\d{6})-(\d+)$/); if(m&&m[1]===ym) mx=Math.max(mx,+m[2]); }); return 'INV-'+ym+'-'+String(mx+1).padStart(3,'0'); };
 // Logical duplicate detection at CREATE time. Returns an existing record that
@@ -7415,6 +7485,10 @@ function App(){
     if(['leads','clients','projects','campaigns','proposals','contentCalendar','packages'].includes(coll)) patch.brand='Magnet';
     let out=null, _prev=null;
     setDb(d=>({...d,[coll]:(d[coll]||[]).map(x=>{ if(x.id===id){ _prev=x;
+      // Fixed-cost definitions are reused every month. Before any edit, payment
+      // mark or settlement, freeze every completed period once so later changes
+      // cannot rewrite prior-month reports.
+      if(coll==='fixedCosts')Object.assign(patch,prepareFixedCostUpdate(x,Object.assign({},x,patch)));
       // Always stamp business milestones, no matter whether the change came
       // from a form, board drag, quick action or automation.
       if(coll==='tasks'&&patch.status==='Done'&&x.status!=='Done'&&!patch.completedAt){ patch.completedAt=nowISO(); patch.completedBy=user.id; }
@@ -9478,10 +9552,10 @@ function monthArchiveRows(db,period){
     reference:item.invoiceNumber||item.paymentNumber||item.taskCode||item.contractNumber||'',notes:item.notes||item.description||''
   },values||{}));
   taskRowsForMonth(db,period).forEach(item=>add('Task',item,{date:item.completedAt||item.dueDate||item.updatedAt||item.createdAt||'',employee:employee(item.assignedTo),reference:item.taskCode||'',amount:item.actualHours||item.estimatedHours||''}));
-  (db.invoices||[]).filter(item=>!item._del&&[item.issueDate,item.dueDate,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Invoice',item));
-  (db.payments||[]).filter(item=>!item._del&&[item.date,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Payment',item));
-  (db.expenses||[]).filter(item=>!item._del&&[item.date,item.paidAt,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Expense',item));
-  (db.fixedCosts||[]).filter(item=>fixedCostAppliesToMonth(item,period)).forEach(item=>add('Fixed cost',item,{date:period+'-01',amount:cycleToMonthly(item.amount,item.cycle),status:fixedCostDueInMonth(item,period)?((item.paidMonths||[]).includes(period)?'Paid':'Due'):'Accrued — not due',notes:item.notes||''}));
+  (db.invoices||[]).filter(item=>!item._del&&invoiceAccountingMonth(item)===period).forEach(item=>add('Invoice',item));
+  (db.payments||[]).filter(item=>!item._del&&paymentAccountingMonth(item)===period).forEach(item=>add('Payment',item));
+  (db.expenses||[]).filter(item=>!item._del&&expenseAccountingMonth(item)===period).forEach(item=>add('Expense',item));
+  (db.fixedCosts||[]).filter(item=>fixedCostAppliesToMonth(item,period)).forEach(item=>{ const state=fixedCostStateForMonth(item,period)||item; add('Fixed cost',state,{id:item.id,date:period+'-01',amount:fixedCostMonthlyAmount(item,period),status:fixedCostDueInMonth(item,period)?((item.paidMonths||[]).includes(period)?'Paid':'Due'):'Accrued — not due',notes:state.notes||item.notes||''}); });
   (db.partnerTx||[]).filter(item=>!item._del&&[item.date,item.createdAt].some(inMonth)).forEach(item=>add('Partner transaction',item,{title:(item.partnerName||'Partner')+' · '+(item.txType||'Transaction'),amount:item.amount||0}));
   (db.partnerSettlements||[]).filter(item=>!item._del&&settlementMonth(item)===period).forEach(item=>add('Partner settlement',item,{date:item.date||period+'-01',title:(item.fromName||'')+' → '+(item.toName||''),amount:item.amount||0}));
   (db.collections||[]).filter(item=>!item._del&&[item.dueDate,item.collectedDate,item.updatedAt,item.createdAt].some(inMonth)).forEach(item=>add('Collection',item));
@@ -9633,10 +9707,11 @@ function ReviewDrawer({ ctx, coll, rec, fields, canApprove, onClose }){
 }
 function SettleForm({ ctx, item, coll, period, onClose }){
   const partners=getPartners(ctx.appSettings);
-  const payer=item.paidBy;
-  const other=(partners.find(p=>p.name!==payer && p.name!=='Company')||partners.find(p=>p.name!==payer)||{}).name||'';
   const accountingPeriod=isMonthISO(period)?period:(coll==='fixedCosts'?thisMonth():(monthOf(item.date)||thisMonth()));
-  const base = Number(item.amount)||0;
+  const periodItem=coll==='fixedCosts'?(fixedCostStateForMonth(item,accountingPeriod)||item):item;
+  const payer=periodItem.paidBy;
+  const other=(partners.find(p=>p.name!==payer && p.name!=='Company')||partners.find(p=>p.name!==payer)||{}).name||'';
+  const base = Number(periodItem.amount)||0;
   const payerShare=(partners.find(p=>p.name===payer)||{}).share; const payerPct=(payerShare==null?50:Number(payerShare))/100;
   const [amount,setAmount]=useState(Math.round(base*(1-payerPct))); // the other partner's share
   const [note,setNote]=useState('');
@@ -9670,7 +9745,7 @@ function ExpensesView({ ctx, ce }){
   const partners=getPartners(ctx.appSettings);
   const [rev,setRev]=useState(null);
   const canApprove = aliasRole(role)==='Admin' || aliasRole(role)==='Accountant';
-  const rows=(db.expenses||[]).filter(e=>recordInMonth(e,period,['date','createdAt'])).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const rows=(db.expenses||[]).filter(e=>expenseAccountingMonth(e)===period).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const pending=rows.filter(e=>(e.status||'Pending')==='Pending');
   const total=rows.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const fields=[{k:'title',label:ar?'البند':'Title'},{k:'category',label:ar?'التصنيف':'Category'},{k:'amount',label:ar?'المبلغ':'Amount',money:true},{k:'date',label:ar?'التاريخ':'Date'},{k:'paidBy',label:ar?'دفعها':'Paid by'},{k:'vendor',label:ar?'الجهة':'Vendor'},{k:'status',label:ar?'الحالة':'Status'},{k:'notes',label:ar?'ملاحظات':'Notes'}];
@@ -9802,10 +9877,10 @@ function FixedCostsView({ ctx, ce }){
   const rows=(db.fixedCosts||[]);
   const active=rows.filter(f=>fixedCostAppliesToMonth(f,period));
   const dueRows=active.filter(f=>fixedCostDueInMonth(f,period));
-  const displayRows=period===thisMonth()?rows:active;
-  const monthlyTotal=active.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
-  const subs=active.filter(f=>f.kind==='Subscription');
-  const subsTotal=subs.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const displayRows=(period===thisMonth()?rows:active).map(item=>Object.assign({},item,fixedCostSnapshot(item,period)||{},{id:item.id}));
+  const monthlyTotal=active.reduce((s,f)=>s+fixedCostMonthlyAmount(f,period),0);
+  const subs=active.filter(f=>fixedCostValueForMonth(f,period,'kind')==='Subscription');
+  const subsTotal=subs.reduce((s,f)=>s+fixedCostMonthlyAmount(f,period),0);
   const canDel = ctx.canDelete ? ctx.canDelete('fixedCosts') : ce;
   // A recurring cost is one definition with a separate paid/settled state per
   // accounting month. Changing the month never duplicates or deletes the item.
@@ -9826,8 +9901,8 @@ function FixedCostsView({ ctx, ce }){
       <${KPI} label=${arf?'اتدفع في الشهر المختار':'Paid in selected month'} value=${paidCount+' / '+dueRows.length} icon="wallet" sub=${dueRows.length===0?(arf?'لا توجد دفعات مستحقة':'no payments due'):paidCount<dueRows.length?(arf?('فاضل '+(dueRows.length-paidCount)):((dueRows.length-paidCount)+' still due')):(arf?'كله اتدفع ✓':'all paid ✓')}/>
     </div>
     <${DataTable} db=${db} rows=${displayRows.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''))} canEditFlag=${ce}
-      onEdit=${ce?(r=>ctx.openModal('fixedCosts',r)):null}
-      onDelete=${canDel?(r=>ctx.delRec('fixedCosts',r.id,r.name)):null}
+      onEdit=${ce&&period===thisMonth()?(r=>ctx.openModal('fixedCosts',(db.fixedCosts||[]).find(x=>x.id===r.id)||r)):null}
+      onDelete=${canDel&&period===thisMonth()?(r=>ctx.delRec('fixedCosts',r.id,r.name)):null}
       extraActions=${r=>html`<${React.Fragment}>
         ${ce&&fixedCostDueInMonth(r,period)&&(isPaidNow(r)
           ? html`<button class="mini" style=${{color:'var(--pos)',borderColor:'var(--pos)'}} title=${arf?'اضغط للتراجع':'Click to undo'} onClick=${()=>unmarkPaid(r)}>${arf?'اتدفع ✓':'Paid ✓'}</button>`
@@ -9849,13 +9924,13 @@ function PartnersView({ ctx }){
   const [edit,setEdit] = useState(false);
   const [period,setPeriod] = useState(thisMonth());
   const [draft,setDraft] = useState(()=>partners.map(p=>({...p})));
-  const paymentRows=(db.payments||[]).filter(p=>recordInMonth(p,period,['date','paidAt','createdAt']));
-  const expenseRows=(db.expenses||[]).filter(e=>recordInMonth(e,period,['date','createdAt']));
+  const paymentRows=(db.payments||[]).filter(p=>paymentAccountingMonth(p)===period);
+  const expenseRows=(db.expenses||[]).filter(e=>expenseAccountingMonth(e)===period);
   const fixedRows=(db.fixedCosts||[]).filter(f=>fixedCostAppliesToMonth(f,period));
   const payrollRows=(db.employeePayments||[]).filter(p=>p.month===period&&p.paymentStatus==='Paid');
   const income = paymentRows.reduce((s,p)=>s+(Number(p.amount)||0),0);
   const expOneoff = expenseRows.reduce((s,e)=>s+(Number(e.amount)||0),0);
-  const expFixed = fixedRows.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const expFixed = fixedRows.reduce((s,f)=>s+fixedCostMonthlyAmount(f,period),0);
   // Paid payroll counts as a cost here too, so this net (the profit that gets
   // split between partners) always matches the Profitability screen's net.
   const paidPayroll = payrollRows.reduce((s,p)=>s+(Number(p.netAmount)||empPaymentNet(p)),0);
@@ -9864,11 +9939,11 @@ function PartnersView({ ctx }){
   const sharePct = (p)=> (p.share==null ? 50 : Number(p.share))/100;
   // What each partner PERSONALLY paid out of pocket (paidBy === their name).
   const paidByName = (name)=> expenseRows.filter(e=>e.paidBy===name&&!e.settled).reduce((s,e)=>s+(Number(e.amount)||0),0)
-    + fixedRows.filter(f=>fixedCostDueInMonth(f,period)&&f.paidBy===name&&!fixedCostSettledInMonth(f,period)).reduce((s,f)=>s+(Number(f.amount)||0),0);
+    + fixedRows.filter(f=>fixedCostDueInMonth(f,period)&&fixedCostValueForMonth(f,period,'paidBy')===name&&!fixedCostSettledInMonth(f,period)).reduce((s,f)=>s+fixedCostDueAmount(f,period),0);
   // Partner ledger: withdrawals (draws) and deposits. Draws are profit
   // distributions, NOT expenses — net profit above is untouched. Balance shown
   // per partner = profit share + deposits − withdrawals.
-  const ptx = (db.partnerTx||[]).filter(t=>!t._del&&recordInMonth(t,period,['date','createdAt']));
+  const ptx = (db.partnerTx||[]).filter(t=>!t._del&&partnerTxAccountingMonth(t)===period);
   const drawsOf    = (name)=> ptx.filter(t=>t.partnerName===name && t.txType!=='Deposit').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const depositsOf = (name)=> ptx.filter(t=>t.partnerName===name && t.txType==='Deposit').reduce((s,t)=>s+(Number(t.amount)||0),0);
   const totalDraws = partners.reduce((s,p)=>s+drawsOf(p.name),0);
@@ -9895,7 +9970,7 @@ function PartnersView({ ctx }){
     if(partners.length!==2){ window.alert('Settlement currently supports exactly 2 partners. Edit partners to 2, or settle manually.'); return; }
     const items=[];
     expenseRows.forEach(e=>{ if(!e.settled&&partners.some(p=>p.name===e.paidBy)){ ctx.updateRecord('expenses',e.id,{settled:true,settledAt:todayISO()}); items.push({coll:'expenses',id:e.id,period}); }});
-    fixedRows.forEach(f=>{ if(fixedCostDueInMonth(f,period)&&!fixedCostSettledInMonth(f,period)&&partners.some(p=>p.name===f.paidBy)){ const settledMonths=Array.from(new Set([...(f.settledMonths||[]),period])).sort(); ctx.updateRecord('fixedCosts',f.id,{settledMonths,lastSettledAt:nowISO()}); items.push({coll:'fixedCosts',id:f.id,period}); }});
+    fixedRows.forEach(f=>{ if(fixedCostDueInMonth(f,period)&&!fixedCostSettledInMonth(f,period)&&partners.some(p=>p.name===fixedCostValueForMonth(f,period,'paidBy'))){ const settledMonths=Array.from(new Set([...(f.settledMonths||[]),period])).sort(); ctx.updateRecord('fixedCosts',f.id,{settledMonths,lastSettledAt:nowISO()}); items.push({coll:'fixedCosts',id:f.id,period}); }});
     ctx.createRecord('partnerSettlements',{ fromName:payer.name, toName:receiver.name, amount:Math.round(settleAmt), date:todayISO(), period, note:'Settled all', items }); showProPopup('savedNotes','Marked as settled'); };
   const unsettleRow=(r)=>{ const rowPeriod=settlementMonth(r)||period; (r.items||[]).forEach(it=>{ try{ if(it.coll==='fixedCosts'){ const f=(db.fixedCosts||[]).find(x=>x.id===it.id)||{}; const target=it.period||rowPeriod; const patch={settledMonths:(f.settledMonths||[]).filter(x=>x!==target)}; if(f.settled&&monthOf(f.settledAt)===target)Object.assign(patch,{settled:false,settledAt:''}); ctx.updateRecord(it.coll,it.id,patch); }else ctx.updateRecord(it.coll,it.id,{settled:false,settledAt:''}); }catch(e){} }); ctx.deleteRecord('partnerSettlements', r.id); };
   // Raw out-of-pocket imbalance (before recorded settlements) — for the breakdown line.
@@ -9904,7 +9979,7 @@ function PartnersView({ ctx }){
   // Detailed list of every shared item paid by a partner (for transparency).
   const sharedItems = [
     ...expenseRows.filter(e=>partners.some(p=>p.name===e.paidBy)).map(e=>({id:e.id,name:e.title||'Expense',kind:'Expense',paidBy:e.paidBy,amount:Number(e.amount)||0,date:e.date,settled:!!e.settled,note:e.settledNote})),
-    ...fixedRows.filter(f=>fixedCostDueInMonth(f,period)&&partners.some(p=>p.name===f.paidBy)).map(f=>({id:f.id,name:f.name||'Fixed cost',kind:'Fixed',paidBy:f.paidBy,amount:Number(f.amount)||0,date:period+'-01',settled:fixedCostSettledInMonth(f,period),note:fixedCostSettlementNote(f,period)}))
+    ...fixedRows.filter(f=>fixedCostDueInMonth(f,period)&&partners.some(p=>p.name===fixedCostValueForMonth(f,period,'paidBy'))).map(f=>({id:f.id,name:fixedCostValueForMonth(f,period,'name')||'Fixed cost',kind:'Fixed',paidBy:fixedCostValueForMonth(f,period,'paidBy'),amount:fixedCostDueAmount(f,period),date:period+'-01',settled:fixedCostSettledInMonth(f,period),note:fixedCostSettlementNote(f,period)}))
   ].sort((a,b)=>(a.settled?1:0)-(b.settled?1:0));
   return html`<div class="view">
     <${Head} eyebrow="Finance" title="Partners & Settlement" desc="Split income and expenses between partners, and settle who paid what.">
@@ -9987,16 +10062,18 @@ function PartnersView({ ctx }){
 function ProfitabilityView({ ctx, asDashboard }){
   const { db } = ctx;
   const [period,setPeriod]=useState(thisMonth());
-  const invoices=(db.invoices||[]).filter(i=>recordInMonth(i,period,['issueDate','dueDate','createdAt']));
-  const payments=(db.payments||[]).filter(p=>recordInMonth(p,period,['date','paidAt','createdAt']));
-  const oneoffRows=(db.expenses||[]).filter(e=>recordInMonth(e,period,['date','createdAt']));
+  const allInvoices=(db.invoices||[]).filter(i=>!i._del);
+  const invoices=allInvoices.filter(i=>invoiceAccountingMonth(i)===period);
+  const invoicesThroughPeriod=allInvoices.filter(i=>invoiceIssuedByPeriod(i,period));
+  const payments=(db.payments||[]).filter(p=>!p._del&&paymentAccountingMonth(p)===period);
+  const oneoffRows=(db.expenses||[]).filter(e=>!e._del&&expenseAccountingMonth(e)===period);
   const fixedRows=(db.fixedCosts||[]).filter(f=>fixedCostAppliesToMonth(f,period));
   const invTotalAll = invoices.reduce((s,i)=>s+ctx.invTotal(i),0);
   const paid = payments.reduce((s,p)=>s+(+p.amount||0),0);
-  const outstanding = invoices.filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+(ctx.invTotal(i)-ctx.invPaid(i)),0);
+  const outstanding = invoicesThroughPeriod.filter(i=>!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+invoiceOutstandingAtPeriodEnd(db,i,period,ctx.invTotal),0);
   const expOneoff = oneoffRows.reduce((s,e)=>s+(Number(e.amount)||0),0);
   // Include active monthly fixed costs so this matches the Partners screen's net.
-  const expFixed = fixedRows.reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const expFixed = fixedRows.reduce((s,f)=>s+fixedCostMonthlyAmount(f,period),0);
   // AUTO payroll: every pay run marked Paid counts as a cost by itself.
   // MANUAL salaries (paid outside the Payroll screen) are normal Expenses and
   // flow through expOneoff — record a salary in ONE of the two places, never both.
@@ -10004,18 +10081,18 @@ function ProfitabilityView({ ctx, asDashboard }){
   // Display-only: salaries living as Fixed Cost lines (category 'Salaries') so the
   // KPI reflects the agency's actual salary model. Already inside expFixed —
   // NOT added to expenses again.
-  const fixedSalaries = fixedRows.filter(f=>/salar/i.test(f.category||'')).reduce((s,f)=>s+cycleToMonthly(f.amount,f.cycle),0);
+  const fixedSalaries = fixedRows.filter(f=>/salar/i.test(fixedCostValueForMonth(f,period,'category')||'')).reduce((s,f)=>s+fixedCostMonthlyAmount(f,period),0);
   const expenses = expOneoff + expFixed + paidPayroll;
   const net = paid-expenses;
-  const overdueCount = invoices.filter(i=>isOverdue(i.dueDate)&&ctx.invTotal(i)-ctx.invPaid(i)>0).length;
+  const overdueCount = invoicesThroughPeriod.filter(i=>invoiceOverdueAtPeriodEnd(db,i,period,ctx.invTotal)).length;
   const perClient = (db.clients||[]).map(c=>{
     const rev=payments.filter(p=>p.clientId===c.id).reduce((s,p)=>s+(+p.amount||0),0);
     const exp=oneoffRows.filter(e=>e.clientId===c.id).reduce((s,e)=>s+(+e.amount||0),0);
     // Partner withdrawals attributed to THIS client's money ("taken from") —
     // they don't change profit (they're distributions) but they do reduce how
     // much of this client's cash is still in the company.
-    const draws=(db.partnerTx||[]).filter(x=>!x._del&&recordInMonth(x,period,['date','createdAt'])&&x.txType!=='Deposit'&&x.sourceClientId===c.id).reduce((s,x)=>s+(+x.amount||0),0);
-    const owed=invoices.filter(i=>i.clientId===c.id&&!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+Math.max(0,ctx.invTotal(i)-ctx.invPaid(i)),0);
+    const draws=(db.partnerTx||[]).filter(x=>!x._del&&partnerTxAccountingMonth(x)===period&&x.txType!=='Deposit'&&x.sourceClientId===c.id).reduce((s,x)=>s+(+x.amount||0),0);
+    const owed=invoicesThroughPeriod.filter(i=>i.clientId===c.id&&!/cancel|draft/i.test(i.status||'')).reduce((s,i)=>s+invoiceOutstandingAtPeriodEnd(db,i,period,ctx.invTotal),0);
     return {id:c.id,name:c.brandName||c.name,rev,exp,draws,owed,profit:rev-exp,cashLeft:rev-exp-draws};
   }).filter(r=>r.rev||r.exp||r.draws).sort((a,b)=>b.profit-a.profit);
   const perProject = (db.projects||[]).map(p=>{
