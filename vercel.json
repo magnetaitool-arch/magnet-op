@@ -74,5 +74,10 @@
         }
       ]
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "codex/magnet-os-v2-staging": false
+    }
+  }
 }
