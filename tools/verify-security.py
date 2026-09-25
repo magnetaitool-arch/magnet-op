@@ -89,9 +89,10 @@ for header in ("Content-Security-Policy", "X-Content-Type-Options", "Referrer-Po
     check(f"vercel.json sets {header}", header in vercel)
 check("CSP restricts object-src and base-uri",
       "object-src 'none'" in vercel and "base-uri 'self'" in vercel)
-if "'unsafe-inline'" in vercel:
-    warn("CSP still allows 'unsafe-inline' for scripts",
-         "required by the single-file Babel/htm architecture; revisit if the app is ever bundled")
+script_policy = re.search(r"script-src ([^;]+)", vercel)
+check("CSP blocks arbitrary inline scripts and event attributes",
+      bool(script_policy) and "'unsafe-inline'" not in script_policy.group(1)
+      and "'unsafe-eval'" not in script_policy.group(1) and "script-src-attr 'none'" in vercel)
 
 # ---------------------------------------------------------------- env docs
 env = read(".env.example") or ""

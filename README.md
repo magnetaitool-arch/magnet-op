@@ -1,87 +1,127 @@
 # Magnet OS
 
-Internal operating system for a marketing/creative agency — CRM, HR, finance,
-projects, tasks, public intake, training docs. Single-file React PWA (`index.html`,
-React + `htm`, **no build step**) with a Supabase backend and Vercel serverless
-functions. Premium dark UI with a lime accent.
+Magnet's internal agency operating system: CRM, clients, projects, tasks,
+recruitment, HR, finance, approvals, public intake, and training documents.
+The existing dark/lime React + HTM PWA is served directly from `index.html`;
+the build validates and packages an explicit release inventory. This is not the agency's public marketing site.
 
-- **Live:** https://magnet-op.vercel.app · first install creates its Owner through the secure setup screen (no default login)
-- **Deploy target:** Vercel · **Supabase project:** `jdylrthffifbhyrrhuqd`
+Production: [magnet-op.vercel.app](https://magnet-op.vercel.app).
+Consult [environment topology](docs/ENVIRONMENT_TOPOLOGY_2026-08-29.md)
+before using any Supabase project. Older handovers refer to a retired database.
 
-## First-time setup
+## Architecture and routes
+
+- `index.html`: bundled React/HTM runtime, styles, app shell, navigation,
+  bilingual screens, compatibility data access, and sync. Extract incrementally.
+- `modules/employee-requests-v3.js`: extracted employee request UI/domain helpers.
+- `api/` and `server/`: Vercel endpoints and shared intake, outbox, and health services.
+- `supabase/functions/`: account compatibility and canonical identity services.
+- `supabase/migrations/`: ordered database migrations; historical files under
+  `supabase/legacy-migrations/` are not a deployment recipe.
+- `serviceworker.js`: network-first HTML and cached static assets. APIs,
+  cross-origin requests, authorization headers, and media ranges bypass caching.
+- `tools/`: local regression checks, staging checks, backup and recovery tooling.
+
+The root serves sign-in/setup and authorized internal views. Existing public
+query routes include `?form=`, `?brief=`, `?verify=`, and `?contractReview=`.
+Record links use `?open=…&id=…`. Training/manual HTML pages and `magnetrun.html`
+are separate documents. Vercel rewrites extensionless non-API paths to the shell.
+
+## Local validation
+
+Use **Node 22+**. The root package has no third-party production runtime dependencies. Lint and strict
+JavaScript type checking cover the newly extracted foundation modules, not the legacy
+inline shell. PostgreSQL and developer tooling are development dependencies.
 
 ```bash
-cp .env.example .env          # fill in keys (see .env.example)
-# (optional) run the QA + config checks — needs Node 18+
-npm run smoke                 # offline syntax + dangerous-pattern scan
-npm run check:config          # live: Supabase, RLS, accounts fn, email
+npm run lint
+npm run typecheck
+npm run build
+npm test
+npm run test:database
+npm run verify:security
+npm run check:config
+npm run audit:saas
+npm run test:service-worker
 ```
 
-The app itself needs no install/build — it's static. `package.json` exists only for
-the backup/QA tooling.
+`pnpm run <script>` runs the same checks when pnpm is the available runner.
+The test suite is local. Configuration and SaaS audits require explicit
+Supabase environment settings; they must not fall back to another project.
+See [.env.example](.env.example). Keep secrets out of Git and browser code.
 
-For a brand-new production database, set `INITIAL_OWNER_SETUP_SECRET` on the
-Supabase `accounts` Edge Function before opening the app. Enter that one-time
-secret in the initial Owner setup screen. This prevents a public visitor from
-claiming the first Owner account.
+`npm run dev` starts an allowlisted loopback preview on port 48763. `npm run build`
+writes the validated release inventory and SHA-256 manifest to `.magnet-build/`; it
+does not deploy. Vercel explicitly skips installation/build to preserve the existing
+static delivery and built-in-only server endpoints; developer tooling is not required
+in production. The preview deliberately serves no production credentials or business APIs.
+Authenticated flows also require
+`/api/runtime-config` and the configured server services. A plain static preview
+without those services is not evidence of working authentication or setup.
+Offline shell caching likewise does not bypass runtime configuration or auth.
 
-## Environment variables
-See **[.env.example](.env.example)**. Secrets (never in the browser):
-`SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, and the intake `SUPABASE_KEY`.
-For email hardening, set `EMAIL_SHARED_SECRET` on trusted server-side callers and
-the email host; use `EMAIL_ALLOWED_ORIGINS` for any custom browser origins.
+## Recent implementation
 
-## Backup before deployment (always)
+The latest committed feature work adds employee requests/approvals and monthly
+finance cycles, including historical fixed costs and period-end balances.
+See [continuation audit](docs/CONTINUATION_AUDIT_2026-09-25.md) for the latest
+local validation and PWA reliability changes.
+
+## Release and recovery
+
+Read [AGENTS.md](AGENTS.md), [production readiness](docs/PRODUCTION_READINESS.md),
+and [environment topology](docs/ENVIRONMENT_TOPOLOGY_2026-08-29.md) first.
+The last documented release gate requires independent staging and verified
+email delivery. Confirm current live state before rollout.
+
 ```bash
-npm run backup:supabase       # -> backups/magnet-os-backup-<ts>.json (checksummed)
-npm run backup:validate backups/<file>.json
+npm run backup:supabase
+npm run backup:validate -- backups/<file>.json
 ```
-Full guide: **[BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md)**.
 
-## Migration steps (Supabase)
-Deploy the accounts Edge Function first, then apply migrations in order:
-```
-supabase functions deploy accounts --no-verify-jwt --project-ref jdylrthffifbhyrrhuqd
-# then, in Supabase SQL Editor:
-supabase/migrations/001_backup_and_audit.sql
-supabase/migrations/002_records_rls_hardening.sql
-supabase/migrations/003_accounts_security.sql
-supabase/migrations/004_activity_and_sync_metadata.sql
-```
-Details + verification: **[SUPABASE_SECURITY_GUIDE.md](SUPABASE_SECURITY_GUIDE.md)**.
+Migrations are append-only and must be tested on a restored, separate staging
+project with auth, role-matrix, and cross-tenant checks before production.
+Never run historical migration instructions from old handovers against production.
+Keep the prior deployment available; follow
+[disaster recovery](docs/DISASTER_RECOVERY.md) for rollback.
 
-## Rollback
-- DB: each migration has non-destructive ROLLBACK notes; `002` can restore the old
-  open policy. In-DB restore point: `records_backup_001`.
-- Data: `tools/restore-supabase-records.js` (dry-run default, never deletes).
-- Code: `git revert` the relevant commit (baseline tag `ef51ad7`).
+## Documentation
 
-## Documentation map
-| Doc | Purpose |
-|---|---|
-| [AUDIT_REPORT.md](AUDIT_REPORT.md) | Phase 0 — full architecture audit + risk ranking |
-| [BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md) | Backup/restore/validate tooling |
-| [SUPABASE_SECURITY_GUIDE.md](SUPABASE_SECURITY_GUIDE.md) | RLS model, migrations, verification |
-| [AUTH_SECURITY_REPORT.md](AUTH_SECURITY_REPORT.md) | Auth old/new flow + test checklist |
-| [SYNC_ENGINE_REPORT.md](SYNC_ENGINE_REPORT.md) | Sync lifecycle, conflict rules, offline |
-| [DEPLOYMENT_FIXED.md](DEPLOYMENT_FIXED.md) | Current Vercel deployment runbook |
-| [DATA_MODEL.md](DATA_MODEL.md) | Collections, sensitive fields, public-form safety |
-| [DATA_MIGRATION_PLAN.md](DATA_MIGRATION_PLAN.md) | Path to normalized tables (later) |
-| [REFACTOR_REPORT.md](REFACTOR_REPORT.md) | Monolith refactor strategy |
-| [QA_CHECKLIST.md](QA_CHECKLIST.md) | Manual + automated QA |
-| [FINAL_ENGINEERING_REPORT.md](FINAL_ENGINEERING_REPORT.md) | What changed, commands, checklist, risks |
-| DEPLOYMENT.md (legacy) | Old Netlify runbook — superseded by DEPLOYMENT_FIXED.md |
+- [Architecture](docs/ARCHITECTURE.md): target architecture and incremental migration.
+- [Auth](docs/AUTH_ARCHITECTURE.md), [database](docs/DATABASE.md), and
+  [employee requests](docs/EMPLOYEE_REQUESTS_V3.md): domain foundations.
+- [Admin operations](docs/ADMIN_OPERATIONS_GUIDE_AR.md): operational workflows.
+- [UX backlog](docs/UX_V2_BACKLOG.md): historical planning, not a current completion ledger.
+- [Backup and restore](BACKUP_AND_RESTORE.md): backup tooling.
 
-## Known limitations
-- Business collections (clients/finance/HR) are still readable with the public anon
-  key by design — only `_accounts` (password hashes) is locked down. Full per-collection
-  isolation requires **Stage B** (Supabase Auth); see the security guide + migration plan.
-- The UI still lives in one large `index.html` (a working, section-marked monolith).
-- Sync is non-destructive last-write-wins; a **durable pending-write queue + visible
-  conflict-review UI** is designed but not yet wired (see SYNC_ENGINE_REPORT.md).
+Older root-level audit/handover reports are historical evidence. Resolve conflicts
+using current source, timestamped migrations, environment topology, and fresh checks.
 
-## Recommended next refactor phase
-1. Apply migrations `001–004` + deploy the accounts function; verify with `check:config`.
-2. Add the durable sync queue (isolated module — SYNC_ENGINE_REPORT.md).
-3. Extract helpers → services from `index.html` (REFACTOR_REPORT.md).
-4. Begin Stage B (Supabase Auth) using DATA_MIGRATION_PLAN.md, on a branch.
+## Isolated database verification
+
+`npm run test:database` starts native PostgreSQL 17 on a dynamically selected loopback port with a
+random password and a temporary private directory. It never reads `DATABASE_URL`,
+production rows, or Supabase credentials. It restores the committed schema-only
+legacy fixture and applies the 32 canonical migrations in order, then tests
+profile provisioning, anonymous access, cross-tenant reads, denied writes, service
+access, membership suspension, capability revocation, and restart persistence.
+The temporary test cluster is removed after shutdown.
+
+With pnpm, the platform binary's symlink hydration must be allowed during install;
+`pnpm-workspace.yaml` permits only the reviewed Darwin ARM64 package script.
+Other platforms require reviewing and permitting their matching package.
+The local `auth` and `storage` fixtures model SQL claims and metadata only; this
+test does not replace Supabase Auth HTTP, Storage HTTP, or restored staging tests.
+
+## Legacy reconciliation
+
+Review `docs/LEGACY_COMPATIBILITY_MATRIX.md` and
+`docs/MIGRATION_RECONCILIATION_REPORT_2026-09-25.md` before migrating a domain.
+Run `pnpm run reconcile:data -- <M0-snapshot.json> backups/<new-report-directory>`
+for a read-only reconciliation report; optionally append a second snapshot to compare
+full row hashes. Findings never trigger repairs or authorize deletion.
+`pnpm run test:reconciliation` tests the checker and explicit-link conversion guard.
+
+### Static asset and CSP release checks
+
+After editing local modules/styles, run `pnpm run assets:update` to update their content-based URLs. After editing inline HTML scripts, run `pnpm run csp:update`. The production package build rejects stale asset versions or CSP hashes. These commands only modify local release references/configuration; they do not deploy.

@@ -36,7 +36,7 @@ check(/currentIdentityHasCapability\('hr\.sensitive\.read'\)/.test(app), 'sensit
 check(/const directory=await cloudLoadEmployeeDirectory\(cfg,null\)/.test(app), 'full load combines authorized records with directory rows');
 check(/cloudLoadEmployeeDirectory\(cfg,since\)/.test(app), 'delta load includes directory changes');
 check(/applyCloudDelta\(prev,d\.rows,d\.directory\)/.test(app), 'directory deltas reach the UI state');
-check(/\[authReady,authUser&&authUser\.id,authScopeKey\]/.test(app), 'role/capability changes trigger a fresh authorized load');
+check(/\[authReady,authContextReady,authUser&&authUser\.id,authScopeKey\]/.test(app), 'role/capability changes trigger a fresh authorized load');
 check(/complete authorized projection[\s\S]{0,240}setDb\(d\)/.test(app), 'authorized full load replaces stale role data');
 check(/setDb\(emptyDB\(\)\).*setAuthUser\(null\)/.test(app), 'logout and rejected sessions purge cached private rows');
 check(/Credentials were accepted, but the authorized workspace could not be loaded safely/.test(app), 'mandatory login fails closed when authorized data cannot load');

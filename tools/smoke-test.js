@@ -100,11 +100,11 @@ console.log('\n[5] dangerous-pattern scan');
 /\/\.netlify\/functions\/intake/.test(html) ? bad('index.html calls netlify intake (Vercel default) — use /api/intake') : ok('no hardcoded netlify intake call in index.html');
 const intakeCore = read('server/public-intake.js');
 const intakeMigration = read('supabase/migrations/20260825203000_transactional_public_intake.sql');
-const runtimeConfig = read('api/runtime-config.js');
+const runtimeConfig = read('server/runtime-config.js');
 const serviceWorker = read('serviceworker.js');
 !/jdylrthffifbhyrrhuqd/.test(runtimeConfig)
-  && /process\.env\.SUPABASE_URL \|\| ''/.test(runtimeConfig)
-  && /process\.env\.SUPABASE_ANON_KEY \|\| ''/.test(runtimeConfig)
+  && /env\.SUPABASE_URL \|\| ''/.test(runtimeConfig)
+  && /env\.SUPABASE_ANON_KEY \|\| ''/.test(runtimeConfig)
   ? ok('runtime config fails closed and has no retired Production database fallback')
   : bad('runtime config can fall back to a retired or unintended database');
 /rpc\/submit_public_intake/.test(intakeCore) && !/rest\/v1\/records/.test(intakeCore)
@@ -120,7 +120,7 @@ const serviceWorker = read('serviceworker.js');
 /url\.pathname === '\/api' \|\| url\.pathname\.startsWith\('\/api\/'\)/.test(serviceWorker)
   ? ok('service worker never caches same-origin API/runtime configuration')
   : bad('service worker can cache same-origin API/runtime configuration and pin devices to stale environments');
-/(?:if \(res && res\.ok\)|res\.ok)[\s\S]{0,140}c\.put\(req, res\.clone\(\)\)/.test(serviceWorker)
+/if \(res\.ok[\s\S]{0,350}remember\([^;]+res\.clone\(\)\)/.test(serviceWorker)
   ? ok('service worker caches only successful responses')
   : bad('service worker can persist failed responses in the app shell cache');
 /height:100dvh/.test(html) && /grid-template-columns:208px minmax\(0,1fr\)/.test(html)
@@ -153,12 +153,13 @@ const serviceWorker = read('serviceworker.js');
   && /is already in use/.test(html)
   ? ok('shared forms validate formats, dates, cross-client links, and duplicate business codes')
   : bad('shared form data-quality validation is incomplete');
-/function workflowStageReadiness\(/.test(html)
-  && /disabled=\$\{!readiness\.ready\}/.test(html)
-  && /A client becomes Active only after onboarding is completed in Workflow/.test(html)
-  && /if\(next===8\) updateRecord\('clients',wf\.clientId,\{status:'Active'\}\)/.test(html)
-  ? ok('client lifecycle is evidence-gated from offer through onboarding and activation')
-  : bad('client lifecycle can still skip commercial or onboarding evidence');
+/workflow_readiness_v2/.test(html)
+  && /advance_workflow_v2/.test(html)
+  && /start_workflow_v2/.test(html)
+  && /disabled=\$\{workflowBusy\|\|!readiness\.ready\}/.test(html)
+  && !/function workflowStageReadiness\(/.test(html)
+  ? ok('workflow UI uses database readiness and commands without cached stage authority')
+  : bad('workflow can still advance using cached stage authority');
 /legacy password hidden/.test(html) && !/placeholder="Password" value=\$\{na\.secret\}/.test(html)
   ? ok('client account handover no longer displays or accepts raw passwords')
   : bad('client account handover still exposes or collects raw passwords');
@@ -264,7 +265,7 @@ const packageConfig = JSON.parse(read('package.json'));
 /__moRealtimeClient\.realtime\.setAuth/.test(html) && /client\.realtime&&client\.realtime\.setAuth/.test(html)
   ? ok('Realtime authenticates with the user JWT and rotates refreshed tokens')
   : bad('Realtime may subscribe anonymously or keep an expired JWT');
-/needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /hasCloudAccounts/.test(html)
+/needsSetup:accounts\.length===0/.test(acct) && /cloudAccountStatus/.test(html) && /MagnetAuthEntry\.resolveAuthEntry/.test(html)
   ? ok('fresh browsers distinguish existing accounts from first-owner setup without exposing the roster')
   : bad('fresh browsers can show first-owner setup when accounts already exist');
 /required:false/.test(html) && /AUTH_V2\.required/.test(html) && /authenticated-session-required/.test(html)
@@ -292,9 +293,9 @@ const packageConfig = JSON.parse(read('package.json'));
   && /const BRANDS = \['Magnet'\]/.test(html) && !/setBrand\(/.test(html)
   ? ok('workspace branding is Magnet-only with no legacy brand selector')
   : bad('legacy TIA/Spark branding or multi-brand selector has returned');
-((html.match(/if\(!authReady \|\| !authUser \|\| !cfgComplete\(cfg\.current\)\) return;/g)||[]).length>=2)
-  && (/if\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)/.test(html)
-    || /if\(!\(authReady&&authUser&&cfgComplete\(cfg\.current\)\)\) return/.test(html))
+((html.match(/if\(!authReady \|\| !authContextReady \|\| !authUser \|\| !cfgComplete\(cfg\.current\)\) return;/g)||[]).length>=2)
+  && (/if\(authReady&&authContextReady&&authUser&&cfgComplete\(cfg\.current\)\)/.test(html)
+    || /if\(!\(authReady&&authContextReady&&authUser&&cfgComplete\(cfg\.current\)\)\) return/.test(html))
   ? ok('anonymous visitors cannot start full, delta, or realtime business-data sync')
   : bad('login page still downloads private business data or consumes database egress');
 

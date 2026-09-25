@@ -261,8 +261,15 @@ async function handleOutbox(request, env = process.env) {
 
   if (action === 'drain') {
     if (!trustedWorker) return reply(401, { error: 'worker_secret_required' });
+    let reminders={status:'DISABLED'};
+    if(env.CRM_FOLLOWUP_REMINDERS_ENABLED==='true'){
+      try{
+        const result=await rpc(config,'enqueue_due_crm_followups_v2',{p_limit:100});
+        reminders=result.response.ok&&Number.isInteger(result.payload)?{status:'READY',created:result.payload}:{status:'FAILED',error:'followup_reminders_unavailable'};
+      }catch{reminders={status:'FAILED',error:'followup_reminders_unavailable'};}
+    }
     const results = await processOutbox(config, env, { limit: Math.max(1, Math.min(Number(body.limit) || 10, 25)) });
-    return reply(200, { ok: true, processed: results.length, results: results.map((result) => ({ id: result.id, status: statusLabel(result.status), error: result.error || null })) });
+    return reply(reminders.status==='FAILED'?503:200, { ok: reminders.status!=='FAILED', reminders, processed: results.length, results: results.map((result) => ({ id: result.id, status: statusLabel(result.status), error: result.error || null })) });
   }
 
   if (!token) return reply(401, { error: 'authenticated_session_required' });

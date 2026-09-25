@@ -47,10 +47,13 @@ async function authenticatedUser(jwt: string) {
   if (!jwt) return null;
   const response = await fetch(AUTH_URL + '/user', {
     headers: { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${jwt}` },
+    signal: AbortSignal.timeout(10000),
   });
-  if (!response.ok) return null;
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) throw new Error('auth_unavailable');
   const user = await response.json().catch(() => null);
-  return user && validUuid(user.id) ? user : null;
+  if (!user || !validUuid(user.id)) throw new Error('auth_unavailable');
+  return user;
 }
 
 async function serviceRequest(path: string, init: RequestInit = {}) {
@@ -157,10 +160,9 @@ Deno.serve(async (request) => {
   if (action === 'health') return reply(request, { ok: true, service: 'identity', version: 1, auth: 'supabase', requestId });
 
   const jwt = accessToken(request);
-  const user = await authenticatedUser(jwt);
-  if (!user) return reply(request, { ok: false, error: 'unauthorized', requestId }, 401);
-
   try {
+    const user = await authenticatedUser(jwt);
+    if (!user) return reply(request, { ok: false, error: 'unauthorized', requestId }, 401);
     const context = await userContext(jwt);
     if (!context) return reply(request, { ok: false, error: 'profile_missing', requestId }, 403);
     if (context.status !== 'ACTIVE') return reply(request, { ok: false, error: 'identity_inactive', requestId }, 403);
@@ -212,6 +214,6 @@ Deno.serve(async (request) => {
     if (category === 'identity_membership_not_found' || category === 'identity_role_not_found') {
       return reply(request, { ok: false, error: 'membership_not_found', requestId }, 404);
     }
-    return reply(request, { ok: false, error: 'server_error', requestId }, 500);
+    return reply(request, { ok: false, error: 'identity_unavailable', requestId }, 503);
   }
 });

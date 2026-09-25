@@ -21,3 +21,6 @@ supabase-auth-migration.sql
 supabase-accounts-lockdown.sql
 SECURITY-UPGRADE.md
 .vercelignore
+
+/.magnet-build
+/docs

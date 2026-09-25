@@ -108,7 +108,8 @@ check(/organization_selection_required/.test(html), 'multi-organization ambiguit
 check(/authUserId:context\.userId/.test(html), 'the UI retains immutable Supabase user id');
 check(/role:canonicalRoleName\(membership\)/.test(html), 'the displayed role comes from live membership');
 check(/return; \/\/ a canonical session must never be overwritten by a legacy role snapshot/.test(html), 'legacy refresh cannot overwrite a canonical role');
-check(/\[401,403,409\]\.includes/.test(html), 'inactive or unresolved identity closes the local session');
+check(/canonical\.status===409&&canonical\.context/.test(html) && /setWorkspaceChoice\(\{context:canonical.context/.test(html), 'unresolved organization opens explicit workspace selection');
+check(/setAuthEntry\(canonical.status===403\?'access-unavailable'/.test(html), 'denied identity closes private UI while preserving recoverable credentials');
 
 console.log('\n[7] runnable verification');
 check(pkg.scripts && pkg.scripts['test:identity'], 'offline identity test is registered');

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true
+  },
+  "include": [
+    "api/runtime-config.js",
+    "server/runtime-config.js",
+    "modules/auth-entry.js",
+    "tools/static-files.js",
+    "tools/dev-server.js",
+    "tools/build-static.js",
+    "tools/foundation-test.js",
+    "modules/legacy-compatibility.js",
+    "modules/session-refresh.js",
+    "tools/asset-versions.js"
+  ]
+}
