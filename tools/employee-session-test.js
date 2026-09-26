@@ -56,3 +56,15 @@ test('login and logout attendance use the same canonical self-owned key', () => 
   assert.equal(keyFor({ id: 'legacy-account', authUserId: 'auth-unlinked' }).key, 'auth-unlinked');
   assert.equal(keyFor({ id: 'legacy-account' }, { employees: [] }).key, 'usr-legacy-account');
 });
+
+test('mandatory JWT cutover includes historical role aliases outside the optional cohort', () => {
+  const fn = source.match(/function authV2AppliesTo\(user\)\{[^\n]+/)[0];
+  const applies = (contract, user) => new Function('AUTH_V2', fn + ';return authV2AppliesTo;')(contract)(user);
+  for (const role of ['Designer', 'Project Manager', 'Accountant', 'Graphic Designer', 'HR']) {
+    assert.equal(applies({ required: true, enabled: true, roles: ['Owner'] }, { role }), true);
+  }
+  assert.equal(applies({ required: false, enabled: true, roles: ['Owner'] }, { role: 'Designer' }), false);
+  assert.equal(applies({ required: false, enabled: true, roles: ['Owner'] }, { role: 'Owner' }), true);
+  assert.equal(applies({ required: false, enabled: false, roles: [] }, { role: 'Owner' }), false);
+  assert.equal(applies({ required: true, enabled: true, roles: [] }, null), false);
+});

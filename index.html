@@ -4413,7 +4413,7 @@ function setSbSession(s){ try{ if(s) store.set(SB_SESSION_KEY, JSON.stringify(s)
 function sbAccessToken(){ try{ const s=getSbSession(); if(!s||!s.access_token) return ''; if(s.expires_at && (Number(s.expires_at)*1000) < (Date.now()+5000)) return ''; return s.access_token; }catch(e){ return ''; } }
 function applyAuthV2Contract(d){ if(d) AUTH_V2={enabled:!!d.enabled||!!d.required,required:!!d.required,roles:Array.isArray(d.roles)?d.roles:[]}; return AUTH_V2; }
 async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return AUTH_V2; const r=await fetch(_acctUrl(cfg),{method:'POST',headers:{apikey:cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'health'})}); if(r.ok){ const j=await r.json(); applyAuthV2Contract(j&&j.authV2); } return AUTH_V2; }catch(e){ return AUTH_V2; } }
-function authV2AppliesTo(user){ return !!(AUTH_V2.enabled && user && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(user.role)>=0)); }
+function authV2AppliesTo(user){ return !!(user && (AUTH_V2.required || (AUTH_V2.enabled && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(user.role)>=0)))); }
 try{ window.__authv2={ get:()=>AUTH_V2, session:getSbSession, token:sbAccessToken, reload:loadAuthV2Flag }; }catch(e){}
 /* ---- AUTH_V2 session management (Step 3): access+refresh tokens, auto-refresh,
    wake/expiry handling. All inert unless AUTH_V2.enabled. Distinguishes an AUTH
