@@ -28,3 +28,11 @@ Exact owner actions:
 2. Approve GitHub Actions as an additional secret store and provision the documented stable database connection, storage credential, encryption key and target organization/project settings; retain the recovery key independently. The first scheduled run and independent artifact restore must pass before ACTIVE is claimed.
 
 These actions enable the already-prepared independent GitHub artifact copy, schedule, retention and failure reporting together. No new paid infrastructure is needed or assumed.
+
+## Release evidence
+
+Application 9009e4d deployed to the existing primary alias, immutable target magnet-4pa5hobye-magnetaitool-archs-projects.vercel.app, deployment dpl_CKJK3eSGsFY1k8NtgMwgd5LJ8rFz. Targeted backup tests (4), regression tests (8), smoke assertions (144), scoped lint/typecheck, security checks, asset/service-worker tests and 44-file build passed. Arabic mobile Backup Health was visually inspected on independent staging with no horizontal overflow or JavaScript errors. Production public login loads with no browser JavaScript errors; authenticated affected-user sync remains blocked on session diagnostics. No RLS or business schema changed.
+
+A new manual encrypted recovery point was exported and remotely checksum-verified at `magnet-recovery/snapshots/2026-09-26T22-51-49.882Z-59b90262-39d4-431e-b1f4-cb98378c11f8`. It includes Phase 3 schema: 142 tables restored into isolated PostgreSQL, 2,683 original row values matched, three Storage object files reconstructed/hash-checked, Auth membership mappings intact. The isolated cluster was stopped. Verified RESTORED receipt recorded; schedule remains false. Earlier failed attempts using the expired CLI connection produced truthful failure receipts/alerts and were retained. Authenticated CLI renewal allowed the successful manual retry; no stable scheduler credential was inferred.
+
+Safari reload preserved the permission-blocked indicator, but the affected browser remained on workspace opening while independent production login worked. Do not clear that browser's pending work. Owner must provide the sanitized diagnostic from the affected session before a record-specific fix or Legacy Review linkage can be chosen safely.
