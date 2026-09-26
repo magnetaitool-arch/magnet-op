@@ -1,0 +1,57 @@
+name: Encrypted database backup
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 1 * * *'
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Require explicit backup configuration
+        env:
+          DATABASE_URL: ${{ secrets.MAGNET_BACKUP_DATABASE_URL }}
+          KEY: ${{ secrets.MAGNET_BACKUP_KEY_BASE64 }}
+          STORAGE_KEY: ${{ secrets.MAGNET_BACKUP_STORAGE_SERVICE_KEY }}
+          PROJECT: ${{ vars.MAGNET_BACKUP_PROJECT_REF }}
+        run: |
+          test -n "$DATABASE_URL" && test -n "$KEY" && test -n "$PROJECT" && test -n "$STORAGE_KEY" || { echo 'OWNER_ACTION_REQUIRED: configure dedicated backup connection, encryption key and target ref.'; exit 1; }
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+      - name: Stream encrypted archive
+        env:
+          MAGNET_BACKUP_DATABASE_URL: ${{ secrets.MAGNET_BACKUP_DATABASE_URL }}
+          MAGNET_BACKUP_KEY_BASE64: ${{ secrets.MAGNET_BACKUP_KEY_BASE64 }}
+          MAGNET_BACKUP_PROJECT_REF: ${{ vars.MAGNET_BACKUP_PROJECT_REF }}
+          MAGNET_BACKUP_OUTPUT: ${{ runner.temp }}/magnet.dump.aesgcm
+        run: node tools/encrypted-backup.mjs
+      - name: Stream encrypted storage objects
+        env:
+          MAGNET_BACKUP_DATABASE_URL: ${{ secrets.MAGNET_BACKUP_DATABASE_URL }}
+          MAGNET_BACKUP_KEY_BASE64: ${{ secrets.MAGNET_BACKUP_KEY_BASE64 }}
+          MAGNET_BACKUP_PROJECT_REF: ${{ vars.MAGNET_BACKUP_PROJECT_REF }}
+          MAGNET_BACKUP_STORAGE_SERVICE_KEY: ${{ secrets.MAGNET_BACKUP_STORAGE_SERVICE_KEY }}
+          MAGNET_BACKUP_STORAGE_OUTPUT: ${{ runner.temp }}/magnet-storage.jsonl.aesgcm
+        run: node tools/encrypted-storage-backup.mjs
+      - name: Store ciphertext off-device for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: magnet-encrypted-database-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/magnet.dump.aesgcm
+            ${{ runner.temp }}/magnet.dump.aesgcm.manifest.json
+            ${{ runner.temp }}/magnet-storage.jsonl.aesgcm
+            ${{ runner.temp }}/magnet-storage.jsonl.aesgcm.manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Visible backup failure
+        if: failure()
+        run: echo 'Backup failed. No successful recovery point is claimed. Repository Actions notifications must be enabled by the owner.' >> "$GITHUB_STEP_SUMMARY"

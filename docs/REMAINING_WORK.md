@@ -1,20 +1,10 @@
-# Remaining work after core production release
+# Remaining work — Phase 2, 2026-09-27
 
-## BLOCKED_EXTERNAL
-- Resend/provider credentials and verified sending domain: actual email, invite/recovery delivery must not be reported as working without a provider receipt.
-- Meta/Instagram/TikTok and other social integrations: application credentials, account connections and platform approval. Existing adapters/configuration remain; no fake publishing success.
+- **P0:** No known blocker in the verified core/Studio scope. See SHIP_STATUS.md for publication state.
+- **P1 / OWNER_ACTION_REQUIRED:** Resolve 173 preserved legacy case references (143 decisions when the two contact groups are grouped), including the existing broad creative/sales `work.manage` policy. Stable IDs, affected records and safe alternatives are in LEGACY_DATA_REVIEW.md. Studio independently enforces assignment; do not remove legacy grants or guess record ownership.
+- **P1 / OWNER_ACTION_REQUIRED:** Activate the encrypted off-device backup job, authorize its credential delivery under the existing secret-store policy, enable failure notifications, and complete its first off-device restore rehearsal. Exporters, daily schedule and 30-day retention are implemented/tested; the unattended service is not active. See OPERATIONAL_BACKUP.md.
+- **P1 / OWNER_ACTION_REQUIRED:** Historical employees confirm their own login using existing credentials. Representative previously uncovered roles were exercised with isolated accounts and production capability sets; no historical passwords were reset or impersonated.
+- **P2:** Remaining mixed-language labels outside the changed Studio surfaces, when those areas are next edited. No broad translation rewrite or repeated core audit is required.
+- **BLOCKED_EXTERNAL:** Resend/sending-domain configuration and actual invite/recovery delivery receipts; social-provider credentials/account connections/platform approvals. These remain outside Phase 2. No external delivery success is claimed.
 
-## POST_DEPLOY
-- Review preserved ambiguous business records before repairing them: shared contact identities, one legacy identity conflict, active children of soft-deleted parents, one missing finance projection and an uncatalogued storage object. Task relationship issue records retain unresolved work; execution stays blocked where a verified relationship is required.
-- Automate encrypted offsite backup retention and recovery rehearsal. A complete encrypted, restore-tested release backup exists locally; this is not a managed ongoing backup service.
-- Standalone `magnet-studio/` remains a separate untracked prototype, outside the main release artifact. Its persistent workspace integration is not completed or certified by this deployment. Do not overwrite or silently include it.
-- Finish remaining mixed Arabic/English labels and broader real-employee/role browser coverage. Current evidence covers synthetic isolated identities and server-enforced role/tenant tests; it does not certify every historic employee login.
-
-## Completed release blockers
-- Independent free staging, 48 canonical migrations and hosted workflow/storage/auth verification.
-- Complete production archive + storage bytes, successful restore, full row-value comparison and actual-data migration rehearsal.
-- Missing legacy migration registry prerequisite; all 20 pending production files applied and reconciled.
-- Account updates preserve existing tenant ownership; no forced legacy-organization reassignment.
-- Missing print icon fixed for reports, briefs and contract details, with a regression guard.
-
-Production data has not been reset or destructively cleaned. See SHIP_STATUS.md for current deployment and evidence.
+Completed: original Studio preserved in git, integrated into the existing authenticated workspace, server-side version/review/approval persistence, private file linkage, task context/notifications, AR/EN/mobile and failure-state verification. Three additive Studio migrations passed independent staging and rollback gates, then production reconciliation. All 54 canonical migration files are represented in the 64-entry production ledger; none pending. Prior core fixes and verification remain complete.

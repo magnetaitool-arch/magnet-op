@@ -1,3 +1,4 @@
+import { verifyStudio } from './studio-database-test.mjs';
 import { verifyEmployeeRequests } from './employee-requests-database-test.mjs';
 import { verifyTaskDependencies } from './task-dependencies-database-test.mjs';
 import { verifyTaskCreate } from './task-create-database-test.mjs';
@@ -385,6 +386,7 @@ try {
   );
   await verifyEmployeeRequests(client);
   await verifyWorkflowSegments({ client, orgA, orgB, user, role, asRole });
+  await verifyStudio({ client, orgA, orgB, user, role, asRole });
   await verifyTaskProjectRelationships({ client, orgA, orgB, user, asRole });
   await verifyTaskStatusAuthority({ client, orgA, orgB, user, role, asRole });
   await verifyApprovalIdentity({ client, orgA, user, role, asRole });

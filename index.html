@@ -1429,7 +1429,7 @@ body.theme-light .tbl thead th{background:#fff}
   .grid.g-3,.grid.g-4{grid-template-columns:1fr!important}
 }
 </style>
-<link rel="stylesheet" href="/styles/foundation.css?v=572c46cae15c5785">
+<link rel="stylesheet" href="/styles/foundation.css?v=c31554eb81d3be87">
 <div id="root"><div id="boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f6f7f9;color:#6f7b8a;font-family:system-ui">Loading Magnet OS…</div></div>
 <!-- ===== MAGNET CLOUD (shared live data + shared accounts) ===== -->
 <script src="/api/runtime-config"></script>
@@ -1439,6 +1439,7 @@ body.theme-light .tbl thead th{background:#fff}
 <script src="/modules/proposal-revisions.js?v=c53cd78498abc5aa"></script>
 <script src="/modules/task-dependencies.js?v=55f0cc4cf973b26c"></script>
 <script src="/modules/task-status.js?v=34a7996fbdd53dcc"></script>
+<script src="/modules/studio-workspace.js?v=2b136a5761d2368c"></script>
 <script src="/modules/project-briefs.js?v=f6d4dc1ba5da8907"></script>
 <script src="/modules/client-onboarding.js?v=2dedb7a6a385160c"></script>
 <script src="/modules/legacy-compatibility.js?v=bad46471340551a0"></script>
@@ -2128,7 +2129,7 @@ const I18N = {
 const FIELD_AR = {
   'Monthly Retainer':'تعاقد شهري','Social Media Management':'إدارة منصات التواصل','Branding':'الهوية التجارية','Website / Landing Page':'موقع / صفحة هبوط','Ads Management':'إدارة الإعلانات','Content Creation':'صناعة المحتوى','Production / Shooting':'الإنتاج / التصوير','AI Content Production':'إنتاج محتوى بالذكاء الاصطناعي','Marketing Consultation':'استشارات تسويقية','One-time Project':'مشروع لمرة واحدة','Brief Needed':'البريف مطلوب','Brief Received':'تم استلام البريف',
   // ---- nav module keys that were missing from I18N (menu showed English) ----
-  plans:'الخطط والأهداف', campaigns:'الحملات', briefs:'بريفات العملاء', collections:'التحصيلات', fixedCosts:'التكاليف الثابتة',
+  plans:'الخطط والأهداف', studio:'ماجنت ستوديو', campaigns:'الحملات', briefs:'بريفات العملاء', collections:'التحصيلات', fixedCosts:'التكاليف الثابتة',
   partners:'الشركاء والتسوية', candidates:'التوظيف', leaderboard:'لوحة المتصدرين', arcade:'الأركيد', users:'المستخدمون والصلاحيات',
   // ---- form field labels ----
   'Full name':'الاسم بالكامل','Brand name':'اسم البراند','Legal name':'الاسم القانوني','Display name':'الاسم الظاهر','Lead name':'اسم العميل المحتمل',
@@ -2465,7 +2466,7 @@ const nameById = (arr,id,f='name') => { const r=byId(arr,id); return r ? (r[f]||
 const ROLES = ['Admin','Sales','Project Manager','Designer','Video Editor','Accountant','Client','HR','Marketing Director','Art Director','Social Media'];
 
 // section keys used by the sidebar + permission checks
-const SECTIONS = ['dashboard','accounts','leads','clients','projects','tasks','deliverables',
+const SECTIONS = ['dashboard','accounts','leads','clients','projects','tasks','studio','deliverables',
   'contacts','salesActivities','proposals','quotations','contracts',
   'invoices','payments','expenses','profitability','fixedCosts','partners','collections','plans','campaigns','briefs',
   'employees','freelancers','departments','workload','availability','attendance','leaves','payroll','candidates',
@@ -2481,33 +2482,33 @@ const CREATIVE_SECTIONS = ['tasks','deliverables','files','comments'];
 // view matrix: which sections each role can open
 const VIEW = {
   Admin: SECTIONS,
-  Sales: ['dashboard','accounts','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
-  'Project Manager': ['dashboard','accounts','plans','clients','projects','tasks','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','workflow','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
-  Designer: ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
-  'Video Editor': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
+  Sales: ['dashboard','accounts','leads','campaigns','briefs','clients','projects','tasks','studio','deliverables','contacts','salesActivities','proposals','quotations','contracts','requests','agents','documents','clientAssets','chat','shareCenter','meetings','files','comments','activityLogs','notifications','reports','settings','teams'],
+  'Project Manager': ['dashboard','accounts','plans','clients','projects','tasks','studio','deliverables','contacts','contracts','invoices','collections','requests','approvalCenter','workflow','automations','agents','documents','clientAssets','chat','shareCenter','calendar','revisionsHub','meetings','files','comments','activityLogs','notifications','reports','workload','availability','employees','freelancers','departments','attendance','leaves','candidates','sops','settings','backupCenter','dataHealth','systemQA','teams'],
+  Designer: ['dashboard','tasks','studio','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
+  'Video Editor': ['dashboard','tasks','studio','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams'],
   Accountant: ['dashboard','clients','invoices','payments','expenses','profitability','fixedCosts','partners','collections','requests','approvalCenter','agents','documents','employees','chat','meetings','files','comments','activityLogs','notifications','reports','settings'],
   Client: ['dashboard','projects','deliverables','invoices','clientAssets','chat','calendar','files','comments','notifications','settings'],
   // HR — people only (no finance, projects or clients).
   HR: ['dashboard','employees','candidates','attendance','leaves','departments','workload','availability','freelancers','requests','approvalCenter','chat','comments','notifications','files','activityLogs','reports','teams','settings'],
   // Social Media — creative execution + content calendar + campaigns/briefs.
-  'Social Media': ['dashboard','tasks','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams','campaigns','briefs'],
+  'Social Media': ['dashboard','tasks','studio','deliverables','requests','clientAssets','chat','calendar','revisionsHub','files','comments','notifications','sops','employees','availability','leaves','settings','teams','campaigns','briefs'],
   // Marketing Director — marketing strategy + content + reports.
-  'Marketing Director': ['dashboard','accounts','plans','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','contracts','calendar','clientAssets','shareCenter','meetings','requests','approvalCenter','agents','automations','reports','documents','files','comments','activityLogs','notifications','teams','workload','settings'],
+  'Marketing Director': ['dashboard','accounts','plans','leads','campaigns','briefs','clients','projects','tasks','studio','deliverables','contacts','salesActivities','proposals','quotations','contracts','calendar','clientAssets','shareCenter','meetings','requests','approvalCenter','agents','automations','reports','documents','files','comments','activityLogs','notifications','teams','workload','settings'],
   // Art Director — leads the creative team.
-  'Art Director': ['dashboard','projects','tasks','deliverables','calendar','clientAssets','revisionsHub','requests','approvalCenter','files','comments','notifications','sops','employees','availability','leaves','teams','reports','settings'],
+  'Art Director': ['dashboard','projects','tasks','studio','deliverables','calendar','clientAssets','revisionsHub','requests','approvalCenter','files','comments','notifications','sops','employees','availability','leaves','teams','reports','settings'],
 };
 // edit matrix: which sections each role can create/edit
 const EDIT = {
   Admin: SECTIONS,
-  Sales: ['accounts','leads','campaigns','briefs','clients','projects','tasks','deliverables','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
-  'Project Manager': ['accounts','plans','clients','projects','tasks','deliverables','revisions','revisionsHub','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
+  Sales: ['accounts','leads','campaigns','briefs','clients','projects','tasks','studio','deliverables','contacts','salesActivities','proposals','quotations','comments','requests','clientAssets','chat'],
+  'Project Manager': ['accounts','plans','clients','projects','tasks','studio','deliverables','revisions','revisionsHub','files','comments','contracts','attendance','leaves','candidates','requests','clientAssets','chat','availability','meetings'],
   Designer: ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   'Video Editor': ['tasks','deliverables','files','comments','leaves','requests','chat','availability'],
   Accountant: ['invoices','payments','expenses','fixedCosts','partners','collections','comments','requests','chat'],
   Client: ['comments','chat'],
   HR: ['candidates','attendance','leaves','requests','comments','chat','availability','reports'],
   'Social Media': ['tasks','deliverables','files','comments','leaves','requests','chat','availability','calendar','campaigns','briefs'],
-  'Marketing Director': ['plans','leads','campaigns','briefs','projects','tasks','deliverables','salesActivities','proposals','calendar','clientAssets','comments','requests','chat'],
+  'Marketing Director': ['plans','leads','campaigns','briefs','projects','tasks','studio','deliverables','salesActivities','proposals','calendar','clientAssets','comments','requests','chat'],
   'Art Director': ['tasks','deliverables','files','comments','requests','chat','availability','clientAssets','calendar','leaves'],
 };
 
@@ -2685,7 +2686,7 @@ const MODULE_CATALOG = [
 ];
 const MODULE_ALWAYS_ON = ['dashboard','settings'];
 // A lean default for a content/delivery-focused agency team.
-const FOCUSED_DEFAULT = ['dashboard','accounts','plans','leads','campaigns','briefs','clients','projects','tasks','deliverables','calendar','clientAssets',
+const FOCUSED_DEFAULT = ['dashboard','accounts','plans','leads','campaigns','briefs','clients','projects','tasks','studio','deliverables','calendar','clientAssets',
   'teams','candidates','employees','availability','freelancers','departments','workload','attendance','leaves',
   'requests','approvalCenter',
   'invoices','payments','collections','expenses','fixedCosts','partners','profitability',
@@ -7431,6 +7432,7 @@ function App(){
   // cloud is checked first so a reviewed/edited draft is never overwritten.
   useEffect(()=>{
     if(!authReady||!authContextReady||!authUser) return;
+    if(cloudOn&&!currentIdentityHasCapability('reports.manage'))return;
     const canEmployeeAuto=(isAdminRole(role)||aliasRole(role)==='HR')&&appSettings.employeeReportsAuto!==false;
     const canClientAuto=isAdminRole(role)||role==='Account Manager';
     if((!canEmployeeAuto&&!canClientAuto)||!userCanEditSection(authUser,'reports',role)) return;
@@ -7918,7 +7920,7 @@ function App(){
 
   /* ---- nav (role-filtered) ---- */
   const NAVGROUPS = [
-    {group:'Main', items:[['dashboard','Dashboard','command'],['accounts','Accounts','people'],['plans','Plans & Goals','target'],['leads','CRM / Leads','target'],['clients','Clients','layers'],['projects','Projects','briefcase'],['tasks','Tasks','check'],['deliverables','Deliverables','docs']]},
+    {group:'Main', items:[['dashboard','Dashboard','command'],['accounts','Accounts','people'],['plans','Plans & Goals','target'],['leads','CRM / Leads','target'],['clients','Clients','layers'],['projects','Projects','briefcase'],['tasks','Tasks','check'],['deliverables','Deliverables','docs'],['studio','Magnet Studio','spark']]},
     {group:'Operations', items:[['workflow','Workflow','target'],['requests','Requests','shield'],['approvalCenter','Approval Center','check'],['clientAssets','Client Assets','grid'],['calendar','Content Calendar','calendar'],['revisionsHub','Revision Control','refresh'],['meetings','Meeting Notes','mail'],['chat','Chat','mail'],['shareCenter','Share Center','arrowUp']]},
     {group:'Intelligence', items:[['automations','Automations','bolt'],['agents','AI Agents','spark']]},
     {group:'Sales', items:[['campaigns','Campaigns','spark'],['briefs','Client Briefs','fileText'],['contacts','Contacts','people'],['salesActivities','Sales Activities','pulse'],['proposals','Proposals','fileText'],['quotations','Quotations','scale'],['contracts','Contracts','shield'],['documents','Document Center','fileText']]},
@@ -7936,15 +7938,15 @@ function App(){
     Admin:['dashboard','accounts','clients','projects','tasks','approvalCenter','invoices'],
     'Project Manager':['dashboard','projects','tasks','approvalCenter','clients','workload','deliverables'],
     Sales:['dashboard','accounts','leads','clients','campaigns','proposals','tasks'],
-    Designer:['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
-    'Video Editor':['dashboard','tasks','deliverables','calendar','clientAssets','requests'],
-    'Social Media':['dashboard','tasks','deliverables','calendar','campaigns','clientAssets'],
+    Designer:['dashboard','tasks','studio','deliverables','calendar','clientAssets','requests'],
+    'Video Editor':['dashboard','tasks','studio','deliverables','calendar','clientAssets','requests'],
+    'Social Media':['dashboard','tasks','studio','deliverables','calendar','campaigns','clientAssets'],
     'Marketing Director':['dashboard','campaigns','leads','clients','calendar','reports'],
-    'Art Director':['dashboard','projects','tasks','deliverables','calendar','approvalCenter'],
+    'Art Director':['dashboard','projects','tasks','studio','deliverables','calendar','approvalCenter'],
     Accountant:['dashboard','invoices','payments','collections','expenses','profitability'],
     HR:['dashboard','employees','candidates','attendance','leaves','requests'],
     Client:['dashboard','projects','deliverables','approvalCenter'],
-    _default:['dashboard','tasks','deliverables','clientAssets','calendar','requests'],
+    _default:['dashboard','tasks','studio','deliverables','clientAssets','calendar','requests'],
   };
   const go = (r,keepDeep)=>{ setRoute(r); if(!keepDeep){try{const url=new URL(location.href);url.searchParams.delete('open');url.searchParams.delete('id');history.replaceState({},'',url.pathname+(url.search?'?'+url.searchParams.toString():'')+url.hash);}catch(e){}} if(canvasRef.current) canvasRef.current.scrollTop=0; };
   const openEntity=(target,id)=>{ const routeMap={task:'tasks',tasks:'tasks',client:'clients',accounts:'clients',lead:'leads',project:'projects',contract:'contracts',invoice:'invoices',document:'documents',applicant:'candidates'}; const next=routeMap[target]||target||'dashboard'; const sameRoute=next===route; try{const url=new URL(location.href);url.searchParams.set('open',next);if(id)url.searchParams.set('id',id);else url.searchParams.delete('id');history.replaceState({},'',url.pathname+'?'+url.searchParams.toString()+url.hash);}catch(e){} go(next,true); if(sameRoute&&id)setTimeout(()=>window.dispatchEvent(new CustomEvent('magnet:open-entity',{detail:{route:next,id}})),0); };
@@ -8728,6 +8730,7 @@ function renderRoute(route, ctx, x){
 
     case 'clients': return html`<${ClientsView} ctx=${ctx} visible=${x.visible} ce=${ce('clients')}/>`;
     case 'projects': return html`<${ProjectsView} ctx=${ctx} visible=${x.visible} ce=${ce('projects')}/>`;
+    case 'studio': return html`<${StudioWorkspace} ctx=${ctx}/>`;
     case 'tasks': return html`<${TasksWorkspaceV2} ctx=${ctx} visible=${x.visible} ce=${ce('tasks')}/>`;
     case 'deliverables': return html`<${DeliverablesView} ctx=${ctx} visible=${x.visible} ce=${ce('deliverables')}/>`;
     case 'plans': return html`<${PlansView} ctx=${ctx} ce=${ce('plans')}/>`;
@@ -12515,6 +12518,8 @@ function ProfileModal({ authUser, lang, onClose, onChanged, onComplete, onLogout
 function ApprovalCenterView({ ctx }){
   const { db, role, user } = ctx;
   const [tab,setTab]=useState('Requests');
+  const [studioQueue,setStudioQueue]=useState(null);
+  useEffect(()=>{let current=true;if(canView('studio',role))ctx.rpc('list_studio_v2',{p_organization_id:ctx.organizationId}).then(out=>{if(current)setStudioQueue(out?.ok?out.documents.filter(d=>d.status==='INTERNAL_REVIEW').length:null);}).catch(()=>{if(current)setStudioQueue(null);});return()=>{current=false;};},[ctx.organizationId,role]);
   const [fb,setFb]=useState({});
   const [busy,setBusy]=useState(''); const [error,setError]=useState('');
   // gather pending items from across the system
@@ -12530,6 +12535,7 @@ function ApprovalCenterView({ ctx }){
   const decide=async(key,action)=>{if(busy)return;setBusy(key);setError('');const result=await action();setBusy('');if(!result||!result.ok)setError(result&&result.error||(getLang()==='ar'?'تعذر حفظ القرار.':'Decision could not be saved.'));};
   return html`<div class="view">
     <${Head} eyebrow="Operations" title="Approval Center" desc="One queue for everything awaiting a manager decision."/>
+    ${canView('studio',role)&&html`<div class="panel mb18"><button class="btn btn-pri" onClick=${()=>ctx.go('studio')}>${ctx.lang==='ar'?'مراجعات ماجنت ستوديو':'Magnet Studio reviews'}${studioQueue===null?'':(' · '+studioQueue)}</button><p class="muted">${ctx.lang==='ar'?'نسخ إبداعية مرتبطة بمهامها؛ الاعتماد محفوظ لكل نسخة.':'Creative versions linked to their tasks; approvals are recorded per version.'}</p></div>`}
     <div class="grid g-4 stagger" style=${{marginBottom:18}}>
       <${KPI} label="Total pending" value=${total} icon="check"/>
       <${KPI} label="Requests" value=${pendReq.length} icon="shield"/>
@@ -12618,6 +12624,7 @@ function AgentsView({ ctx, visible }){
 
 /* ---------------- Workflow (Easy Mode + full timeline) ---------------- */
 const TaskDependencies=window.MagnetTaskDependencies.createTaskDependencies(React,html);
+const StudioWorkspace=window.MagnetStudioWorkspace.createStudioWorkspace(React,html);
 const ProjectBriefs=window.MagnetProjectBriefs.createProjectBriefs(React,html);
 const ClientOnboarding=window.MagnetClientOnboarding.createClientOnboarding(React,html);
 function WorkflowView({ ctx }){

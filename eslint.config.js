@@ -2,6 +2,27 @@
 // New/extracted modules get real linting; the legacy inline app keeps its smoke gate.
 module.exports = [
   {
+    files: ['magnet-studio/integration.js'],
+    languageOptions: {
+      globals: {
+        docs: 'writable',
+        working: 'writable',
+        persistWorking: 'writable',
+        save: 'writable',
+        renderStudio: 'writable',
+        state: 'writable',
+        app: 'readonly',
+        $: 'readonly',
+        blank: 'readonly',
+        field: 'readonly',
+        esc: 'readonly',
+        topbar: 'readonly',
+        bind: 'readonly',
+        toast: 'readonly',
+      },
+    },
+  },
+  {
     files: [
       'api/runtime-config.js',
       'server/runtime-config.js',
@@ -11,6 +32,8 @@ module.exports = [
       'modules/proposal-revisions.js',
       'modules/client-onboarding.js',
       'modules/project-briefs.js',
+      'modules/studio-workspace.js',
+      'magnet-studio/integration.js',
       'modules/task-status.js',
       'modules/task-dependencies.js',
       'tools/task-status-test.js',
@@ -37,6 +60,12 @@ module.exports = [
       sourceType: 'commonjs',
       globals: {
         window: 'readonly',
+        location: 'readonly',
+        crypto: 'readonly',
+        document: 'readonly',
+        parent: 'readonly',
+        NodeFilter: 'readonly',
+        URLSearchParams: 'readonly',
         Buffer: 'readonly',
         AbortSignal: 'readonly',
         URL: 'readonly',

@@ -3,6 +3,13 @@
 // Explicit release/preview inventory. Never recursively publish this workspace.
 const STATIC_FILES = Object.freeze([
   'index.html',
+  'modules/studio-workspace.js',
+  'magnet-studio/index.html',
+  'magnet-studio/app.js',
+  'magnet-studio/integration.js',
+  'magnet-studio/app.css',
+  'magnet-studio/responsive.css',
+  'magnet-studio/magnet-logo.png',
   'serviceworker.js',
   'manifest.json',
   'magnet-logo.png',

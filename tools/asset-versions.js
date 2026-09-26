@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 /** @param {string} html @param {(file:string)=>Buffer} read */
 function versionedHtml(html, read) {
   return html.replace(
-    /((?:src|href)=")(\/(?:modules|styles)\/[^"?]+)(?:\?[^" ]*)?"/g,
+    /((?:src|href)=")(\/(?:modules|styles|magnet-studio)\/[^"?]+)(?:\?[^" ]*)?"/g,
     (_match, prefix, url) => {
       const file = url.slice(1);
       if (!STATIC_FILES.includes(file)) throw new Error('Unpackaged asset: ' + file);
@@ -17,13 +17,17 @@ function versionedHtml(html, read) {
   );
 }
 function verifyAssetVersions(write = false) {
-  const target = path.join(root, 'index.html'),
-    current = fs.readFileSync(target, 'utf8');
-  const expected = versionedHtml(current, (file) => fs.readFileSync(path.join(root, file)));
-  if (current !== expected) {
-    if (!write)
-      throw new Error('Asset content versions are stale. Run pnpm run assets:update before build.');
-    fs.writeFileSync(target, expected);
+  for (const htmlFile of ['index.html', 'magnet-studio/index.html']) {
+    const target = path.join(root, htmlFile),
+      current = fs.readFileSync(target, 'utf8');
+    const expected = versionedHtml(current, (file) => fs.readFileSync(path.join(root, file)));
+    if (current !== expected) {
+      if (!write)
+        throw new Error(
+          'Asset content versions are stale. Run pnpm run assets:update before build.',
+        );
+      fs.writeFileSync(target, expected);
+    }
   }
   return true;
 }

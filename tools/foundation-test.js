@@ -116,7 +116,9 @@ test('preview path allowlist blocks private files, encoded paths and APIs', () =
     '/%2e%2e/package.json',
     '/node_modules/x.js',
     '/api/intake',
-    '/magnet-studio/app.js',
+    '/magnet-studio/.env',
+    '/magnet-studio/design-qa.md',
+    '/magnet-studio/vercel.json',
   ])
     assert.equal(staticPath(file), null, file);
   assert.equal(staticPath('/workspace'), 'index.html');
@@ -167,6 +169,14 @@ test('production artifact has deterministic hashes and excludes secrets and unre
     assert.match(file.sha256, /^[a-f0-9]{64}$/);
     assert.ok(file.bytes > 0);
   }
-  for (const file of ['.env', '.git', 'backups', 'magnet-studio', 'tools', 'docs'])
+  for (const file of [
+    '.env',
+    '.git',
+    'backups',
+    'magnet-studio/vercel.json',
+    'magnet-studio/design-qa.md',
+    'tools',
+    'docs',
+  ])
     assert.ok(!fs.existsSync(path.join(__dirname, '../.magnet-build', file)));
 });

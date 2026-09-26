@@ -1,3 +1,5 @@
+> Historical standalone prototype review, retained as evidence of the original design. Integration verification is recorded in the main readiness/ship documents; the statements below do not certify the current release.
+
 # Magnet Studio — Design QA
 
 - Source visual truth: `/Users/mac/.codex/generated_images/01a05e5e-4476-7de3-9a72-e9e25c23b677/exec-5cb63e0f-8a5b-4596-80b3-5979becc3120.png`
