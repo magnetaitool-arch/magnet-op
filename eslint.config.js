@@ -33,6 +33,11 @@ module.exports = [
       'modules/client-onboarding.js',
       'modules/project-briefs.js',
       'modules/studio-workspace.js',
+      'modules/legacy-review.js',
+      'tools/legacy-review-source.js',
+      'tools/legacy-review-source-test.js',
+      'tools/*backup*.mjs',
+      'tools/import-legacy-review.mjs',
       'magnet-studio/integration.js',
       'modules/task-status.js',
       'modules/task-dependencies.js',
@@ -59,6 +64,8 @@ module.exports = [
       ecmaVersion: 2022,
       sourceType: 'commonjs',
       globals: {
+        Blob: 'readonly',
+        setTimeout: 'readonly',
         window: 'readonly',
         location: 'readonly',
         crypto: 'readonly',
@@ -91,6 +98,8 @@ module.exports = [
   },
   {
     files: [
+      'tools/*backup*.mjs',
+      'tools/import-legacy-review.mjs',
       'tools/database-test.mjs',
       'tools/workflow-database-test.mjs',
       'tools/conversion-database-test.mjs',

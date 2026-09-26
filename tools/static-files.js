@@ -4,6 +4,7 @@
 const STATIC_FILES = Object.freeze([
   'index.html',
   'modules/studio-workspace.js',
+  'modules/legacy-review.js',
   'magnet-studio/index.html',
   'magnet-studio/app.js',
   'magnet-studio/integration.js',

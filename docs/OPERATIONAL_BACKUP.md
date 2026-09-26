@@ -16,3 +16,5 @@ Current AGENTS.md limits required secrets to Vercel/Supabase stores. Enabling th
 No paid plan, production reset, key upload or scheduled success is assumed.
 
 Deployment authorization: the existing GitHub OAuth credential cannot publish Actions workflows (missing `workflow` scope). The complete workflow is preserved as `tools/encrypted-backup-workflow.yml`; an authorized repository owner must install it at `.github/workflows/encrypted-backup.yml` on the default branch after approving credential delivery. No automation is claimed active. Studio publication does not depend on this permission.
+
+Phase 3 adds `tools/operational-backup.mjs`, a private same-provider off-device recovery copy, strict decrypt/manifest verification, bounded 30-day artifact retention, persistent Backup Health receipts and in-app failure alerts. An actual encrypted off-device download/restore rehearsal passed (137 tables, three business object byte streams). This remains PARTIAL: neither an unattended schedule nor independent-provider protection is active. See DISASTER_RECOVERY.md for the exact runbook and exclusions.

@@ -27,7 +27,7 @@ const iv = randomBytes(12),
 const path = resolve(process.env.MAGNET_BACKUP_OUTPUT || 'production.dump.aesgcm');
 const sink = createWriteStream(path, { mode: 0o600 });
 sink.write(Buffer.concat([Buffer.from('MAGNET-BACKUP-V1\n'), iv]));
-const child = spawn('pg_dump', ['--format=custom', '--no-owner', '--no-acl', '--role=postgres'], {
+const child = spawn('pg_dump', ['--format=custom', '--no-owner', '--no-acl', '--role=postgres', '--schema=public', '--schema=auth', '--schema=storage', '--schema=supabase_migrations', '--lock-wait-timeout=20000'], {
   env: {
     ...process.env,
     PGHOST: db.hostname,
@@ -35,6 +35,7 @@ const child = spawn('pg_dump', ['--format=custom', '--no-owner', '--no-acl', '--
     PGUSER: decodeURIComponent(db.username),
     PGPASSWORD: decodeURIComponent(db.password),
     PGDATABASE: db.pathname.slice(1),
+    PGCONNECT_TIMEOUT: '20',
     PGSSLMODE: 'verify-full',
     PGSSLROOTCERT: process.env.MAGNET_BACKUP_SSLROOTCERT || 'system',
   },

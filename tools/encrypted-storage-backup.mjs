@@ -28,6 +28,7 @@ const env = {
   PGUSER: decodeURIComponent(url.username),
   PGPASSWORD: decodeURIComponent(url.password),
   PGDATABASE: url.pathname.slice(1),
+  PGCONNECT_TIMEOUT: '20',
   PGSSLMODE: 'verify-full',
   PGSSLROOTCERT: process.env.MAGNET_BACKUP_SSLROOTCERT || 'system',
 };
@@ -40,7 +41,7 @@ try {
         '-X',
         '-qAt',
         '-c',
-        "begin read only; set local role postgres; select coalesce(jsonb_agg(jsonb_build_object('id',id,'bucket',bucket_id,'name',name,'size',metadata->>'size') order by id),'[]') from storage.objects; commit;",
+        "begin read only; set local role postgres; select coalesce(jsonb_agg(jsonb_build_object('id',id,'bucket',bucket_id,'name',name,'size',metadata->>'size') order by id),'[]') from storage.objects where bucket_id <> 'magnet-recovery'; commit;",
       ],
       { env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
     ),

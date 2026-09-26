@@ -25,7 +25,7 @@ npm run backup:supabase
 npm run backup:validate -- backups/<file>.json
 ```
 
-The static application has no compile, lint, or type-check step yet. Do not report those as passing. A future modular TypeScript migration must add them before replacing the legacy shell.
+The static application now has an allowlisted production build plus scoped ESLint and TypeScript checks (`npm run build`, `npm run lint`, `npm run typecheck`). These checks do not make the entire legacy HTML monolith typed. Use `npm run test:database` for the fresh isolated PostgreSQL behavioral suite; never substitute a production database for it.
 
 ## Database migration workflow
 

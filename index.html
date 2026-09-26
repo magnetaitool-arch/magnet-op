@@ -1429,7 +1429,7 @@ body.theme-light .tbl thead th{background:#fff}
   .grid.g-3,.grid.g-4{grid-template-columns:1fr!important}
 }
 </style>
-<link rel="stylesheet" href="/styles/foundation.css?v=c31554eb81d3be87">
+<link rel="stylesheet" href="/styles/foundation.css?v=ab77d74abff120a9">
 <div id="root"><div id="boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f6f7f9;color:#6f7b8a;font-family:system-ui">Loading Magnet OS…</div></div>
 <!-- ===== MAGNET CLOUD (shared live data + shared accounts) ===== -->
 <script src="/api/runtime-config"></script>
@@ -1439,6 +1439,7 @@ body.theme-light .tbl thead th{background:#fff}
 <script src="/modules/proposal-revisions.js?v=c53cd78498abc5aa"></script>
 <script src="/modules/task-dependencies.js?v=55f0cc4cf973b26c"></script>
 <script src="/modules/task-status.js?v=34a7996fbdd53dcc"></script>
+<script src="/modules/legacy-review.js?v=f4064a2c0f87af3d"></script>
 <script src="/modules/studio-workspace.js?v=2b136a5761d2368c"></script>
 <script src="/modules/project-briefs.js?v=f6d4dc1ba5da8907"></script>
 <script src="/modules/client-onboarding.js?v=2dedb7a6a385160c"></script>
@@ -2129,7 +2130,7 @@ const I18N = {
 const FIELD_AR = {
   'Monthly Retainer':'تعاقد شهري','Social Media Management':'إدارة منصات التواصل','Branding':'الهوية التجارية','Website / Landing Page':'موقع / صفحة هبوط','Ads Management':'إدارة الإعلانات','Content Creation':'صناعة المحتوى','Production / Shooting':'الإنتاج / التصوير','AI Content Production':'إنتاج محتوى بالذكاء الاصطناعي','Marketing Consultation':'استشارات تسويقية','One-time Project':'مشروع لمرة واحدة','Brief Needed':'البريف مطلوب','Brief Received':'تم استلام البريف',
   // ---- nav module keys that were missing from I18N (menu showed English) ----
-  plans:'الخطط والأهداف', studio:'ماجنت ستوديو', campaigns:'الحملات', briefs:'بريفات العملاء', collections:'التحصيلات', fixedCosts:'التكاليف الثابتة',
+  legacyReview:'مراجعة البيانات القديمة', backupHealth:'النسخ الاحتياطي', plans:'الخطط والأهداف', studio:'ماجنت ستوديو', campaigns:'الحملات', briefs:'بريفات العملاء', collections:'التحصيلات', fixedCosts:'التكاليف الثابتة',
   partners:'الشركاء والتسوية', candidates:'التوظيف', leaderboard:'لوحة المتصدرين', arcade:'الأركيد', users:'المستخدمون والصلاحيات',
   // ---- form field labels ----
   'Full name':'الاسم بالكامل','Brand name':'اسم البراند','Legal name':'الاسم القانوني','Display name':'الاسم الظاهر','Lead name':'اسم العميل المحتمل',
@@ -2466,7 +2467,7 @@ const nameById = (arr,id,f='name') => { const r=byId(arr,id); return r ? (r[f]||
 const ROLES = ['Admin','Sales','Project Manager','Designer','Video Editor','Accountant','Client','HR','Marketing Director','Art Director','Social Media'];
 
 // section keys used by the sidebar + permission checks
-const SECTIONS = ['dashboard','accounts','leads','clients','projects','tasks','studio','deliverables',
+const SECTIONS = ['legacyReview','backupHealth','dashboard','accounts','leads','clients','projects','tasks','studio','deliverables',
   'contacts','salesActivities','proposals','quotations','contracts',
   'invoices','payments','expenses','profitability','fixedCosts','partners','collections','plans','campaigns','briefs',
   'employees','freelancers','departments','workload','availability','attendance','leaves','payroll','candidates',
@@ -8730,6 +8731,8 @@ function renderRoute(route, ctx, x){
 
     case 'clients': return html`<${ClientsView} ctx=${ctx} visible=${x.visible} ce=${ce('clients')}/>`;
     case 'projects': return html`<${ProjectsView} ctx=${ctx} visible=${x.visible} ce=${ce('projects')}/>`;
+    case 'legacyReview': return html`<${LegacyReview} ctx=${ctx}/>`;
+    case 'backupHealth': return html`<${BackupHealth} ctx=${ctx}/>`;
     case 'studio': return html`<${StudioWorkspace} ctx=${ctx}/>`;
     case 'tasks': return html`<${TasksWorkspaceV2} ctx=${ctx} visible=${x.visible} ce=${ce('tasks')}/>`;
     case 'deliverables': return html`<${DeliverablesView} ctx=${ctx} visible=${x.visible} ce=${ce('deliverables')}/>`;
@@ -10805,6 +10808,7 @@ function SettingsView({ ctx, x }){
       <${Tag} type=${settingsState==='saved'?'ok':(settingsState==='error'?'neg':(settingsState==='offline'?'warn':''))}>${settingsLabel}<//>
     <//>
 
+    ${['owner','admin'].includes(ctx.user?.canonicalRoleKey)&&ctx.user?.capabilities?.includes('organization.manage')&&html`<${Panel} title=${arr?'البيانات والصيانة':'Data & Maintenance'} className="mb18"><div class="flex gap8"><button class="btn" onClick=${()=>ctx.go('legacyReview')}>${arr?'مراجعة البيانات القديمة':'Legacy Data Review'}</button><button class="btn" onClick=${()=>ctx.go('backupHealth')}>${arr?'حالة النسخ الاحتياطي':'Backup Health'}</button><button class="btn" onClick=${()=>ctx.go('systemHealth')}>${arr?'صحة النظام':'System Health'}</button></div><//>`}
     <${Panel} title=${ctx.lang==='ar'?'العملة واللغة':'Currency & language'} className="mb18">
       <div class="flex gap8" style=${{flexWrap:'wrap'}}>
         <label class="fld" style=${{minWidth:200}}><span>${ctx.lang==='ar'?'العملة الافتراضية':'Default currency'}</span>
@@ -12190,6 +12194,7 @@ function SystemHealthView({ ctx }){
     <${Head} eyebrow="SYSTEM / OPERATIONS" title=${L('System Health','صحة النظام')} desc=${L('One secure view for database, login, storage, delivery and jobs.','شاشة آمنة واحدة لقاعدة البيانات والدخول والتخزين والإرسال والعمليات الخلفية.')}>
       <button class="btn btn-pri" disabled=${loading} onClick=${load}>${React.createElement(Icon.refresh)} ${loading?L('Checking…','جاري الفحص…'):L('Check now','افحص الآن')}</button>
     <//>
+    ${['owner','admin'].includes(ctx.user?.canonicalRoleKey)&&html`<button class="btn mb18" onClick=${()=>ctx.go('backupHealth')}>${L('Backups','النسخ الاحتياطي')}</button>`}
     ${loading&&!snapshot?html`<${Panel}><div class="flex center gap8"><span class="spin"></span><span>${L('Running a read-only health check…','جاري تنفيذ فحص قراءة فقط…')}</span></div><//>`:''}
     ${error&&error!=='not-allowed'?html`<${Panel}><${EmptyState} icon="alert" title=${error==='session-required'?L('Session needs renewal','الجلسة تحتاج تجديد'):L('Health service unavailable','خدمة الفحص غير متاحة')} text=${error==='session-required'?L('Sign in again, then retry. No data was changed.','سجّل دخول من جديد ثم جرّب. لم يتم تغيير أي بيانات.'):L('The app could not complete the safe database check. Retry once and review Supabase/Vercel if it continues.','التطبيق لم يقدر يكمل فحص قاعدة البيانات الآمن. جرّب مرة، ولو استمرت راجع Supabase وVercel.')}/><//>`:''}
     ${snapshot&&html`
@@ -12624,6 +12629,7 @@ function AgentsView({ ctx, visible }){
 
 /* ---------------- Workflow (Easy Mode + full timeline) ---------------- */
 const TaskDependencies=window.MagnetTaskDependencies.createTaskDependencies(React,html);
+const {LegacyReview,BackupHealth}=window.MagnetLegacyReview.createLegacyReview(React,html);
 const StudioWorkspace=window.MagnetStudioWorkspace.createStudioWorkspace(React,html);
 const ProjectBriefs=window.MagnetProjectBriefs.createProjectBriefs(React,html);
 const ClientOnboarding=window.MagnetClientOnboarding.createClientOnboarding(React,html);

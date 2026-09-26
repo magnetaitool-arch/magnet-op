@@ -1,108 +1,40 @@
-# Magnet OS disaster recovery
+# Disaster recovery — Phase 3
 
-## Current status
+## Recovery scope and location
 
-Local JSON exports and restore tools exist, but the 2026-08-16 audit could not create a fresh complete production backup because no service-role credential/project-admin access was available. Existing files in `backups/` are useful recovery evidence but may exclude server-only account data and have not been demonstrated through a current staging restore.
+Production uses Supabase PostgreSQL/Auth/Storage (`xqqgbvigfojfydzfguan`), Vercel `magnet-op`, and the existing GitHub repository. The checked provider inventory had zero available database backup entries and PITR disabled. Provider internals are not assumed to provide a usable recovery point.
 
-Until this runbook is exercised, recovery is **not production-proven**.
+`tools/operational-backup.mjs` streams native PostgreSQL 17 archives (public, auth, storage, supabase_migrations) and Storage bytes through AES-256-GCM. Ciphertext and manifests are uploaded to private Supabase bucket `magnet-recovery`, downloaded again, and SHA-256 compared. The recovery bucket is excluded from object-byte export to avoid recursive backups. Recovery files are off-device but in the same Supabase project: this does NOT protect against loss of the provider/project. The prepared GitHub artifact workflow supplies a separate-provider copy once authorized.
 
-## Objectives
+Database engine roles, provider-owned extensions/configuration, Vercel/Supabase secrets, DNS/provider accounts and the encryption key are not in the archive. Keep code in the existing remote and a separately controlled copy of the recovery key. Auth restore includes identity rows; provider configuration and external integrations need separate restoration.
 
-Initial internal target:
+## Frequency, retention and alerts
 
-- RPO: 24 hours maximum; reduce to 1 hour before commercial launch for critical business data.
-- RTO: 4 hours internal; reduce to 1 hour for commercial launch.
-- Retention: daily 35 days, monthly 12 months, plus pre-migration snapshots.
-- Backups encrypted at rest, access logged, and stored outside the primary project/account failure domain.
+Current execution is manual; automatic scheduling remains NOT CONFIGURED. Do not call backup ACTIVE. The supplied workflow is daily 01:20 UTC with 30-day private artifact retention. GitHub authorization lacks workflow publication scope; owner must install the template on the default branch and authorize secret delivery under AGENTS.md. No payment or new project is required by this implementation.
 
-Final targets require owner approval based on customer contracts and cost.
+The Supabase runner retains its recognized `snapshots/<timestamp>-<uuid>/` recovery artifacts for 30 days, pruning only its four exact artifact names after a new verified upload. Nothing in business buckets is eligible. Retention executes with the runner, not as an independently active schedule. The existing initial copies must be retained until the first automated recovery point is checked.
 
-## Backup layers
+`backup_evidence_v3` accepts runner receipts only through a service-role RPC. Failure emits an owner/admin in-app notification. Backup Health shows NOT CONFIGURED without receipts, FAILED after a failure, WARNING for manual/missing/stale schedule or restore evidence, and HEALTHY only with recent off-device, scheduled and restore evidence. There is no email dependency. Until a scheduler is authorized, no unattended failure-monitoring claim is made.
 
-1. Managed Postgres backup/PITR appropriate to plan.
-2. Scheduled logical schema + data export with checksums and row counts.
-3. Private Storage object inventory/export or provider replication.
-4. Hosting/environment configuration inventory without printing secret values.
-5. Git repository, applied migration list, Edge Function versions, and Vercel deployment reference.
-6. Pre-migration snapshot and verified rollback package for every high-risk release.
+## Operator run
 
-Never commit production dumps, account hashes, HR/finance data, or environment secrets to Git.
+An authorized recovery operator injects the documented `MAGNET_BACKUP_*` environment values from approved secret stores: explicit production ref, organization ID, stable database URL, server Storage key, 32-byte base64 encryption key, and trusted CA path if required. Never paste values into chat, git or logs. Use Node 24 and PostgreSQL 17 clients, then run `node tools/operational-backup.mjs`. A temporary CLI database password may support a manual rehearsal; it is not a recurring credential.
 
-## Required backup gate
+## Restore (never over production for a rehearsal)
 
-Before any restrictive or destructive migration:
+1. Retrieve the four ciphertext/manifest artifacts using authorized server access. Verify receipt hashes. Supply the offline recovery key through the environment.
+2. Run `node tools/decrypt-backup.mjs database.aesgcm database.manifest.json database.dump` and the equivalent Storage command. Output must be a new private file; authentication or manifest failure aborts. Check the archive with `pg_restore --list`.
+3. Create an isolated PostgreSQL 17 cluster bound only to loopback. Prepare required Supabase role names (`anon`, `authenticated`, `service_role`, `supabase_admin`, `supabase_auth_admin`, `supabase_storage_admin`, `authenticator`, `dashboard_user`, `supabase_read_only_user`, `supabase_replication_admin`) and `extensions` with pgcrypto/uuid-ossp. On this fresh disposable cluster only, remove its empty public schema before `pg_restore --no-owner --no-acl --exit-on-error`. Managed staging instead needs its provider-owned prerequisites and an explicitly reviewed restore plan; never blindly clean a shared database.
+4. Decode Storage JSONL object/chunk/end records into a private isolated directory. Verify the final complete marker, every object byte count/SHA-256, and matching Storage catalog IDs. Exclude `magnet-recovery` backup metadata from expectations of restored business-file bytes. To restore service, upload verified bytes to the matching private buckets with their reviewed access policies.
+5. Verify table/entity counts, native FK/constraint restoration, membership→Auth mappings, canonical links and representative source values. Verify application auth/RLS before exposing a restored environment. Record the exact archive receipt, target and results. A valid SQL exit alone is insufficient.
+6. For real disaster recovery, owner selects the target/cutover window and authorizes any overwrite. Configure secrets/redirect allow-lists and retain the previous deployment until login, tenant isolation and core workflows pass.
 
-```bash
-npm run backup:supabase
-npm run backup:validate -- backups/<new-file>.json
-```
+## Verified rehearsal
 
-Record:
+The Phase 3 recovery point was downloaded from provider-hosted ciphertext, decrypted with valid GCM tags/manifests, and restored into a fresh local PostgreSQL 17 cluster. All 137 archived application/Auth/Storage/ledger tables restored with strict error handling; three business object streams passed byte/hash checks and matched catalog IDs; membership→Auth orphan count was zero. The cluster was stopped afterward. Private receipts/counts live under ignored `backups/phase3-20260927/`; no credentials or archive contents are committed. Scheduled and independent-provider recovery still require owner activation.
 
-- Timestamp and operator.
-- Supabase project reference and migration head.
-- Schema checksum/version.
-- Per-table/per-collection row counts.
-- Export checksum and encrypted storage location.
-- Whether server-only collections and Storage objects are included.
-- Staging restore test result.
+## Incident ownership and response
 
-If any item is missing, stop the migration.
+Assign an incident commander, database/recovery operator, application rollback operator, security contact and communications owner outside the public repository. Retain timestamps, impact, recovery actions and reconciliation evidence without credentials or sensitive payloads. The earlier internal objectives (24-hour RPO / 4-hour RTO) remain planning targets, not achieved guarantees while scheduling is inactive; commercial targets and longer retention require an explicit cost/contract decision. Rehearse quarterly and before high-risk permission cutovers.
 
-## Restore drill
-
-1. Create an isolated staging Supabase project.
-2. Apply migrations from zero in order.
-3. Restore the logical backup using dry-run first, then apply.
-4. Validate checksums/counts and anomaly queries.
-5. Run login, profile/membership resolution, role matrix, cross-tenant denial, core CRUD, file access, email outbox, and Arabic/English browser smoke.
-6. Measure elapsed time against RTO and document gaps.
-7. Destroy the staging copy safely after approval or retain it under controlled access.
-
-Run quarterly and before the tenant/RLS production cutover.
-
-## Incident recovery paths
-
-### Bad application deployment
-
-- Stop rollout and promote the previous Vercel deployment.
-- Do not roll back the app alone when it depends on a newer restrictive schema; use the documented compatibility matrix.
-- Compare error/RLS/auth metrics and preserve logs.
-
-### Bad additive migration
-
-- Disable the feature flag/dual-write path.
-- Prefer a forward corrective migration.
-- Leave new tables/columns intact for investigation unless removal is explicitly approved.
-
-### Data corruption or accidental deletion
-
-- Freeze affected mutations and identify exact organization/entity/time window.
-- Preserve audit logs and current snapshot.
-- Restore to isolated staging first; extract only required rows when possible.
-- Reconcile versions and tenant ownership; obtain approval before production restore.
-- Notify affected customers according to policy/law.
-
-### Auth outage
-
-- Do not re-enable anonymous private-data access as a shortcut.
-- Verify Supabase status, project quota, Site URL/redirect config, secrets, Edge Function health, and provider email delivery.
-- Use audited admin recovery/reconciliation; never distribute a committed shared password.
-
-### Provider quota/egress restriction
-
-- Alert before 60/80/95% thresholds.
-- Reduce full-table sync and oversized assets; move static/media delivery to appropriate storage/CDN.
-- Keep an approved capacity/plan decision and an export path. A “free forever” dependency is not a continuity guarantee.
-
-## Ownership and communications
-
-Assign by name outside this public repository:
-
-- Incident commander.
-- Database/recovery operator.
-- Application rollback operator.
-- Security/privacy contact.
-- Customer/team communications owner.
-
-Every incident gets timestamps, impact, root cause, actions, data validation, and prevention follow-up. Do not include credentials or sensitive payloads in incident notes.
+For a bad deployment, retain/promote the preceding compatible Vercel deployment and compare auth/RLS errors. For an additive migration defect, withdraw the new UI and prefer a forward correction; retain tables/history. For corruption, freeze affected writes, preserve current evidence, restore into isolation, then obtain approval for a scoped production repair. For an Auth outage, never reopen anonymous private-data access: inspect project health, redirects and Edge Functions and use audited recovery. Provider quota restrictions require an owner capacity decision, not an assumed paid upgrade.

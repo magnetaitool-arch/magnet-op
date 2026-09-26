@@ -42,6 +42,7 @@ jobs:
           MAGNET_BACKUP_STORAGE_OUTPUT: ${{ runner.temp }}/magnet-storage.jsonl.aesgcm
         run: node tools/encrypted-storage-backup.mjs
       - name: Store ciphertext off-device for 30 days
+        id: recovery_artifact
         uses: actions/upload-artifact@v4
         with:
           name: magnet-encrypted-database-${{ github.run_id }}
@@ -52,6 +53,22 @@ jobs:
             ${{ runner.temp }}/magnet-storage.jsonl.aesgcm.manifest.json
           if-no-files-found: error
           retention-days: 30
+      - name: Record completed backup receipt
+        env:
+          MAGNET_BACKUP_PROJECT_REF: ${{ vars.MAGNET_BACKUP_PROJECT_REF }}
+          MAGNET_BACKUP_ORGANIZATION_ID: ${{ vars.MAGNET_BACKUP_ORGANIZATION_ID }}
+          MAGNET_BACKUP_STORAGE_SERVICE_KEY: ${{ secrets.MAGNET_BACKUP_STORAGE_SERVICE_KEY }}
+          MAGNET_BACKUP_OUTPUT: ${{ runner.temp }}/magnet.dump.aesgcm
+          MAGNET_BACKUP_STORAGE_OUTPUT: ${{ runner.temp }}/magnet-storage.jsonl.aesgcm
+          MAGNET_BACKUP_ARTIFACT_URL: ${{ steps.recovery_artifact.outputs.artifact-url }}
+        run: node tools/report-backup-health.mjs success
+      - name: Notify owners in app on failure
+        if: failure()
+        env:
+          MAGNET_BACKUP_PROJECT_REF: ${{ vars.MAGNET_BACKUP_PROJECT_REF }}
+          MAGNET_BACKUP_ORGANIZATION_ID: ${{ vars.MAGNET_BACKUP_ORGANIZATION_ID }}
+          MAGNET_BACKUP_STORAGE_SERVICE_KEY: ${{ secrets.MAGNET_BACKUP_STORAGE_SERVICE_KEY }}
+        run: node tools/report-backup-health.mjs failure
       - name: Visible backup failure
         if: failure()
         run: echo 'Backup failed. No successful recovery point is claimed. Repository Actions notifications must be enabled by the owner.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,3 +1,4 @@
+import { verifyLegacyReview } from './legacy-review-database-test.mjs';
 import { verifyStudio } from './studio-database-test.mjs';
 import { verifyEmployeeRequests } from './employee-requests-database-test.mjs';
 import { verifyTaskDependencies } from './task-dependencies-database-test.mjs';
@@ -387,6 +388,7 @@ try {
   await verifyEmployeeRequests(client);
   await verifyWorkflowSegments({ client, orgA, orgB, user, role, asRole });
   await verifyStudio({ client, orgA, orgB, user, role, asRole });
+  await verifyLegacyReview({ client, orgA, orgB, user, role, asRole });
   await verifyTaskProjectRelationships({ client, orgA, orgB, user, asRole });
   await verifyTaskStatusAuthority({ client, orgA, orgB, user, role, asRole });
   await verifyApprovalIdentity({ client, orgA, user, role, asRole });
@@ -614,7 +616,7 @@ try {
   );
 } catch (error) {
   console.error(
-    `FAIL ${current}: ${error instanceof Error ? error.message : 'Database process exited unexpectedly'}`,
+    `FAIL ${current}: ${error instanceof Error ? error.message + (error.position ? ' at SQL position '+error.position : '') : 'Database process exited unexpectedly'}`,
   );
   failed = true;
 } finally {

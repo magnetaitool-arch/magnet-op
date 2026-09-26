@@ -1,0 +1,11 @@
+import {readFile,writeFile,chmod} from 'node:fs/promises';
+import {createDecipheriv,createHash} from 'node:crypto';
+const [source,manifestPath,destination]=process.argv.slice(2);
+if(!source||!manifestPath||!destination)throw Error('Usage: decrypt-backup.mjs ciphertext manifest output (isolated restore only)');
+const key=Buffer.from(process.env.MAGNET_BACKUP_KEY_BASE64||'','base64');if(key.length!==32)throw Error('32-byte recovery key required');
+const bytes=await readFile(source),header=Buffer.from('MAGNET-BACKUP-V1\n');if(!bytes.subarray(0,header.length).equals(header))throw Error('Invalid archive format');
+const decipher=createDecipheriv('aes-256-gcm',key,bytes.subarray(header.length,header.length+12));decipher.setAuthTag(bytes.subarray(-16));
+const plain=Buffer.concat([decipher.update(bytes.subarray(header.length+12,-16)),decipher.final()]),manifest=JSON.parse(await readFile(manifestPath,'utf8'));
+const expected=manifest.sha256||manifest.plainArchiveSha256||manifest.plaintextSha256;
+if(!expected||createHash('sha256').update(plain).digest('hex')!==expected)throw Error('Recovery manifest checksum mismatch');
+await writeFile(destination,plain,{flag:'wx',mode:0o600});await chmod(destination,0o600);console.log('PASS authenticated decryption and manifest checksum; isolated output created');
