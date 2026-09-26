@@ -2746,6 +2746,7 @@ function resolveEmployee(user, db){
   if(!user || !db) return null; const emps=db.employees||[];
   const norm=s=>String(s||'').trim().toLowerCase();
   const em=norm(user.email), un=norm(user.username), nm=norm(user.name||user.fullName), eid=user.employeeId;
+  if(user.authUserId)return (eid&&emps.find(e=>e.id===eid))||emps.find(e=>e.userId===user.authUserId)||null;
   return (eid&&emps.find(e=>e.id===eid))
     || emps.find(e=>e.id===user.id)
     || (em&&emps.find(e=>norm(e.loginEmail)===em||norm(e.email)===em))
@@ -6961,7 +6962,7 @@ function App(){
   const baseRole = (authUser && authUser.role) || 'Owner';
   const role = roleOverride || baseRole;
   const user = authUser
-    ? { id:authUser.id, authUserId:authUser.authUserId, organizationId:authUser.organizationId, membershipId:authUser.membershipId, membershipStatus:authUser.membershipStatus, canonicalRoleKey:authUser.canonicalRoleKey, capabilities:Array.isArray(authUser.capabilities)?authUser.capabilities:[], name:authUser.fullName||authUser.username, clientId:(authUser.assignedClients&&authUser.assignedClients[0])||'cl-nadia', email:authUser.email, account:authUser }
+    ? { id:authUser.id, authUserId:authUser.authUserId, employeeId:authUser.employeeId, username:authUser.username, fullName:authUser.fullName, organizationId:authUser.organizationId, membershipId:authUser.membershipId, membershipStatus:authUser.membershipStatus, canonicalRoleKey:authUser.canonicalRoleKey, capabilities:Array.isArray(authUser.capabilities)?authUser.capabilities:[], name:authUser.fullName||authUser.username, clientId:(authUser.assignedClients&&authUser.assignedClients[0])||'cl-nadia', email:authUser.email, account:authUser }
     : { id:'local-admin', name:'System Owner', clientId:'cl-nadia' };
   const isOwner = baseRole==='Owner' || baseRole==='Admin';
   const authScopeKey = authUser ? [
@@ -6970,16 +6971,11 @@ function App(){
     (authUser.capabilities||[]).slice().sort().join(',')
   ].join('|') : '';
 
-  // Map a logged-in account to an employee (by email/username/name) for attendance.
+  // Use the authenticated identity when account and employee IDs differ.
   const empKeyFor = (u,sourceDb)=>{
-    sourceDb=sourceDb||db;
-    const actorName = u.fullName || u.username || 'User';
-    const emp = (sourceDb.employees||[]).find(e=>
-      (u.email && (e.loginEmail===u.email || e.email===u.email)) ||
-      (e.userId && e.userId===u.id) ||
-      (u.username && (e.loginEmail===u.username)) ||
-      (e.name && e.name===actorName) || (e.fullName && e.fullName===actorName));
-    return { emp, key: emp ? emp.id : ('usr-'+u.id), actorName };
+    const emp=resolveEmployee(u,sourceDb||db);
+    const actorName=u.fullName||u.username||'User';
+    return {emp,key:emp?emp.id:(u.authUserId||('usr-'+u.id)),actorName};
   };
   const hhmm = ()=>{ const n=new Date(); return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0'); };
   const logActivity = (u, action, details)=>{
