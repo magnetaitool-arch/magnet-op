@@ -23,3 +23,9 @@ Rollback: restore the captured previous `records_can_write` definition, then dro
 ## Remaining acceptance gate
 
 The affected Safari retry now returns 401 because that session expired. User explicitly requested a pause after deployment for manual System Owner login. Do not reset credentials, clear browser state, or mark the exact sync operation resolved until the user logs in and the same pending write succeeds, persists after refresh/relogin, and the queue entry is removed only by confirmed success. Full Studio feature verification resumes after that gate; this report does not claim Studio complete.
+
+## Applied release
+
+Fix commit `9bdc16a`; production deployment `dpl_58hZLXraqhT2ey3qZZX9Zvsm8FpF` / `magnet-ov3qto6lc-magnetaitool-archs-projects.vercel.app`, primary alias `magnet-op.vercel.app`. Production ledger 66, canonical migrations 56. All 106 existing public table counts and full row fingerprints matched inside the migration transaction. The read-only actual-actor policy probe now returns owner/read TRUE/existing write TRUE/incoming write TRUE. Another active member of the same production workspace still gets existing-write FALSE. Staging actual upsert as an unauthorized member returned 42501 even with forged incoming authorship; inactive, conflicting and unconfirmed legacy mappings fail closed. Scoped lint/typecheck/build, sync diagnostics test and full local database suite passed.
+
+Acceptance remains pending the explicitly requested manual Safari login. No password was requested or reset; no queued item was removed. Continue with the exact pending write, refresh/relogin persistence, Arabic/English Studio and then full feature recovery after login. Do not label that browser retest PASS before observing it.
