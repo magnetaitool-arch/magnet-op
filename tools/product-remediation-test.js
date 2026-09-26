@@ -199,3 +199,14 @@ test('late conversion response cannot populate a different user or workspace cac
   );
   assert.deepEqual(h.cache().clients, [{ id: 'existing' }]);
 });
+
+test('all directly rendered application icons exist, including report/brief printing', () => {
+  const start = html.indexOf('const Icon = {');
+  const end = html.indexOf('window.Icon = Icon;', start);
+  const iconSource = html.slice(start, end);
+  const icons = vm.runInNewContext(iconSource + '\nIcon;', { _I: () => () => null });
+  for (const match of html.matchAll(/React\.createElement\((Icon\.\w+(?:\s*\|\|\s*Icon\.\w+)*)/g)) {
+    const component = vm.runInNewContext(match[1], { Icon: icons });
+    assert.equal(typeof component, 'function', `Missing renderable icon: ${match[1]}`);
+  }
+});

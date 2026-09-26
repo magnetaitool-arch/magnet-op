@@ -108,7 +108,26 @@ async function reconcileLegacyIdentity(authUserId:string,legacyAccountRowId:stri
   if(!result||result.ok!==true) throw new Error('identity reconciliation incomplete');
   return result;
 }
-async function dbUpsert(rows:any[]){ const organizationId=await legacyOrganizationId(); const scoped=rows.map(row=>Object.assign({},row,{organization_id:row.organization_id||organizationId})); const r=await fetch(REST+'?on_conflict=id', { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' }, body:JSON.stringify(scoped) }); if(!r.ok) throw new Error('db write '+r.status+' '+await r.text()); }
+async function dbUpsert(rows:any[]){
+  // Existing ownership comes from the database, never from browser claims or
+  // the legacy agency default. Login/profile updates must not move a tenant.
+  const scoped=await Promise.all(rows.map(async(row:any)=>{
+    const response=await fetch(REST+'?id=eq.'+encodeURIComponent(row.id)+'&select=organization_id&limit=1',{
+      headers:{apikey:KEY,Authorization:'Bearer '+KEY},
+    });
+    if(!response.ok) throw new Error('account ownership lookup failed');
+    const existing=await response.json();
+    if(!Array.isArray(existing)) throw new Error('account ownership response invalid');
+    const organizationId=existing.length?existing[0].organization_id:await legacyOrganizationId();
+    if(!organizationId) throw new Error('account ownership missing');
+    return Object.assign({},row,{organization_id:organizationId});
+  }));
+  const r=await fetch(REST+'?on_conflict=id',{
+    method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify(scoped),
+  });
+  if(!r.ok) throw new Error('db write '+r.status);
+}
 async function dbDelete(id:string){ const r=await fetch(REST+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers:{ apikey:KEY, Authorization:'Bearer '+KEY } }); if(!r.ok) throw new Error('db del '+r.status); }
 const sanitize = (u:any)=>{ const c={...u}; delete c.passwordHash; delete c.verifyToken; return c; };
 

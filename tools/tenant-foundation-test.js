@@ -54,7 +54,7 @@ check(/submit_public_intake/.test(intakeCore) && /p_organization_id/.test(intake
   && /insert into public\.records \(id, coll, data, organization_id\)/i.test(intakeMigration), 'public intake stamps tenant ownership transactionally');
 check(/campaign\.get/.test(publicForm) && /brief\.submit/.test(publicForm), 'public campaign and brief access use a server route');
 check(/submit_public_brief/.test(publicForm) && /submit_public_brief/.test(migration), 'brief submission is transactional');
-check(/organization_id:row\.organization_id\|\|organizationId/.test(accounts), 'legacy account service writes tenant ownership');
+check(/organization_id:organizationId/.test(accounts) && /existing\[0\]\.organization_id/.test(accounts), 'legacy account service preserves persisted tenant ownership');
 
 console.log('\n[5] recoverable deletion and retention');
 check(/create or replace function public\.soft_delete_record/.test(deleteMigration), 'authorized soft-delete command exists');
