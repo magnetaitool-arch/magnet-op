@@ -5,6 +5,7 @@
 - **OWNER_ACTION_REQUIRED:** Authorize installation of `tools/encrypted-backup-workflow.yml` on the default branch, approve secret-store delivery, supply a stable backup connection and independently retain the recovery key. The current OAuth credential lacks workflow publication scope. Verify the first scheduled artifact, failure alert and off-device restore. Manual encrypted recovery is proven; unattended and independent-provider backup remain inactive.
 - **OWNER_ACTION_REQUIRED:** Historical employees confirm their own existing credentials. Representative role coverage is complete; personal passwords were not reset or impersonated.
 - **BLOCKED_EXTERNAL:** Email/Resend sending-domain credentials and actual delivery; social account connections/platform approvals. Neither is part of this phase.
+- **P2 / POST_DEPLOY:** Investigate the observed shell layout after changing viewport and language in one session; reload restored it, and fixed desktop/mobile layouts passed.
 - **P2:** Address mixed-language labels outside changed surfaces when those areas are next edited. No repeated broad audit or completed migration campaign is required.
 
 Completed: Studio; persistent owner/admin review center with stable source IDs, masked search, decisions, preview/confirmation, transactional typed repairs, stale/idempotency guards, immutable audit and reconciliation; private encrypted off-device database/object recovery with an actual isolated restore; Backup Health and in-app failure evidence. Current canonical migration files: 55; production ledger: 65; none pending.
