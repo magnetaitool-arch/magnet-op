@@ -11,3 +11,13 @@ node_modules
 /LesAmisProposal/
 
 /.magnet-build/
+
+# Studio source is versioned; historical screenshots and generated files are not.
+.DS_Store
+/magnet-studio/*report*.png
+/magnet-studio/design-comparison.png
+/magnet-studio/responsive-*.png
+/magnet-studio/production-*.png
+/magnet-studio/node_modules/
+/magnet-studio/dist/
+/magnet-studio/.vercel/
