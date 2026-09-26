@@ -7,10 +7,10 @@ DEPLOYMENT TARGET: Existing Vercel magnet-op project, preview dpl_nGU5ugHySzNS99
 BUILD STATUS: PASS — build, scoped lint/typecheck, critical/full tests, security checks; 47 migrations passed isolated PostgreSQL rehearsal.
 DATABASE STATUS: Production data unchanged. Independent hosted staging verification pending.
 MIGRATIONS PENDING: 18 new additive migrations in this checkpoint; reconcile against hosted migration history before rollout. No production SQL applied.
-BLOCKED_EXTERNAL: Independent Supabase staging credentials and hosted auth/RLS verification; external email/social provider credentials or approvals.
+BLOCKED_EXTERNAL: Supabase rejected creation of independent project "Magnet OS Release Staging": account has reached its two-active-free-project limit. Owner must authorize billing/upgrade or make an independent project slot available. CLI authentication works; no project was created. External email/social credentials remain optional blockers.
 CRITICAL KNOWN ISSUES: Production promotion blocked by pending compatible database migrations and independent staging verification. Preview configuration guard visually verified EN/AR desktop/mobile, no page exceptions or mobile overflow; runtime-config intentionally returns 503. Login/session, dashboard, CRM, tasks, projects and Studio remain unavailable in this preview; no claim of hosted workflow verification.
 NEXT 5 ACTIONS:
-1. Configure preview database bindings only after independent staging is ready.
+1. OWNER_ACTION_REQUIRED: Resolve Supabase free-project quota in organization jnnpxvowmnurhquaowia; then retry independent staging creation. Do not pause/delete either active project automatically.
 2. Configure independent Supabase staging and rehearse migration/rollback with representative data.
 3. Verify hosted auth, tenant isolation and critical bilingual/mobile workflows.
 4. Reconcile production data and schedule approved migration rollout.
