@@ -14,3 +14,11 @@ Production: `xqqgbvigfojfydzfguan`; independent hosted staging: `vsurqqbxjvqzvqb
 Private evidence: `backups/release-recovery-20260926/` and `backups/release-staging-20260926/`. Recovery owner for this rollout: executing release operator; retain the previous deployment and use tested contract rollback if an auth, tenant or data regression occurs. Reconcile after production migration before accepting the release.
 
 Standalone Studio prototype, provider-backed social publishing, external email delivery and exhaustive real-employee account testing are **not** certified by these checks. They remain explicitly outside this core release claim; no successful external delivery is simulated.
+
+## Production result
+
+All 20 files applied successfully through the existing authenticated Supabase CLI. Post-apply snapshot: **134 tables / 58 migration ledger entries / zero pending files**. Every pre-existing business and identity value is preserved (new nullable task project links match the rehearsal). Existing reconciliation issue counts remain unchanged. No count loss, guessed ownership repair or production reset occurred.
+
+A temporary synthetic identity/workspace was created solely for production browser testing, separately from Magnet's actual organization; no real employee password was changed. Testing exposed and fixed an account helper that overwrote existing organization IDs with the legacy default. Repeat login and isolated workspace/RLS tests pass after the correction, which was first deployed and tested on independent staging.
+
+After production browser tests, 2,683 original records/profiles/memberships/clients/invoices/payments/tasks were compared again and remained unchanged. The isolated QA account/workspace is disabled, provider identity banned, password randomized and token refresh denied. Private restore cluster was stopped after verification.

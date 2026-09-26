@@ -1,17 +1,17 @@
 # SHIP STATUS
 
-DEPLOYED: Connected staging preview: https://magnet-lxn09czi0-magnetaitool-archs-projects.vercel.app
-COMMIT: Release continuation commit containing this status; application artifact remains e51eedb.
+DEPLOYED: YES — https://magnet-op.vercel.app
+COMMIT: 0c9d060 (deployed implementation); final evidence in the checkpoint containing this report.
 BRANCH: codex/magnet-os-v2-staging
-DEPLOYMENT TARGET: Existing Vercel magnet-op, preview dpl_8Lba5rMP9ybvz78agQHQxatc8UQm. Production unchanged.
-BUILD STATUS: PASS — build, scoped lint/typecheck; hosted Auth/tenant/task retry smoke and real browser login/navigation/persistence/mobile checks pass.
-DATABASE STATUS: Independent free staging vsurqqbxjvqzvqbmetjw is active; 47 canonical migrations applied. PRIVATE Auth paused with owner approval. No production migration.
-MIGRATIONS PENDING: 19 on production (18 new plus employee_requests_v3), verified against live read-only ledger.
-BLOCKED_EXTERNAL: Production backup CLI requires unavailable Docker/Podman or native dump/restore toolchain; optional email/social credentials.
-CRITICAL KNOWN ISSUES: Production recovery point is not verified; full hosted E2E and representative reconciliation remain incomplete. Production release gate is closed.
+DEPLOYMENT TARGET: Existing Vercel magnet-op; production dpl_BioCb7Jb1x3gLaAJuWbmhg6eW2Rc, magnet-or02xngvh-magnetaitool-archs-projects.vercel.app. Production alias explicitly verified.
+BUILD STATUS: PASS — build, scoped lint/typecheck, full test command, 48-migration local suite, hosted workflow/storage/auth checks and 26 security checks. Final browser console/page errors: zero.
+DATABASE STATUS: SAFE — encrypted restore-tested backup; production reconciliation passed. Post-browser comparison preserved all 2,683 original rows across seven critical tables. Temporary isolated QA identity/workspace disabled; old-token reads and refresh denied.
+MIGRATIONS PENDING: NONE — 20 applied; production ledger has 58 entries.
+BLOCKED_EXTERNAL: Email/Resend and social-provider credentials/approvals; no successful external delivery claimed.
+CRITICAL KNOWN ISSUES: None observed in verified core release flows. Preserved legacy ambiguities require review; standalone Studio and broader master-directive work remain POST_DEPLOY (see REMAINING_WORK.md).
 NEXT 5 ACTIONS:
-1. Make the backup/restore runtime available without a paid plan.
-2. Create and restore-test complete protected production backup.
-3. Complete hosted role/session/storage/business E2E and representative reconciliation.
-4. Apply verified production migrations only after all release gates pass.
-5. Promote, smoke-test, reconcile and checkpoint the production release.
+1. Review flagged legacy identities, contacts and unresolved task relationships without guessing repairs.
+2. Automate encrypted offsite backups and restore rehearsal.
+3. Configure and verify external email delivery/recovery.
+4. Connect and verify approved social publishing providers.
+5. Complete standalone Studio persistence and remaining product/localization work.
