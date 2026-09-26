@@ -102,9 +102,6 @@ async function snapshot(name) {
       await client.query(
         fs.readFileSync(path.join(root, 'tools/fixtures/legacy-schema.sql'), 'utf8'),
       );
-      await client.query(
-        'create table public.schema_migrations(version text primary key,description text,applied_by text)',
-      );
       console.log('Installed schema-only legacy baseline on independent staging');
     }
     for (const name of files) {
@@ -135,7 +132,7 @@ async function snapshot(name) {
       fs.copyFileSync(path.join(root, 'supabase/migrations', name), path.join(migrationsDir, name));
       const result = spawnSync(
         cli,
-        ['db', 'push', '--workdir', work, '--db-url', url.toString(), '--yes'],
+        ['db', 'push', '--workdir', work, '--db-url', url.toString(), '--include-all', '--yes'],
         { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 120000 },
       );
       const safe = (result.stdout + '\n' + result.stderr)

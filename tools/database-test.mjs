@@ -51,7 +51,6 @@ try {
   client = database.getPgClient('postgres', '127.0.0.1');
   await client.connect();
   await client.query(`
-    create table public.schema_migrations(version text primary key,description text,applied_by text);
     create role anon nologin; create role authenticated nologin;
     create role service_role nologin bypassrls;
     create schema auth; create schema storage; create schema extensions;

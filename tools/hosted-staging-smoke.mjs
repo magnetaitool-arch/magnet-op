@@ -46,7 +46,7 @@ try {
   const migrations = (
     await db.query('select count(*)::int n from supabase_migrations.schema_migrations')
   ).rows[0].n;
-  assert.equal(migrations, 47, 'All hosted staging migrations must be applied first');
+  assert.equal(migrations, 48, 'All hosted staging migrations must be applied first');
   const org = (await db.query("select id from organizations where slug='magnet'")).rows[0].id;
   const other = (
     await db.query(
