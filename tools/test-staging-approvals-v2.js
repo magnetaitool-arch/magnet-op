@@ -119,7 +119,7 @@ begin
   if (select data->>'status' from public.records where id=deliverable_id)<>'Approved' then raise exception 'deliverable state not persisted'; end if;
   begin
     perform public.transition_approval_v2(org_id,'deliverables',deliverable_id,'Client Review','APPROVE',null);
-  exception when serialization_failure then stale:=true; end;
+  exception when sqlstate 'PT409' then stale:=true; end;
   if not stale then raise exception 'stale approval was accepted'; end if;
 
   insert into public.records(id,coll,data,organization_id,created_at,updated_at)

@@ -1,5 +1,7 @@
 # Production smoke verification — 2026-09-26
 
+Historical first-release evidence. Superseded by [POST_DEPLOY_VERIFICATION.md](POST_DEPLOY_VERIFICATION.md) for the current deployment and fixes.
+
 Live: https://magnet-op.vercel.app
 Deployment: `dpl_BioCb7Jb1x3gLaAJuWbmhg6eW2Rc`; code `0c9d060`.
 
