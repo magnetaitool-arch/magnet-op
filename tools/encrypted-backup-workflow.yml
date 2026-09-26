@@ -20,8 +20,9 @@ jobs:
           KEY: ${{ secrets.MAGNET_BACKUP_KEY_BASE64 }}
           STORAGE_KEY: ${{ secrets.MAGNET_BACKUP_STORAGE_SERVICE_KEY }}
           PROJECT: ${{ vars.MAGNET_BACKUP_PROJECT_REF }}
+          ORGANIZATION: ${{ vars.MAGNET_BACKUP_ORGANIZATION_ID }}
         run: |
-          test -n "$DATABASE_URL" && test -n "$KEY" && test -n "$PROJECT" && test -n "$STORAGE_KEY" || { echo 'OWNER_ACTION_REQUIRED: configure dedicated backup connection, encryption key and target ref.'; exit 1; }
+          test -n "$DATABASE_URL" && test -n "$KEY" && test -n "$PROJECT" && test -n "$STORAGE_KEY" && test -n "$ORGANIZATION" || { echo 'OWNER_ACTION_REQUIRED: configure dedicated backup connection, encryption key, target ref and organization ID.'; exit 1; }
       - name: Install PostgreSQL 17 client
         run: |
           sudo apt-get update -qq
