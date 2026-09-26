@@ -4911,7 +4911,7 @@ function moSaveStatus(state, n, failure){
     }
     el.style.bottom=window.innerWidth<=767?'calc(84px + env(safe-area-inset-bottom))':'14px'; el.style.display='block';
     el.style.color=m.c; el.style.border='1px solid '+m.b; el.style.opacity='1'; el.textContent=m.t;
-    el.style.cursor='default'; el.onclick=null; el.removeAttribute('title');
+    el.style.cursor='default'; el.onclick=null; el.onkeydown=null; el.removeAttribute('title'); el.removeAttribute('role'); el.removeAttribute('tabindex'); el.removeAttribute('aria-label');
     if(_moSaveHide){ clearTimeout(_moSaveHide); _moSaveHide=null; }
     if(state==='saved'){ _moSaveHide=setTimeout(function(){ try{ if(el){ el.style.opacity='0'; setTimeout(function(){ try{ if(el&&el.style.opacity==='0') el.remove(); }catch(e){} },350); } }catch(e){} }, 1600); }
   }catch(e){}
@@ -5077,6 +5077,17 @@ async function syncQueueDrain(options){
     else syncQueueChip();
   } finally { _sqDraining=false; if(syncQueueCurrent().length)syncQueueChip(); }
 }
+function syncQueueDiagnostics(){
+  const safe=value=>String(value||'').slice(0,160).replace(/[\r\n\t]/g,' ');
+  return syncQueueCurrent().map(item=>({
+    operation:safe(item.type),endpoint:item.type==='delete'?'/rest/v1/rpc/soft_delete_record':'/rest/v1/records?on_conflict=id',
+    table:'public.records',collection:safe(item.coll),recordId:safe(item.id||(item.rec&&item.rec.id)),
+    authUserId:safe(item.authUserId),organizationId:safe(item.organizationId),
+    clientId:safe(item.rec&&item.rec.clientId),projectId:safe(item.rec&&item.rec.projectId),
+    authorId:safe(item.rec&&item.rec.userId),status:Number(item.lastFailure&&item.lastFailure.status)||0,
+    code:syncFailureCode(item.lastFailure&&item.lastFailure.code)
+  }));
+}
 function syncQueueChip(forcedState,forcedFailure){
   try {
     const list=syncQueueCurrent(); const n=list.length;
@@ -5107,10 +5118,16 @@ function syncQueueChip(forcedState,forcedFailure){
     }else{
       text=_arc?('في انتظار المزامنة: '+n):('SYNC PENDING: '+n); title=_arc?'التغييرات محفوظة محليًا وستُرسل تلقائيًا. اضغط للمحاولة الآن.':'Changes are preserved locally and will retry with backoff. Click to retry now.';
     }
-    el.style.color=color; el.style.borderColor=border; el.title=title; el.textContent=text;
+    const diagnostics=JSON.stringify(syncQueueDiagnostics());
+    el.style.color=color; el.style.borderColor=border; el.title=title+'\n'+diagnostics; el.textContent=text;
+    el.setAttribute('role','button'); el.setAttribute('tabindex','0');
+    el.setAttribute('aria-label',text+'. '+title+' '+diagnostics);
+    el.onclick=function(){syncQueueDrain({manual:true});};
+    el.onkeydown=function(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();syncQueueDrain({manual:true});}};
   } catch(e){}
 }
 window.__syncQueue = {
+  details:syncQueueDiagnostics,
   size:()=>syncQueueCurrent().length,
   summary:()=>{const list=syncQueueCurrent();return {pending:list.length,blocked:list.filter(x=>x.blocked).length,retryable:list.filter(x=>!x.blocked).length,categories:list.reduce((out,x)=>{const k=x&&x.lastFailure&&x.lastFailure.category||'pending';out[k]=(out[k]||0)+1;return out;},{})};},
   quarantined:()=>{const scope=syncQueueScope();return syncQueueLoad().filter(item=>!syncQueueMatches(item,scope)).length;},
