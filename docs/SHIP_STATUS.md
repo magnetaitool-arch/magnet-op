@@ -1,17 +1,17 @@
 # SHIP STATUS
 
-DEPLOYED: YES, protected preview https://magnet-j38t2ynu1-magnetaitool-archs-projects.vercel.app — production unchanged.
-COMMIT: e51eedb (release artifact); implementation checkpoint 0d0fac0. Both pushed to origin.
+DEPLOYED: Connected staging preview: https://magnet-lxn09czi0-magnetaitool-archs-projects.vercel.app
+COMMIT: Release continuation commit containing this status; application artifact remains e51eedb.
 BRANCH: codex/magnet-os-v2-staging
-DEPLOYMENT TARGET: Existing Vercel magnet-op project, preview dpl_nGU5ugHySzNS99Ddv28jw1C6e7To. Database bindings intentionally disabled for this deployment; branch auto-deploy disabled to prevent inherited production access.
-BUILD STATUS: PASS — build, scoped lint/typecheck, critical/full tests, security checks; 47 migrations passed isolated PostgreSQL rehearsal.
-DATABASE STATUS: Production data unchanged. Independent hosted staging verification pending.
-MIGRATIONS PENDING: 18 new additive migrations in this checkpoint; reconcile against hosted migration history before rollout. No production SQL applied.
-BLOCKED_EXTERNAL: Supabase rejected creation of independent project "Magnet OS Release Staging": account has reached its two-active-free-project limit. Owner must authorize billing/upgrade or make an independent project slot available. CLI authentication works; no project was created. External email/social credentials remain optional blockers.
-CRITICAL KNOWN ISSUES: Production promotion blocked by pending compatible database migrations and independent staging verification. Preview configuration guard visually verified EN/AR desktop/mobile, no page exceptions or mobile overflow; runtime-config intentionally returns 503. Login/session, dashboard, CRM, tasks, projects and Studio remain unavailable in this preview; no claim of hosted workflow verification.
+DEPLOYMENT TARGET: Existing Vercel magnet-op, preview dpl_8Lba5rMP9ybvz78agQHQxatc8UQm. Production unchanged.
+BUILD STATUS: PASS — build, scoped lint/typecheck; hosted Auth/tenant/task retry smoke and real browser login/navigation/persistence/mobile checks pass.
+DATABASE STATUS: Independent free staging vsurqqbxjvqzvqbmetjw is active; 47 canonical migrations applied. PRIVATE Auth paused with owner approval. No production migration.
+MIGRATIONS PENDING: 19 on production (18 new plus employee_requests_v3), verified against live read-only ledger.
+BLOCKED_EXTERNAL: Production backup CLI requires unavailable Docker/Podman or native dump/restore toolchain; optional email/social credentials.
+CRITICAL KNOWN ISSUES: Production recovery point is not verified; full hosted E2E and representative reconciliation remain incomplete. Production release gate is closed.
 NEXT 5 ACTIONS:
-1. OWNER_ACTION_REQUIRED: Resolve Supabase free-project quota in organization jnnpxvowmnurhquaowia; then retry independent staging creation. Do not pause/delete either active project automatically.
-2. Configure independent Supabase staging and rehearse migration/rollback with representative data.
-3. Verify hosted auth, tenant isolation and critical bilingual/mobile workflows.
-4. Reconcile production data and schedule approved migration rollout.
-5. Promote verified release; POST_DEPLOY: optional integrations and NON_CRITICAL polish.
+1. Make the backup/restore runtime available without a paid plan.
+2. Create and restore-test complete protected production backup.
+3. Complete hosted role/session/storage/business E2E and representative reconciliation.
+4. Apply verified production migrations only after all release gates pass.
+5. Promote, smoke-test, reconcile and checkpoint the production release.
