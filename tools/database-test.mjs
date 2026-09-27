@@ -1,3 +1,4 @@
+import { verifyStudioBuilder } from './studio-builder-database-test.mjs';
 import { verifyGameIdentity } from './game-identity-database-test.mjs';
 import { verifyLegacyReview } from './legacy-review-database-test.mjs';
 import { verifyStudio } from './studio-database-test.mjs';
@@ -389,6 +390,7 @@ try {
   await verifyEmployeeRequests(client);
   await verifyWorkflowSegments({ client, orgA, orgB, user, role, asRole });
   await verifyStudio({ client, orgA, orgB, user, role, asRole });
+  await verifyStudioBuilder({client, orgA, orgB, user, asRole});
   await client.query('begin');
   try { await verifyGameIdentity(client); } finally { await client.query('rollback'); }
   await verifyLegacyReview({ client, orgA, orgB, user, role, asRole });
