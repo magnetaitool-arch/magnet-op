@@ -55,10 +55,46 @@ export async function verifyStudioBuilder({ client, orgA, orgB, user, asRole }) 
     await reject(() => client.query('select studio_resources_v3($1,$2)', [orgB, task.id]), {
       code: '42501',
     });
+    const sibling = (
+      await client.query(
+        "select create_task_v2($1,'Sibling logo task',$2,'workflow-project','workflow-employee') result",
+        [orgA, account],
+      )
+    ).rows[0].result.task;
+    const image = (
+      await client.query(
+        "select create_document_upload_v2($1,'Client logo','Company Document','INTERNAL','logo.png','image/png',12) result",
+        [orgA],
+      )
+    ).rows[0].result;
+    await client.query(
+      "insert into storage.objects(bucket_id,name) values ('magnet-documents',$1)",
+      [image.originalPath],
+    );
+    await client.query('select finalize_document_upload_v2($1,$2)', [orgA, image.id]);
+    payload.brand.logoId = image.id;
+    payload.pages[0].blocks[0].mediaId = image.id;
+    await save(payload, 1);
+    await reject(
+      () => client.query("select studio_share_v3($1,$2,'CREATE')", [orgA, docId]),
+      /studio_shared_image_invalid/,
+    );
+    await client.query('select link_task_document_v2($1,$2,$3)', [orgA, sibling.id, image.id]);
     const shared = (
       await client.query("select studio_share_v3($1,$2,'CREATE',null,true,7) result", [orgA, docId])
     ).rows[0].result;
     assert.match(shared.token, /^[a-f0-9]{64}$/);
+    await client.query('set local role service_role');
+    const signedAsset = (
+      await client.query('select studio_shared_asset_v3($1,$2) result', [shared.token, image.id])
+    ).rows[0].result;
+    assert.equal(signedAsset.path, image.originalPath);
+    assert.ok(signedAsset.expiresIn <= 60);
+    await reject(
+      () => client.query('select studio_shared_asset_v3($1,$2)', [shared.token, randomUUID()]),
+      { code: '42501' },
+    );
+
     await client.query('set local role anon');
     await client.query("select set_config('request.jwt.claim.sub','',true)");
     await reject(() => client.query('select * from studio_shares_v3'), { code: '42501' });

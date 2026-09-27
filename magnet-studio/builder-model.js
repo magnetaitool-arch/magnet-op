@@ -143,6 +143,7 @@
     };
     for (let i = 0; i < t[2].length; i += 2) {
       const blocks = t[2].slice(i, i + 2).map((type) => block(type, lang));
+      for (const b of blocks) if (b.type === 'cover') b.mediaId = d.brand.logoId || null;
       d.pages.push({
         id: id(),
         title: (lang === 'ar' ? 'صفحة ' : 'Page ') + (d.pages.length + 1),
