@@ -18,7 +18,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
   const send = (type, payload) =>
     parent.postMessage({ channel: 'magnet-studio', type, payload }, location.origin);
   const dictionary = {
-    'Answer what you know. Detailed answers create a stronger strategic brief':
+    'Answer what you know. Detailed answers create a stronger strategic brief.':
       'أجب عما تعرفه. الإجابات المفصلة تساعد على إعداد بريف استراتيجي أقوى',
     'Select every platform included': 'اختر جميع المنصات المشمولة',
     'Current period': 'الفترة الحالية',

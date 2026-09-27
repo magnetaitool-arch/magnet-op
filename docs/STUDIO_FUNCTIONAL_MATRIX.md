@@ -38,3 +38,12 @@ Scope: existing embedded Studio. VERIFIED means the stated end-to-end behavior p
 - Private evidence: `backups/foundation-cleanup-20260927/`, including `studio-long-fixed.pdf`, `studio-long-brief-fixed.pdf`, continuation-page rendering and mobile final-review screenshot. Original role/database/workflow proof remains in prior release artifacts.
 
 Deployment: application `4f57e03`, `dpl_2k7rsWx19G8JZYZyTfMnM7KFyo4z`, primary https://magnet-op.vercel.app. All six changed/current app artifacts match release checksums. Actual production standalone Studio entry redirects anonymous users to login with no captured JavaScript runtime errors. Authenticated mutation/negative tests remain deliberately on independent staging.
+
+## Additional control pass — same release foundation
+
+- Actual seven-section navigation, Back/Continue and both endpoints passed without changing saved v2. Blocked-popup injection displayed the export recovery message and preserved the title/version.
+- At 320px, EN/AR shell width was 320px and embedded editor width 284px; neither overflowed. Visual inspection found a punctuation mismatch in the Arabic brief helper dictionary; corrected and retested in both languages.
+- Eight sequential, read-only staging library reloads completed in 232–335ms; RPC durations 185–282ms, all without application errors. This does not certify concurrent, large-library or throttled-device performance.
+- Native Safari verification could not proceed because Safari had an unrelated password-update system prompt. It was left untouched. Native Safari/iOS print coverage remains PARTIAL; no successful print claim is made.
+- Existing full tests, lint, typecheck, security and 44-file build passed again. Configuration: zero failures, two existing email warnings. No schema or authorization changes.
+- Additional private evidence: `studio-additional-controls.json`, `studio-mobile-320-ar.png`, `studio-mobile-320-ar-editor.png` in the existing recovery evidence directory. Earlier workflow verification remains applicable; unsupported features remain unsupported.
