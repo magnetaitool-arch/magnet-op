@@ -36,3 +36,5 @@ Scope: existing embedded Studio. VERIFIED means the stated end-to-end behavior p
 - No known broken supported critical workflow remains in the tested scope. Overall Studio remains PARTIAL because unsupported features and the explicit browser/performance limits above are not completed features.
 - No owner credentials or business-ownership decision is required for these frontend fixes. No production data was fabricated, reassigned or deleted.
 - Private evidence: `backups/foundation-cleanup-20260927/`, including `studio-long-fixed.pdf`, `studio-long-brief-fixed.pdf`, continuation-page rendering and mobile final-review screenshot. Original role/database/workflow proof remains in prior release artifacts.
+
+Deployment: application `4f57e03`, `dpl_2k7rsWx19G8JZYZyTfMnM7KFyo4z`, primary https://magnet-op.vercel.app. All six changed/current app artifacts match release checksums. Actual production standalone Studio entry redirects anonymous users to login with no captured JavaScript runtime errors. Authenticated mutation/negative tests remain deliberately on independent staging.
