@@ -250,7 +250,7 @@ async function handleOutbox(request, env = process.env) {
     if (query.health !== undefined || !query.id) {
       if (token) {
         const context = await rpc(config, 'current_identity_context', {}, token);
-        if (!context.response.ok || !context.payload || context.payload.ok !== true) return reply(401, { error: 'authenticated_session_required' });
+        if (!context.response.ok || !context.payload?.userId || context.payload.status !== 'ACTIVE' || !Array.isArray(context.payload.memberships) || !context.payload.memberships.some(m => m.membershipStatus === 'ACTIVE' && m.organizationStatus === 'ACTIVE')) return reply(401, { error: 'authenticated_session_required' });
       }
       let admin = {};
       if (query.organizationId && token) {

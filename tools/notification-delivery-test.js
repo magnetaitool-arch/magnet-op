@@ -47,3 +47,15 @@ test('webhook authenticates before persistence and retries failed storage',async
  assert.equal((await handleWebhook(body,h,env)).status,503);assert.equal(calls,1);
  }finally{global.fetch=original;}
 });
+test('health resolves the actual identity RPC contract and retains the admin authorization boundary',async()=>{
+ const {handleOutbox}=require('../server/outbox');const original=global.fetch;
+ const env={SUPABASE_URL:'https://abcdefghijklmnopqrst.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fixture'};
+ const request={method:'GET',headers:{authorization:'Bearer synthetic-user-jwt'},query:{health:'1',organizationId:'00000000-0000-4000-8000-000000000001'}};
+ let allowed=true,active=true;
+ try{
+ global.fetch=async url=>url.endsWith('current_identity_context')?Response.json({userId:'synthetic-user',status:active?'ACTIVE':'SUSPENDED',memberships:[{membershipStatus:'ACTIVE',organizationStatus:'ACTIVE'}]}):Response.json(allowed?{ok:true,messages:[]}:{error:'denied'},{status:allowed?200:403});
+ const ok=await handleOutbox(request,env);assert.equal(ok.status,200);assert.equal(ok.body.emailConfigured,false);
+ allowed=false;assert.equal((await handleOutbox(request,env)).status,403);
+ active=false;assert.equal((await handleOutbox(request,env)).status,401);
+ }finally{global.fetch=original;}
+});
