@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { renderEmail } = require('./email-templates');
 
 function normalOrigin(value) {
   try { return new URL(String(value || '')).origin; } catch (error) { return ''; }
@@ -56,7 +57,7 @@ function serviceHeaders(key, bearer) {
 }
 
 async function jsonFetch(url, init) {
-  const response = await fetch(url, init);
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(12000) });
   const payload = await response.json().catch(() => ({}));
   return { response, payload };
 }
@@ -108,7 +109,7 @@ function publicEmailText(message, env) {
   const lines = [clip(payload.title, 200), '', clip(payload.message, 2000)];
   for (const [key, value] of Object.entries(fields)) if (value) lines.push(`${clip(key, 50)}: ${clip(value, 2000)}`);
   if (payload.submittedAt) lines.push('submittedAt: ' + clip(payload.submittedAt, 80));
-  if (payload.deepLinkPath) lines.push('', clip(env.MAGNET_APP_URL || 'https://magnet-os-staging.vercel.app', 500).replace(/\/$/, '') + clip(payload.deepLinkPath, 500));
+  if (payload.deepLinkPath) lines.push('', clip(env.APP_URL || env.MAGNET_APP_URL || 'https://magnet-op.vercel.app', 500).replace(/\/$/, '') + clip(payload.deepLinkPath, 500));
   return lines.join('\n');
 }
 
@@ -122,21 +123,24 @@ function configuredRecipient(message, env) {
 }
 
 async function deliverEmail(message, env) {
+  if (message.attempt_count > 1 && Date.now() - Date.parse(message.created_at) >= 23 * 60 * 60 * 1000) return { outcome: 'FAILED', provider: 'resend', errorCategory: 'IDEMPOTENCY_WINDOW_EXPIRED' };
   const providerKey = String(env.RESEND_API_KEY || '');
-  const from = clip(env.FROM_EMAIL || 'Magnet OS <onboarding@resend.dev>', 320);
+  const from = clip(env.EMAIL_FROM || env.FROM_EMAIL || '', 320);
   const payload = message.payload || {};
-  const recipients = message.kind === 'EMAIL_INTERNAL' ? emailArray(payload.to) : emailArray(configuredRecipient(message, env));
-  if (!providerKey || !recipients) return { outcome: 'FAILED', provider: 'resend', providerStatus: 'not_configured', errorCategory: 'CONFIGURATION_MISSING' };
-  const subject = clip(payload.subject || ('[Magnet OS] ' + clip(payload.title, 160)), 200);
-  const text = message.kind === 'EMAIL_INTERNAL' ? clip(payload.text, 150000) : publicEmailText(message, env);
-  const html = message.kind === 'EMAIL_INTERNAL' ? String(payload.html || '').slice(0, 150000) : '';
+  const recipients = ['EMAIL_INTERNAL','EMAIL_NOTIFICATION'].includes(message.kind) ? emailArray(payload.to) : emailArray(configuredRecipient(message, env));
+  if (!providerKey || !from || !recipients) return { outcome: 'FAILED', provider: 'resend', providerStatus: 'not_configured', errorCategory: 'CONFIGURATION_MISSING' };
+  const template = message.kind === 'EMAIL_NOTIFICATION' ? renderEmail(payload, env) : null;
+  const subject = clip(template?.subject || payload.subject || ('[Magnet OS] ' + clip(payload.title, 160)), 200);
+  const text = template?.text || (message.kind === 'EMAIL_INTERNAL' ? clip(payload.text, 150000) : publicEmailText(message, env));
+  const html = template?.html || (message.kind === 'EMAIL_INTERNAL' ? String(payload.html || '').slice(0, 150000) : '');
   try {
     const response = await jsonFetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + providerKey, 'Content-Type': 'application/json', 'Idempotency-Key': clip(message.idempotency_key, 200), 'User-Agent': 'MagnetOS/2.0' },
-      body: JSON.stringify({ from, to: recipients, subject, html: html || undefined, text: text || (html ? undefined : ' ') }),
+      headers: { Authorization: 'Bearer ' + providerKey, 'Content-Type': 'application/json', 'Idempotency-Key': clip(message.provider_idempotency_key || message.idempotency_key, 200), 'User-Agent': 'MagnetOS/2.0' },
+      body: JSON.stringify({ from, reply_to: env.EMAIL_REPLY_TO || undefined, to: recipients, subject, html: html || undefined, text: text || (html ? undefined : ' ') }),
     });
-    if (!response.response.ok) return { outcome: 'FAILED', provider: 'resend', providerStatus: 'rejected', errorCategory: 'PROVIDER_REJECTED', safeContext: { httpStatus: response.response.status } };
+    if (!response.response.ok) return { outcome: 'FAILED', provider: 'resend', providerStatus: 'rejected', errorCategory: [408,409,429].includes(response.response.status) || response.response.status >= 500 ? 'PROVIDER_TEMPORARY' : 'PROVIDER_PERMANENT', safeContext: { httpStatus: response.response.status } };
+    if (!response.payload?.id) return { outcome: 'FAILED', provider: 'resend', errorCategory: 'PROVIDER_UNAVAILABLE' };
     return { outcome: 'ACCEPTED', provider: 'resend', providerMessageId: clip(response.payload && response.payload.id, 160), providerStatus: 'accepted' };
   } catch (error) {
     return { outcome: 'FAILED', provider: 'resend', providerStatus: 'unavailable', errorCategory: 'PROVIDER_UNAVAILABLE' };
@@ -183,6 +187,11 @@ async function finishMessage(config, message, workerId, result) {
 }
 
 async function processClaimed(config, message, workerId, env) {
+  if (message.kind === 'EMAIL_NOTIFICATION') {
+    const allowed = await rpc(config, 'notification_email_allowed_v2', { p_message_id: message.id });
+    if (!allowed.response.ok) throw new Error('notification_authorization_unavailable');
+    if (allowed.payload !== true) return finishMessage(config, message, workerId, { outcome: 'SUPPRESSED', provider: 'resend', providerStatus: 'recipient_or_preference_revoked' });
+  }
   const result = message.kind === 'WHATSAPP_PUBLIC_INTAKE'
     ? await deliverWhatsApp(message, env)
     : await deliverEmail(message, env);
@@ -210,7 +219,7 @@ async function processOutbox(config, env, options = {}) {
 
 function statusLabel(value) {
   const normalized = String(value || '').toUpperCase();
-  return ({ PENDING: 'Queued', PROCESSING: 'Processing', ACCEPTED: 'Accepted', DELIVERED: 'Delivered', FAILED: 'Failed', SUPPRESSED: 'Suppressed', CANCELLED: 'Cancelled' })[normalized] || 'Unknown';
+  return ({ PENDING: 'Queued', PROCESSING: 'Processing', ACCEPTED: 'Accepted', DELIVERED: 'Delivered', FAILED: 'Failed', SUPPRESSED: 'Suppressed', CANCELLED: 'Cancelled', BOUNCED: 'Bounced' })[normalized] || 'Unknown';
 }
 
 async function handleOutbox(request, env = process.env) {
@@ -243,11 +252,20 @@ async function handleOutbox(request, env = process.env) {
         const context = await rpc(config, 'current_identity_context', {}, token);
         if (!context.response.ok || !context.payload || context.payload.ok !== true) return reply(401, { error: 'authenticated_session_required' });
       }
+      let admin = {};
+      if (query.organizationId && token) {
+        const log = await rpc(config, 'email_delivery_log_v2', { p_organization_id: query.organizationId }, token);
+        if (!log.response.ok) return reply(403, { error: 'organization_manage_required' });
+        admin = { messages: log.payload.messages, from: clip(env.EMAIL_FROM || env.FROM_EMAIL, 320), domainStatus: 'NOT_VERIFIED_BY_APPLICATION' };
+      }
       return reply(200, {
+        ...admin,
         ok: true,
-        emailConfigured: !!(env.RESEND_API_KEY && env.FROM_EMAIL),
+        emailConfigured: !!(env.RESEND_API_KEY && (env.EMAIL_FROM || env.FROM_EMAIL)),
         whatsappConfigured: !!(env.WHATSAPP_PROVIDER === 'meta' && env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
         workerConfigured: !!workerSecret,
+        webhookConfigured: !!env.RESEND_WEBHOOK_SECRET,
+        provider: 'Resend',
       });
     }
     if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(String(query.id))) return reply(400, { error: 'invalid_message_id' });
@@ -312,4 +330,4 @@ async function handleOutbox(request, env = process.env) {
   });
 }
 
-module.exports = { handleOutbox, processOutbox, _test: { allowedOrigins, validEmailPayload, statusLabel } };
+module.exports = { handleOutbox, processOutbox, _test: { allowedOrigins, validEmailPayload, statusLabel, deliverEmail } };

@@ -42,7 +42,7 @@ check(/revoke all on function public\.claim_outbox_messages[\s\S]*authenticated/
 console.log('\n[4] client delivery state');
 check(/'Authorization':'Bearer '\+token/.test(app), 'browser sends its access token to the email route');
 check(/emailEventStatus[\s\S]*Queued[\s\S]*Processing/.test(app), 'UI understands queued and processing states');
-check(/purpose:'TASK_ASSIGNMENT'/.test(app) && /purpose:'PAYSLIP'/.test(app) && /purpose:'USER_ADMIN'/.test(app), 'high-risk email actions declare their purpose');
+check(/task_assignment_email_v2/.test(app) && /purpose:'PAYSLIP'/.test(app) && /purpose:'USER_ADMIN'/.test(app), 'task email reuses server events; document and account email declare their purpose');
 
 console.log(`\nResult: ${passed} passed, ${failed} failed.`);
 process.exit(failed ? 1 : 0);

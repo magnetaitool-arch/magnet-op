@@ -1,3 +1,12 @@
+# Phase 4 remaining work
+
+- BLOCKED_EXTERNAL: Supply Resend key and verified EMAIL_FROM, set webhook signing secret, register `/api/resend-webhook`, then verify a real delivered event. No delivery is claimed from queue acceptance.
+- BLOCKED_EXTERNAL: Grant magnetofficial.com repository/backend access; implement the durable website submission/retry worker using WEBSITE_LEAD_INTEGRATION.md. The Magnet OS server secret is configured privately; website deployment is not done.
+- OWNER_ACTION_REQUIRED: Authorize an available unattended worker host/schedule and verify execution; the existing protected outbox endpoint is ready, but no schedule is claimed active.
+- IMPLEMENTATION_REMAINING: Team invitation issue/resend/revoke/expiry/acceptance and provider-native password recovery through the transitional identity bridge. Do not equate templates or the existing invitation table with completed workflows.
+
+Earlier outstanding operational items (not redone in Phase 4):
+
 # Remaining work — Phase 3, 2026-09-27
 
 - **STUDIO_V2_PARTIAL:** Structured builder, ten templates, 21 blocks, client kit, reusable templates, real source bindings, versions/restore, comments/review, scoped links, PDF/PNG and mobile/AR-EN are verified in staging. Remaining: editable/native-app PPTX acceptance; sustained/large-library/throttled-device performance; legacy report/iOS print matrix. Video editing, social publishing and threaded/annotation comments are not supported. See STUDIO_FUNCTIONAL_MATRIX.md. No auth re-login or repeated foundation audit is pending.

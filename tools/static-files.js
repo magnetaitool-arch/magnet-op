@@ -37,6 +37,9 @@ const STATIC_FILES = Object.freeze([
   'modules/auth-entry.js',
   'modules/session-refresh.js',
   'modules/crm-followups.js',
+  'modules/notification-preferences.js',
+  'modules/acquisition-settings.js',
+  'modules/acquisition-metrics.js',
   'modules/proposal-revisions.js',
   'modules/client-onboarding.js',
   'modules/project-briefs.js',
@@ -47,7 +50,11 @@ const STATIC_FILES = Object.freeze([
 ]);
 const SERVER_FILES = Object.freeze([
   'api/intake.js',
+  'api/website-leads.js',
   'api/outbox.js',
+  'api/resend-webhook.js',
+  'server/resend-webhook.js',
+  'server/email-templates.js',
   'api/public-form.js',
   'api/runtime-config.js',
   'api/studio-share-asset.js',

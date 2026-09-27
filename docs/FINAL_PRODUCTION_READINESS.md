@@ -1,3 +1,7 @@
+# Phase 4 update
+
+Notification preferences, centralized delivery, verified webhook adapter, website CRM API/routing/attribution and acquisition metrics are implemented and tested on isolated staging. Full acquisition release is PARTIAL until public website integration, real Resend delivery, unattended worker scheduling and invitation/provider recovery flows are verified. See PHASE4_RELEASE.md and SHIP_STATUS.md. Earlier Studio evidence below is retained as historical evidence.
+
 # Studio V2 update — 2026-09-27
 
 Additive builder migrations are live and reconciled: 60 canonical / 70 production ledger; all 106 original public table counts/full-row fingerprints unchanged. Core builder release gates passed on isolated staging; scoped lint/typecheck, full tests, security and 54-file build pass. Application `2f6203c` is deployed to https://magnet-op.vercel.app; post-deploy asset, authenticated Safari Studio/session and anonymous mobile/AR checks passed. See SHIP_STATUS.md. PPTX remains raster-slide PARTIAL; sustained-load/device and legacy print limits remain explicit in STUDIO_FUNCTIONAL_MATRIX.md. Existing email/social/scheduled-backup owner actions remain unchanged.

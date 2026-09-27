@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 
 const CANDIDATE_FIELDS = ['fullName','age','mobile','otherPhones','email','area','maritalStatus','position','specialization','experience','availableFrom','currentSalary','expectedSalary','workplaces','courses','gameScore','cvLink','notes'];
-const LEAD_FIELDS = ['name','company','email','phone','brand','source','serviceInterest','value','budget','notes','message','campaignId','campaignName'];
+const LEAD_FIELDS = ['name','company','email','phone','brand','source','serviceInterest','value','budget','notes','message','campaignId','campaignName','language','industry','business_stage','current_marketing_setup','budget_range','timeline','website','instagram','facebook','tiktok','project_notes','contact_preference','preferred_contact_time','utm_source','utm_medium','utm_campaign','utm_content','utm_term','landing_page','referrer','fbclid','gclid','ttclid','form_source'];
 let organizationCache = null;
 
 function normalOrigin(value) {
@@ -72,6 +72,19 @@ function sanitizePayload(body) {
   }
   if (body.type === 'lead') {
     const payload = pick(body, LEAD_FIELDS);
+    for (const field of ['goals','services']) {
+      if (body[field] !== undefined) {
+        if (!Array.isArray(body[field]) || body[field].length > 20 || body[field].some(v => typeof v !== 'string' || v.length > 200)) throw new Error('invalid_lead');
+        payload[field] = [...new Set(body[field].map(v => v.trim()).filter(Boolean))];
+      }
+    }
+    for (const field of ['website','instagram','facebook','tiktok','landing_page','referrer']) {
+      if (payload[field]) { try { const url = new URL(payload[field]); if (!['https:','http:'].includes(url.protocol)) throw new Error(); } catch { throw new Error('invalid_lead'); } }
+    }
+    if (payload.language && !['ar','en'].includes(payload.language)) throw new Error('invalid_lead');
+    if (payload.form_source && !['project_matcher','contact','campaign'].includes(payload.form_source)) throw new Error('invalid_lead');
+    if (!payload.serviceInterest && payload.services) payload.serviceInterest = payload.services.join(', ');
+    if (!payload.message && payload.project_notes) payload.message = payload.project_notes;
     if (payload.email) payload.email = clip(payload.email, 320).toLowerCase();
     if (!payload.name && !payload.company) throw new Error('invalid_lead');
     if (!validEmail(payload.email) && !validPhone(payload.phone)) throw new Error('invalid_lead');
@@ -85,7 +98,7 @@ function serviceHeaders(key) {
 }
 
 async function jsonFetch(url, init) {
-  const response = await fetch(url, init);
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(12000) });
   const payload = await response.json().catch(() => ({}));
   return { response, payload };
 }
@@ -146,7 +159,7 @@ async function handlePublicIntake(request, env = process.env) {
   const headers = Object.fromEntries(Object.entries(request.headers || {}).map(([key, value]) => [String(key).toLowerCase(), value]));
   const origin = String(headers.origin || '');
   const cors = responseHeaders(origin, env);
-  const trustedSecret = String(env.PUBLIC_INTAKE_SHARED_SECRET || '');
+  const trustedSecret = String(env.WEBSITE_INTAKE_SECRET || env.PUBLIC_INTAKE_SHARED_SECRET || '');
   const hasTrustedSecret = !!(trustedSecret && headers['x-magnet-intake-secret'] === trustedSecret);
   const originAllowed = !!(normalOrigin(origin) && allowedOrigins(env).has(normalOrigin(origin)));
 
@@ -160,6 +173,7 @@ async function handlePublicIntake(request, env = process.env) {
     try { body = JSON.parse(body || '{}'); } catch (error) { return { status: 400, headers: cors, body: { error: 'invalid_json' } }; }
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { status: 400, headers: cors, body: { error: 'invalid_json' } };
+  if (Buffer.byteLength(JSON.stringify(body)) > 100000) return { status: 413, headers: cors, body: { error: 'payload_too_large' } };
   if (body.company_website || body.hp || body._gotcha) return { status: 200, headers: cors, body: { ok: true, skipped: true } };
 
   let payload;
@@ -179,12 +193,12 @@ async function handlePublicIntake(request, env = process.env) {
 
   try {
     const orgId = await organizationId(base, key, env);
-    const result = await jsonFetch(base + '/rest/v1/rpc/submit_public_intake', {
+    const result = await jsonFetch(base + (request.websiteIntegration ? '/rest/v1/rpc/submit_website_lead_v2' : '/rest/v1/rpc/submit_public_intake'), {
       method: 'POST',
       headers: serviceHeaders(key),
       body: JSON.stringify({
         p_organization_id: orgId,
-        p_intake_kind: body.type,
+        ...(request.websiteIntegration ? {} : { p_intake_kind: body.type }),
         p_payload: payload,
         p_idempotency_key: idempotencyKey,
         p_request_hash: requestHash,
@@ -197,7 +211,7 @@ async function handlePublicIntake(request, env = process.env) {
     }
     let deliveryAttempted = 0;
     try {
-      deliveryAttempted = await attemptQueuedDeliveries(base, key, env, orgId, result.payload && result.payload.id);
+      if (!request.websiteIntegration) deliveryAttempted = await attemptQueuedDeliveries(base, key, env, orgId, result.payload && result.payload.id);
     } catch (error) {
       // The canonical intake is already committed. A pending outbox row remains
       // durable and can be retried by the worker without duplicating the intake.

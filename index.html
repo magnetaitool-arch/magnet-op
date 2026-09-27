@@ -1435,6 +1435,9 @@ body.theme-light .tbl thead th{background:#fff}
 <script src="/api/runtime-config"></script>
 <script src="/modules/auth-entry.js?v=a41967ed3945bb79"></script>
 <script src="/modules/session-refresh.js?v=fa10e2c60a01f1c1"></script>
+<script src="/modules/acquisition-metrics.js?v=2e4310edce5aa8c4"></script>
+<script src="/modules/acquisition-settings.js?v=a32707781f95e4e5"></script>
+<script src="/modules/notification-preferences.js?v=352a2f6f20f40d5c"></script>
 <script src="/modules/crm-followups.js?v=852a97e023ff2ab1"></script>
 <script src="/modules/proposal-revisions.js?v=c53cd78498abc5aa"></script>
 <script src="/modules/task-dependencies.js?v=55f0cc4cf973b26c"></script>
@@ -4831,7 +4834,7 @@ async function getEmailStatus(id){
   const data=await emailAPIGet('id='+encodeURIComponent(id));
   return Object.assign({},data,{status:emailEventStatus(data.last_event||data.status)});
 }
-async function getEmailHealth(){ return emailAPIGet(''); }
+async function getEmailHealth(){ return emailAPIGet('health=1&organizationId='+encodeURIComponent(tenantOrganizationId())); }
 function taskAssignmentEmailHTML(task, emp, db){
   const project=byId((db&&db.projects)||[],task&&task.projectId)||{};
   const client=byId((db&&db.clients)||[],task&&task.clientId)||{};
@@ -6237,14 +6240,15 @@ function NotificationCenterView({ ctx }){
     <${Head} eyebrow=${arr?'التشغيل':'Operations'} title=${t('Notifications')} desc=${arr?'كل اللي بيحصل في الفريق — لايف.':'Everything happening across your team — live.'}>
       ${unreadCount>0&&html`<button class="btn btn-ghost" onClick=${markAll}>${t('Mark all read')}</button>`}
     <//>
+    <${NotificationPreferences} rpc=${ctx.rpc} organizationId=${ctx.user.organizationId||activeOrganizationId()} lang=${ctx.lang}/>
     <div class="seg" style=${{marginBottom:16}}>
-      ${[['all',arr?'الكل':'All'],['unread',(arr?'غير المقروء':'Unread')+(unreadCount>0?(' ('+unreadCount+')'):'')],['mine',arr?'الخاصة بيا':'Mine']].map(([k,l])=>html`<button key=${k} class=${tab===k?'on':''} onClick=${()=>setTab(k)}>${l}</button>`)}
+      ${[['all',arr?'الكل':'All'],['unread',(arr?'غير المقروء':'Unread')+(unreadCount>0?(' ('+unreadCount+')'):'')]].map(([k,l])=>html`<button key=${k} class=${tab===k?'on':''} onClick=${()=>setTab(k)}>${l}</button>`)}
     </div>
     ${list.length===0?html`<${EmptyState} title=${t('No notifications')} text=${arr?'مفيش جديد — انت متابع كل حاجة.':"You're all caught up."} icon="bell"/>`:
-    html`<div class="notif-list">${list.map(n=>html`<div class="notif-card ${n.read?'':'unread'}" key=${n.id}
+    html`<div class="notif-list">${list.map(n=>html`<div tabIndex="0" role="button" onKeyDown=${e=>{if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.currentTarget.click();}}} class="notif-card ${n.read?'':'unread'}" key=${n.id}
         onClick=${()=>{ if(!n.read) markOne(n.id); if(canonical&&(n.route||n.entityType))ctx.openEntity(n.route||n.entityType,n.entityId);else if(n.entityType&&canView(n.entityType,role)) ctx.go(n.entityType); }}>
       <span class="nc-dot ${n.read?'':'on'}"></span>
-      <div class="nc-body"><b>${t(n.title)}</b><span>${n.message||''}</span><i>${fmtDateTime(n.createdAt)}${n.role?(' · '+n.role):''}</i></div>
+      <div class="nc-body"><b>${t(n.title)}</b><span>${n.message||''}</span><i>${n.type||'INFO'} · ${n.severity||'INFO'} · ${fmtDateTime(n.createdAt)}${n.role?(' · '+n.role):''}</i></div>
       ${!n.read&&html`<button class="mini" onClick=${e=>{e.stopPropagation();markOne(n.id);}}>${arr?'تمت القراءة':'Mark read'}</button>`}
     </div>`)}</div>`}
   </div>`;
@@ -7410,14 +7414,7 @@ function App(){
     const rec = { id:uid('nt'), userId:isRole?null:userIdOrRole, role:isRole?userIdOrRole:null, title, message, entityType, entityId, read:false, createdAt:nowISO() };
     setDb(d=>({...d, notifications:[rec, ...(d.notifications||[])].slice(0,300)}));
     cloudUpsert(cfg.current,'notifications',rec);
-    // Optional email to a specific recipient (off unless enabled in Settings → Email).
-    if(!isRole && appSettings.emailNotifications && !(entityType==='tasks'&&title==='New task assigned')){
-      try {
-        const u=(AUTH.loadUsers()||[]).find(x=>x.id===userIdOrRole) || (db.employees||[]).find(e=>e.id===userIdOrRole) || {};
-        const to=u.email||u.loginEmail;
-        if(to) sendEmail({ purpose:'NOTIFICATION', to, subject:'['+(brand||'Magnet OS')+'] '+title, text:title+'\n\n'+(message||'')+'\n\n'+location.origin }).catch(()=>{});
-      } catch(e){}
-    }
+    // Canonical notification projection queues preference-aware email server-side.
   };
   // Upsert a record by its existing id (replace locally + merge in cloud).
   const upsertRecord = (coll, rec) => {
@@ -7572,51 +7569,21 @@ function App(){
   };
   const sendTaskAssignmentEmail = async (task, force) => {
     const current=(task&&task.id&&byId(db.tasks,task.id))||task||{};
-    const emp=(db.employees||[]).find(e=>e.id===current.assignedTo||e.name===current.assignedTo||e.fullName===current.assignedTo);
-    if(!current.id||!current.assignedTo) return {ok:false,status:'Unassigned'};
-    if(!force && !appSettings.emailNotifications){
-      updateRecord('tasks',current.id,{assignmentEmailStatus:'Disabled',assignmentEmailError:'Email notifications are disabled'});
-      return {ok:false,status:'Disabled'};
-    }
-    const to=emp&&(emp.email||emp.loginEmail);
-    if(!to){
-      const msg=lang==='ar'?'الموظف مفيش إيميل مسجل في ملفه.':'The employee has no email in their profile.';
-      updateRecord('tasks',current.id,{assignmentEmailStatus:'Missing email',assignmentEmailTo:'',assignmentEmailError:msg,assignmentEmailAt:nowISO()});
-      if(force) alert(msg);
-      return {ok:false,status:'Missing email',error:msg};
-    }
-    updateRecord('tasks',current.id,{assignmentEmailStatus:'Sending',assignmentEmailTo:to,assignmentEmailError:''});
-    try{
-      const key=(('task-assigned/'+current.id+'/'+String(current.assignedTo))+(force?('/retry-'+Date.now()):'')).replace(/[^A-Za-z0-9_./:-]/g,'-').slice(0,256);
-      const sent=await sendEmail({purpose:'TASK_ASSIGNMENT',to,subject:'[Magnet OS] New task: '+(current.title||current.name||''),html:taskAssignmentEmailHTML(current,emp,db),idempotencyKey:key});
-      const result={ok:true,id:sent&&sent.id,to,status:(sent&&sent.status)||'Queued',at:nowISO(),error:(sent&&sent.error)||''};
-      updateRecord('tasks',current.id,{assignmentEmailStatus:result.status,assignmentEmailId:result.id||'',assignmentEmailTo:to,assignmentEmailAt:result.at,assignmentEmailError:''});
-      if(force) showProPopup('syncSuccess',(lang==='ar'?'الإيميل اتقبل للإرسال إلى ':'Email accepted for delivery to ')+to);
+    try {
+      let result=await workspaceRpc(cfg.current,'task_assignment_email_v2',{p_organization_id:tenantOrganizationId(),p_legacy_record_id:current.id});
+      if(force&&result.id&&result.status==='FAILED'){
+        const response=await fetch('/api/outbox',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+sbAccessToken()},body:JSON.stringify({action:'retry',id:result.id})});
+        result=await response.json();if(!response.ok)throw new Error(result.error||'retry_not_allowed');
+      }
+      if(result.id)updateRecord('tasks',current.id,{assignmentEmailStatus:result.status,assignmentEmailId:result.id,assignmentEmailError:result.error||''});
+      if(force)alert((lang==='ar'?'حالة البريد: ':'Email status: ')+result.status+(result.error?' · '+result.error:''));
       return result;
-    }catch(err){
-      const message=String((err&&err.message)||err||'Email failed');
-      updateRecord('tasks',current.id,{assignmentEmailStatus:'Failed',assignmentEmailTo:to,assignmentEmailAt:nowISO(),assignmentEmailError:message});
-      addNotification('Project Manager','Task email failed',(current.title||current.name||'Task')+' · '+to+' · '+message,'tasks',current.id);
-      if(force) alert((lang==='ar'?'فشل إرسال إيميل التاسك: ':'Task email failed: ')+message);
-      return {ok:false,status:'Failed',error:message};
-    }
+    }catch(err){if(force)alert(String(err.message||err));return {ok:false,error:String(err.message||err)};}
   };
   const checkTaskAssignmentEmail = async (task, showResult) => {
-    const current=(task&&task.id&&byId(db.tasks,task.id))||task||{};
-    if(!current.assignmentEmailId){
-      const msg=lang==='ar'?'مفيش رقم تتبّع للإيميل — اعمل إعادة إرسال.':'No provider tracking id — retry the email.';
-      if(showResult!==false) alert(msg); return {ok:false,error:msg};
-    }
-    try{
-      const result=await getEmailStatus(current.assignmentEmailId);
-      updateRecord('tasks',current.id,{assignmentEmailStatus:result.status,assignmentEmailCheckedAt:nowISO(),assignmentEmailError:''});
-      if(showResult!==false) showProPopup('syncSuccess',(lang==='ar'?'حالة الإيميل: ':'Email status: ')+result.status);
-      return result;
-    }catch(err){
-      const message=String((err&&err.message)||err||'Status check failed');
-      updateRecord('tasks',current.id,{assignmentEmailError:message,assignmentEmailCheckedAt:nowISO()});
-      if(showResult!==false) alert(message); return {ok:false,error:message};
-    }
+    const result=await sendTaskAssignmentEmail(task,false);
+    if(showResult!==false)alert((lang==='ar'?'حالة البريد: ':'Email status: ')+(result.status||result.error));
+    return result;
   };
   const deleteRecord = (coll, id) => {
     // Defense in depth: protected finance collections (invoices/payments) may only be
@@ -8691,6 +8658,8 @@ function LeadProfileModal({ctx,detail,canEdit,busy,error,onClose,onStage,onNote,
       <div class="rec-profile-actions">${lead.email&&html`<a class="mini" href=${'mailto:'+lead.email}>${React.createElement(Icon.mail)} ${L('Email','إيميل')}</a>`}${lead.phone&&html`<a class="mini" href=${'tel:'+lead.phone}>${L('Call','اتصال')}</a>`}${crmWhatsapp(lead.phone)&&html`<a class="mini" href=${crmWhatsapp(lead.phone)} target="_blank" rel="noopener">WhatsApp</a>`}${canEdit&&html`<button class="btn btn-ghost" onClick=${onEdit}>${L('Edit','تعديل')}</button>`}<button class="icon-btn" onClick=${onClose}><span style=${{fontSize:18}}>×</span></button></div>
     </div>
     <div class="crm-action-strip"><div><span>${L('Stage','المرحلة')}</span><select class="sel" disabled=${!canEdit||busy} value=${lead.stage} onChange=${e=>onStage(e.target.value)}>${CRM_STAGES.map(s=>html`<option key=${s}>${s}</option>`)}</select></div><div><span>${L('Estimated value','القيمة المتوقعة')}</span><b>${money(lead.value||0)}</b></div><div><span>${L('Requested service','الخدمة المطلوبة')}</span><b>${lead.serviceInterest||'—'}</b></div>${canEdit&&lead.stage==='Won'&&html`<button class="btn btn-pri" disabled=${busy} onClick=${onConvert}>${L('Create client','تحويل لعميل')}</button>`}</div>
+    ${payload.duplicateReviewRequired&&html`<p role="alert" class="rec-error">${L('Possible duplicate identity: review the separate website submission before merging or converting.','هوية متكررة محتملة: راجع طلب الموقع المستقل قبل الدمج أو التحويل.')}</p>`}
+    <div class="grid g-3" style=${{padding:16}}>${[['Source / المصدر',payload.utm_source||lead.source],['Medium / الوسيط',payload.utm_medium],['Campaign / الحملة',payload.utm_campaign],['Language / اللغة',payload.language],['Qualification / التصنيف',payload.qualification],['Assigned owner / المسؤول',((ctx.db.employees||[]).find(e=>e.id===lead.ownerId)||{}).name||((ctx.db.employees||[]).find(e=>e.id===lead.ownerId)||{}).fullName||(payload.assignedAuthUserId?L('Assigned sales member','عضو مبيعات مكلّف'):L('Unassigned','غير مسند'))],['Landing page / صفحة الوصول',payload.landing_page]].map(([label,value])=>html`<div key=${label}><small>${label}</small><p style=${{overflowWrap:'anywhere'}}>${value||'—'}</p></div>`)}</div>
     ${error&&html`<div class="rec-error">${error}</div>`}
     <div class="rec-tabs">${tabs.map(name=>html`<button key=${name} class=${tab===name?'on':''} onClick=${()=>setTab(name)}>${ar?labels[name]:name}</button>`)}</div>
     ${tab==='Overview'&&html`<div class="rec-section"><h4>${L('Lead overview','ملخص العميل المحتمل')}</h4><div class="rec-facts"><${RecFact} label=${L('Name','الاسم')} value=${lead.name}/><${RecFact} label=${L('Company','الشركة')} value=${lead.company}/><${RecFact} label=${L('Phone','الموبايل')} value=${lead.phone}/><${RecFact} label=${L('Email','الإيميل')} value=${lead.email}/><${RecFact} label=${L('Service','الخدمة')} value=${lead.serviceInterest}/><${RecFact} label=${L('Submitted','وقت الإرسال')} value=${fmtDateTime(lead.submittedAt)}/></div>${lead.message&&html`<div class="crm-message"><span>${L('Message','الرسالة')}</span><p>${lead.message}</p></div>`}</div>`}
@@ -8703,6 +8672,7 @@ function LeadProfileModal({ctx,detail,canEdit,busy,error,onClose,onStage,onNote,
   </div></div></div>`;
 }
 
+const AcquisitionMetrics=window.MagnetAcquisitionMetrics.createAcquisitionMetrics(React,html);
 function SalesPipelineView({ctx,leads,canEdit}){
   const ar=ctx.lang==='ar';const L=(en,ara)=>ar?ara:en;const organizationId=ctx.user&&ctx.user.organizationId||activeOrganizationId();
   const [crmView,setCrmView]=useState('pipeline');
@@ -8720,6 +8690,7 @@ function SalesPipelineView({ctx,leads,canEdit}){
   const convertLead=async()=>{if(!profile||!profile.lead||profileBusy)return;setProfileBusy(true);setProfileError('');try{const legacy=Object.assign({},profile.lead.payload||{},{id:profile.lead.legacyRecordId});await ctx.convertLead(legacy,profile.lead.version);closeProfile();}catch(e){const code=String(e.message||'');setProfileError(/review_required/.test(code)?L('This relationship needs review. No conversion was saved.','هذا الربط يحتاج مراجعة. لم يتم حفظ التحويل.'):/version_conflict/.test(code)?L('This lead changed. Close and reopen it before converting.','تم تعديل هذا العميل المحتمل. أغلقه وأعد فتحه قبل التحويل.'):L('Conversion could not be confirmed. Retry safely; if this environment has not been upgraded, contact your administrator.','تعذّر تأكيد التحويل. يمكنك إعادة المحاولة بأمان؛ إذا لم تتم ترقية البيئة، تواصل مع مسؤول النظام.'));}finally{setProfileBusy(false);}};
   const items=Array.isArray(result.items)?result.items:[],counts=result.counts||{};const sources=['Website','Referral','Instagram','Ads','Cold','Event','Manual'];
   return html`<div class="view rec-shell crm-v2-shell"><${Head} eyebrow="SALES / CRM" title=${L('Leads & Pipeline','العملاء المحتملون')} desc=${L('Track leads, conversations, and sales stages.','تابع العملاء المحتملين والمحادثات ومراحل البيع.')}>${canEdit&&html`<button class="btn btn-pri" disabled=${loading||!!error} onClick=${()=>ctx.openModal('leads',{status:'New Lead',brand:'Magnet',source:'Manual'})}>${React.createElement(Icon.plus)} ${L('New lead','Lead جديد')}</button>`}<//>
+    <${AcquisitionMetrics} rpc=${ctx.rpc} organizationId=${organizationId} lang=${ctx.lang}/>
     <div class="rec-tabs"><button class=${crmView==='pipeline'?'on':''} onClick=${()=>setCrmView('pipeline')}>${L('Pipeline','مسار المبيعات')}</button><button class=${crmView==='followups'?'on':''} onClick=${()=>setCrmView('followups')}>${L('Follow-ups','المتابعات')}</button></div>
     ${crmView==='followups'&&html`<${FollowupQueue} refreshKey=${profile?'open':'closed'} rpc=${ctx.rpc} organizationId=${organizationId} lang=${ctx.lang} onOpen=${openLead}/>`}
     ${crmView==='pipeline'&&html`    <div class="crm-stages"><button class="rec-stage-tab ${stage===''?'on':''}" onClick=${()=>{setStage('');setPage(1);}}><b>${loading||error?'—':Number(result.total)||0}</b><span>${L('All leads','كل الـLeads')}</span></button>${CRM_STAGES.map(s=>html`<button key=${s} class="rec-stage-tab ${stage===s?'on':''}" onClick=${()=>{setStage(s);setPage(1);}}><b>${loading||error?'—':Number(counts[s])||0}</b><span>${s}</span></button>`)}</div>
@@ -9495,6 +9466,7 @@ function DashboardView({ ctx, byBrand }){
       ${aliasRole(role)==='Admin'&&fin&&html`<${KPI} label="Payroll due" value=${money(payrollDue)} icon="wallet"/>`}
       ${aliasRole(role)==='Admin'&&html`<${KPI} label="Avg. performance" value=${avgPerf} icon="trend"/>`}
     </div>
+    ${(ctx.user.capabilities||[]).includes('clients.read')&&html`<${AcquisitionMetrics} rpc=${ctx.rpc} organizationId=${ctx.user.organizationId||activeOrganizationId()} lang=${ctx.lang}/>`}
     <${Panel} title="Daily War Room" sub="What needs action today" className="mb18">
       <div class="war-grid">
         <div class="war-card"><h4>Pending approvals</h4>
@@ -10823,6 +10795,8 @@ function SOPView(){
       <p class="muted" style=${{fontSize:12,marginTop:6,lineHeight:1.5}}>Documented process & checklist.</p></div>`)}</div></div>`;
 }
 
+const AcquisitionSettings=window.MagnetAcquisitionSettings.createAcquisitionSettings(React,html);
+const NotificationPreferences=window.MagnetNotificationPreferences.createNotificationPreferences(React,html);
 function SettingsView({ ctx, x }){
   const { cfg, cloudOn, db } = ctx;
   const [url,setUrl]=useState((cfg&&cfg.url)||'');
@@ -10918,28 +10892,25 @@ function SettingsView({ ctx, x }){
         </div></div>`)}
     <//>
 
+    ${(ctx.user.capabilities||[]).includes('clients.manage')&&html`<${AcquisitionSettings} rpc=${ctx.rpc} organizationId=${ctx.user.organizationId||activeOrganizationId()} lang=${ctx.lang}/>`}
+    <${NotificationPreferences} rpc=${ctx.rpc} organizationId=${ctx.user.organizationId||activeOrganizationId()} lang=${ctx.lang}/>
     <${Panel} title=${ctx.lang==='ar'?'الإيميل (الإشعارات والمستندات)':'Email (notifications & documents)'} className="mb18">
       <p class="muted" style=${{fontSize:12.5,lineHeight:1.6,marginBottom:12}}>${ctx.lang==='ar'
-        ?'الإرسال يتم عبر خدمة Resend من خلال دالة Vercel. أضف RESEND_API_KEY (و FROM_EMAIL اختياريًا) في Environment Variables على Vercel ثم أعد النشر. لإرسال لكل الفريق فعّل دومين في resend.com/domains.'
-        :'Email is sent via Resend through a Vercel Function. Add RESEND_API_KEY (and optionally FROM_EMAIL) in your Vercel Environment Variables, then redeploy. To email anyone, verify a domain at resend.com/domains.'}</p>
-      <label class="flex center gap8" style=${{fontSize:13,cursor:'pointer',marginBottom:12}}>
-        <input type="checkbox" checked=${!!ctx.appSettings.emailNotifications} onChange=${e=>ctx.applyAppSettings({emailNotifications:e.target.checked})}/>
-        <span>${ctx.lang==='ar'?'إرسال إشعارات بالبريد عند إسناد المهام والموافقات':'Email team members on task assignments & approvals'}</span></label>
+        ?'الإرسال يتم عبر خدمة Resend من خلال دالة Vercel. أضف RESEND_API_KEY و EMAIL_FROM في Environment Variables على Vercel ثم أعد النشر. لإرسال لكل الفريق فعّل دومين في resend.com/domains.'
+        :'Email is sent via Resend through a Vercel Function. Add RESEND_API_KEY and EMAIL_FROM in your Vercel Environment Variables, then redeploy. To email anyone, verify a domain at resend.com/domains.'}</p>
+
       <div class="flex gap8" style=${{alignItems:'center',flexWrap:'wrap',marginBottom:12}}>
         <button class="mini" onClick=${async()=>{ setEmailHealth({loading:true}); try{setEmailHealth(await getEmailHealth());}catch(err){setEmailHealth({ok:false,error:String((err&&err.message)||err)});} }}>${ctx.lang==='ar'?'فحص إعداد البريد':'Check email setup'}</button>
         ${emailHealth&&emailHealth.loading?html`<span class="muted" style=${{fontSize:12}}>${ctx.lang==='ar'?'جاري الفحص…':'Checking…'}</span>`:''}
-        ${emailHealth&&emailHealth.ok?html`<${Tag} type=${emailHealth.senderMode==='custom'?'ok':'warn'}>${emailHealth.senderMode==='custom'?(ctx.lang==='ar'?'دومين إرسال مفعّل':'Verified/custom sender'):(ctx.lang==='ar'?'وضع اختبار Resend':'Resend test sender')}<//>`:''}
-        ${emailHealth&&emailHealth.error?html`<span style=${{fontSize:12,color:'var(--neg)'}}>${emailHealth.error}</span>`:''}
+        ${emailHealth&&emailHealth.ok?html`<span>${emailHealth.provider} · ${emailHealth.emailConfigured?(ctx.lang==='ar'?'الإعداد موجود — التسليم غير مؤكد':'Configured — delivery not yet verified'):(ctx.lang==='ar'?'يحتاج إعداد مزوّد البريد':'Provider configuration missing')}</span>`:''}
+        ${emailHealth&&emailHealth.error?html`<span role="alert">${emailHealth.error}</span>`:''}
       </div>
-      ${emailHealth&&emailHealth.ok&&emailHealth.senderMode==='test'?html`<div style=${{padding:10,border:'1px solid var(--warn)',borderRadius:8,color:'var(--warn)',fontSize:12,lineHeight:1.6,marginBottom:12}}>${ctx.lang==='ar'
-        ?'تحذير: onboarding@resend.dev يرسل فقط لإيميل مالك حساب Resend. عشان كل الموظفين يستلموا، فعّل دومين شركتك في Resend واضبط FROM_EMAIL ثم أعد النشر.'
-        :'Warning: onboarding@resend.dev only sends to the Resend account owner. Verify your company domain, set FROM_EMAIL, then redeploy before emailing staff.'}</div>`:''}
-      <div class="muted" style=${{fontSize:11.5,marginBottom:12}}>${ctx.lang==='ar'?'إيميلات تالفة/مرتدة مسجلة: ':'Recorded failed/bounced emails: '}${(db.tasks||[]).filter(v=>['Failed','Bounced','Complained'].includes(v.assignmentEmailStatus)).length+(db.employeePayments||[]).filter(v=>['Failed','Bounced','Complained'].includes(v.payslipEmailStatus)).length}</div>
+      ${emailHealth&&emailHealth.ok&&html`<p class="muted">${emailHealth.from||'—'} · Webhook: ${emailHealth.webhookConfigured?'Configured':'Missing'} · Worker: ${emailHealth.workerConfigured?'Configured':'Missing'}</p><div style=${{overflowX:'auto'}}><table class="table"><thead><tr><th>Event</th><th>Status</th><th>Attempts</th><th>Time</th><th>Error</th></tr></thead><tbody>${(emailHealth.messages||[]).map(m=>html`<tr key=${m.id}><td>${m.event_type||m.kind}</td><td>${m.status}</td><td>${m.attempt_count}</td><td>${fmtDateTime(m.created_at)}</td><td>${m.last_error_category||'—'}</td></tr>`)}</tbody></table></div>`}
       <div class="flex gap8" style=${{flexWrap:'wrap',alignItems:'flex-end'}}>
         <label class="fld" style=${{minWidth:240}}><span>${ctx.lang==='ar'?'إيميل لاختبار الإرسال':'Send a test email to'}</span>
           <input value=${email} placeholder="you@example.com" onChange=${e=>setEmail(e.target.value)}/></label>
         <button class="btn btn-ghost" onClick=${async()=>{ if(!email){alert('Enter an email first.');return;}
-          try{ await sendEmail({purpose:'SYSTEM_TEST',to:email,subject:'Magnet OS — test email',text:'This is a test from your Magnet OS deployment. If you got this, email is working.'}); showProPopup('syncSuccess','Test email sent to '+email); }
+          try{ const result=await sendEmail({purpose:'SYSTEM_TEST',to:email,idempotencyKey:'system-test/'+crypto.randomUUID(),subject:'Magnet OS — test email',text:'This is a test from your Magnet OS deployment.'}); alert((ctx.lang==='ar'?'حالة البريد: ':'Email status: ')+result.status+(result.error?' · '+result.error:''));setEmailHealth(await getEmailHealth()); }
           catch(err){ alert('Test failed: '+err.message+'\n\nCheck that RESEND_API_KEY is set in Vercel and you redeployed.'); } }}>${ctx.lang==='ar'?'إرسال اختبار':'Send test'}</button>
       </div>
     <//>

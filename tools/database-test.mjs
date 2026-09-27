@@ -1,3 +1,5 @@
+import { verifyWebsiteAcquisition } from './website-acquisition-database-test.mjs';
+import { verifyNotificationDelivery } from './notification-delivery-database-test.mjs';
 import { verifyStudioBuilder } from './studio-builder-database-test.mjs';
 import { verifyGameIdentity } from './game-identity-database-test.mjs';
 import { verifyLegacyReview } from './legacy-review-database-test.mjs';
@@ -433,6 +435,8 @@ try {
     asRole,
     connect: () => database.getPgClient('postgres', '127.0.0.1'),
   });
+  await verifyNotificationDelivery({client,orgA,orgB,user,asRole});
+  await verifyWebsiteAcquisition({client,orgA,orgB,user,asRole});
   await verifyFollowups({
     client,
     orgA,

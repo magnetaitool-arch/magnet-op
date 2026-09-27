@@ -1,17 +1,10 @@
-# SHIP STATUS
-
-DEPLOYED: YES — https://magnet-op.vercel.app
-COMMIT: 2f6203c (application).
+DEPLOYED: Existing Studio release live; Phase 4 release in progress.
+COMMIT: Pending Phase 4 checkpoint (previous app: 2f6203c; docs: 57e5234).
 BRANCH: codex/magnet-os-v2-staging
-DEPLOYMENT TARGET: Existing Vercel project magnet-op; magnet-9jhmjwd0d-magnetaitool-archs-projects.vercel.app; dpl_AqCNChFxzckQXFxfx6noBMBTXejT. Primary alias verified.
-BUILD STATUS: PASS — full tests, lint, typecheck, security, 60-migration isolated suite, targeted browser/export/storage checks, 54-file build. Config: 0 failures; 2 existing email warnings. Live: 13 artifact hashes match; Safari owner/session/Studio/AR-EN and anonymous mobile login pass; invalid share denied.
-DATABASE STATUS: SAFE — three additive migrations committed; all 106 original public table counts/full-row fingerprints unchanged. Full encrypted native database/storage backup validated; no production business data rewritten.
-MIGRATIONS PENDING: NONE — canonical 60 / production ledger 70.
-BLOCKED_EXTERNAL: Scheduled backup workflow/secret authorization; email/social credentials and provider approval.
-CRITICAL KNOWN ISSUES: No known broken critical builder workflow in tested scope. Overall PARTIAL: raster-slide PPTX, sustained/throttled-device load and legacy/iOS print coverage. Details: STUDIO_FUNCTIONAL_MATRIX.md.
-NEXT 5 ACTIONS:
-1. Complete remaining legacy/iOS print coverage when that environment is available.
-2. Validate editable PPTX separately if required; current exported slides are raster images.
-3. Benchmark representative large libraries and throttled physical devices.
-4. Review ambiguous legacy cases using owner decisions only.
-5. Authorize scheduled backup workflow/secret delivery and verify a scheduled recovery point.
+DEPLOYMENT TARGET: https://magnet-op.vercel.app (existing Vercel project)
+BUILD STATUS: PASS — scoped lint/typecheck, full tests, security, 65 isolated migrations, targeted server tests and allowlisted build.
+DATABASE STATUS: New full encrypted backup verified; independent staging migrations/reconciliation and actual HTTP lead lifecycle PASS. Production migration PASS: 110 original tables preserved (original columns compared), storage private, ledger 75.
+MIGRATIONS PENDING: NONE for this release; five additive migrations applied.
+BLOCKED_EXTERNAL: Resend key/verified sender/webhook registration; magnetofficial.com repository/backend access; verified unattended email worker schedule.
+CRITICAL KNOWN ISSUES: Full Phase 4 is not complete: team invitations and provider-native recovery remain unimplemented; real website and email delivery are not verified. Existing authentication remains unchanged.
+NEXT 5 ACTIONS: Complete production reconciliation/deploy; configure Resend and verify real delivery/webhook; connect the website durable submission worker; authorize/verify unattended outbox scheduling; implement/test invitation and provider-recovery flows against the existing identity bridge.
