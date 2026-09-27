@@ -30,7 +30,8 @@ function createStudioWorkspace(React, html) {
       current = useRef({}),
       lock = useRef(false),
       pending = useRef(null),
-      generation = useRef(0);
+      generation = useRef(0),
+      edits = useRef(0);
     current.current = { ctx, detail, editor, task, kind, file, campaign, brief };
     const errorText = L(
       'Not confirmed. Check your connection and permissions. For a version conflict, reopen the document before editing.',
@@ -81,10 +82,27 @@ function createStudioWorkspace(React, html) {
     useEffect(() => {
       post({ type: 'LANG', lang: ctx.lang });
     }, [ctx.lang]);
+    useEffect(() => {
+      const guard = (event) => {
+        if (
+          (dirty || lock.current) &&
+          !window.confirm(
+            L(
+              'Leave Studio with unsaved work? Keep this page open to save it.',
+              'مغادرة ستوديو مع عمل غير محفوظ؟ ابقَ في الصفحة لحفظه.',
+            ),
+          )
+        )
+          event.preventDefault();
+      };
+      window.addEventListener('magnet:before-navigate', guard);
+      return () => window.removeEventListener('magnet:before-navigate', guard);
+    }, [dirty, ctx.lang]);
     const run = async (action, payload) => {
       if (lock.current) return;
       const c = current.current,
         g = generation.current,
+        edit = edits.current,
         d = c.detail?.document;
       if (!c.editor && !d) return;
       const args = {
@@ -114,9 +132,9 @@ function createStudioWorkspace(React, html) {
         setEditor((previous) =>
           previous ? { ...previous, revision: out.document.revision } : previous,
         );
-        setDirty(false);
+        if (edit === edits.current) setDirty(false);
         pending.current = null;
-        post({ type: 'SAVED' });
+        post({ type: 'SAVED', payload: action === 'SAVE' ? payload : null });
         post({ type: 'LOCK', readOnly: !['DRAFT', 'REVISION'].includes(out.document.status) });
         await load();
       } catch {
@@ -137,7 +155,10 @@ function createStudioWorkspace(React, html) {
           event.data?.channel !== 'magnet-studio'
         )
           return;
-        if (event.data.type === 'DIRTY') setDirty(true);
+        if (event.data.type === 'DIRTY') {
+          edits.current++;
+          setDirty(true);
+        }
         if (event.data.type === 'READY') initialize();
         if (event.data.type === 'SAVE') run('SAVE', event.data.payload);
       };
@@ -235,7 +256,11 @@ function createStudioWorkspace(React, html) {
               class="inp"
               value=${task}
               disabled=${busy}
-              onChange=${(e) => setTask(e.target.value)}
+              onChange=${(e) => {
+                setTask(e.target.value);
+                setCampaign('');
+                setBrief('');
+              }}
             >
               <option value="">${L('Choose assigned work', 'اختر المهمة')}</option>
               ${list.tasks.map((t) => html`<option value=${t.id}>${t.client} / ${t.project} / ${t.title}</option>`)}
@@ -312,7 +337,7 @@ function createStudioWorkspace(React, html) {
             >${L('Linked task file', 'ملف مرتبط بالمهمة')}<select
               class="inp"
               value=${file}
-              disabled=${busy || !['DRAFT', 'REVISION'].includes(detail.document.status)}
+              disabled=${busy || editor?.revision !== detail.document.revision || !['DRAFT', 'REVISION'].includes(detail.document.status)}
               onChange=${(e) => {
                 setFile(e.target.value);
                 setDirty(true);
@@ -325,7 +350,7 @@ function createStudioWorkspace(React, html) {
           >
           <details>
             <summary>${L('Version and review history', 'سجل النسخ والمراجعة')}</summary>
-            ${detail.versions.map((v) => html`<button class="btn" onClick=${() => setEditor({ id: detail.document.id, kind: detail.document.kind, revision: v.revision, payload: v.payload, readOnly: true, nonce: crypto.randomUUID() })}>${L('View version', 'عرض نسخة')} ${v.revision}</button>`)}${detail.events.map((e) => html`<p>${statusLabel(e.action)} · v${e.revision} ${e.comment || ''}</p>`)}
+            ${detail.versions.map((v) => html`<button class="btn" disabled=${busy || dirty} onClick=${() => setEditor({ id: detail.document.id, kind: detail.document.kind, revision: v.revision, payload: v.payload, readOnly: true, nonce: crypto.randomUUID() })}>${L('View version', 'عرض نسخة')} ${v.revision}</button>`)}${detail.events.map((e) => html`<p>${statusLabel(e.action)} · v${e.revision} ${e.comment || ''}</p>`)}
           </details>
         </div>`
       }

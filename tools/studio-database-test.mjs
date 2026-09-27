@@ -131,6 +131,57 @@ export async function verifyStudio({
       (await client.query('select get_studio_v2($1,$2) result', [orgA, id])).rows[0].result.ok,
       true,
     );
+    await client.query('set local role postgres');
+    const hadClientRead = (
+      await client.query(
+        "delete from role_capabilities where role_id=$1 and capability_id=(select id from capabilities where key='clients.read') returning capability_id",
+        [role],
+      )
+    ).rows;
+    const campaign = 'studio-campaign-' + randomUUID();
+    const unrelated = 'studio-campaign-' + randomUUID();
+    await client.query(
+      "insert into records(id,coll,organization_id,data) values($1,'campaigns',$3,$4),($2,'campaigns',$3,$5)",
+      [
+        campaign,
+        unrelated,
+        orgA,
+        { name: 'Assigned campaign', clientId: clientRecord },
+        { name: 'Unrelated campaign', clientId: 'not-this-client' },
+      ],
+    );
+    await client.query('set local role authenticated');
+    assert.equal(
+      (await client.query("select has_org_capability($1,'clients.read') allowed", [orgA])).rows[0]
+        .allowed,
+      false,
+    );
+    const campaigns = (await client.query('select list_studio_v2($1) result', [orgA])).rows[0]
+      .result.campaigns;
+    assert.ok(campaigns.some((c) => c.id === campaign));
+    assert.ok(!campaigns.some((c) => c.id === unrelated));
+    const saveCampaign = (campaignId) =>
+      client.query(
+        "select studio_command_v2($1,$2,$3,'report',$4,0,'SAVE',$5,null,null,$6) result",
+        [orgA, randomUUID(), task.id, campaignId, { title: 'Assigned report' }, randomUUID()],
+      );
+    assert.equal((await saveCampaign(campaign)).rows[0].result.ok, true);
+    await reject(() => saveCampaign(unrelated), /studio_campaign_invalid/);
+    await client.query('set local role postgres');
+    await client.query(
+      'update records set deleted_at=now(),data=data||\'{"_del":true}\' where id=$1',
+      [campaign],
+    );
+    await client.query('set local role authenticated');
+    await reject(() => saveCampaign(campaign), /studio_campaign_invalid/);
+    await client.query("select set_config('request.jwt.claim.sub',$1,true)", [reviewer]);
+    await reject(() => saveCampaign(campaign), { code: '42501' });
+    await client.query('set local role postgres');
+    for (const capability of hadClientRead)
+      await client.query('insert into role_capabilities(role_id,capability_id) values($1,$2)', [
+        role,
+        capability.capability_id,
+      ]);
     await client.query("select set_config('request.jwt.claim.sub',$1,true)", [reviewer]);
     await client.query('set local role postgres');
     await reject(

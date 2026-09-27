@@ -10,6 +10,7 @@ module.exports = [
         persistWorking: 'writable',
         save: 'writable',
         renderStudio: 'writable',
+        exportPDF: 'writable',
         state: 'writable',
         app: 'readonly',
         $: 'readonly',

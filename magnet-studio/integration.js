@@ -6,10 +6,27 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
     creativeKind = '',
     contextBrief = '',
     rendering = false;
+  document.querySelectorAll('[data-platform]').forEach((el) => {
+    const click = el.onclick;
+    el.onclick = (event) => {
+      click(event);
+      persistWorking();
+    };
+  });
   const L = (en, ar) => (lang === 'ar' ? ar : en);
   const send = (type, payload) =>
     parent.postMessage({ channel: 'magnet-studio', type, payload }, location.origin);
   const dictionary = {
+    'Answer what you know. Detailed answers create a stronger strategic brief':
+      'أجب عما تعرفه. الإجابات المفصلة تساعد على إعداد بريف استراتيجي أقوى',
+    'Select every platform included': 'اختر جميع المنصات المشمولة',
+    'Current period': 'الفترة الحالية',
+    'Previous period — for growth comparison': 'الفترة السابقة — لمقارنة النمو',
+    'Content published': 'المحتوى المنشور',
+    '3-page PDF · Insights excluded': 'PDF من ٣ صفحات · بدون التحليلات',
+    '4-page PDF · Insights included': 'PDF من ٤ صفحات · يتضمن التحليلات',
+    'Review the live document, save the draft, then use Export PDF.':
+      'راجع المعاينة واحفظ المسودة، ثم استخدم تصدير PDF.',
     'BRIEFS & REPORTS': 'البريفات والتقارير',
     'Save draft': 'حفظ نسخة',
     'Export PDF': 'تصدير PDF',
@@ -151,6 +168,14 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       toast(L('Saving to workspace…', 'جارٍ الحفظ في مساحة العمل…'));
     }
   };
+  const originalExport = exportPDF;
+  exportPDF = function () {
+    if (dirty) {
+      toast(L('Save the server version before exporting.', 'احفظ النسخة على الخادم قبل التصدير.'));
+      return;
+    }
+    originalExport();
+  };
   const originalRender = renderStudio;
   renderStudio = function () {
     rendering = true;
@@ -169,6 +194,13 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       bind();
     }
     rendering = false;
+    document.querySelectorAll('[data-platform]').forEach((el) => {
+      const click = el.onclick;
+      el.onclick = (event) => {
+        click(event);
+        persistWorking();
+      };
+    });
     if (creativeKind)
       document.querySelectorAll('[data-key]').forEach(
         (el) =>
@@ -226,6 +258,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       if (!m.payload && m.clientName) state.doc.client = m.clientName;
       renderStudio();
       dirty = !m.payload;
+      if (dirty) send('DIRTY');
       const label = $('#saved');
       if (label)
         label.textContent = readOnly
@@ -240,6 +273,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       renderStudio();
     }
     if (m.type === 'SAVED') {
+      if (m.payload && JSON.stringify(m.payload) !== JSON.stringify(state.doc)) return;
       dirty = false;
       const el = $('#saved');
       if (el) el.textContent = L('Saved to workspace', 'تم الحفظ في مساحة العمل');
