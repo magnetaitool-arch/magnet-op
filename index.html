@@ -7038,6 +7038,7 @@ function App(){
       cloudUpsert(cfg.current,'attendance',upd);
     }
   };
+  const protectedEntryRoute=(user)=>new URLSearchParams(location.search).get('open')==='studio'&&user&&canView('studio',user.role)&&moduleEnabled('studio',appSettings)&&userSeesModule(user,'studio',user.role)?'studio':'dashboard';
   const doLogin = async (identifier, password, remember)=>{
     // Load the rollout contract BEFORE authenticating. Previously this happened
     // after login in parallel with cloudLoadAll, so a fresh browser never requested
@@ -7103,7 +7104,7 @@ function App(){
     }
     try { AUTH.syncUsersFromCloud().catch(()=>{}); } catch(e){} // pull full team roster now that we have a token
     if(authorizedDb)setDb(authorizedDb); else if(cfgComplete(cfg.current))setDb(emptyDB());
-    setAuthContextReady(true);setAuthUser(loginUser); setShowLogin(false); setRoleOverride(null); setRoute('dashboard');
+    setAuthContextReady(true);setAuthUser(loginUser); setShowLogin(false); setRoleOverride(null); setRoute(protectedEntryRoute(loginUser));
     try { recordLogin(loginUser,authorizedDb||emptyDB()); } catch(e){}
     return null;
   };
@@ -7126,7 +7127,7 @@ function App(){
     store.set('magnet_active_organization_id',organizationId);
     const user=mergeCanonicalIdentity(workspaceChoice.user,live.context);
     if(!user)throw new Error('Workspace access could not be resolved.');
-    setSessionUser(user,workspaceChoice.remember);setDb(emptyDB());setRoleOverride(null);setWorkspaceChoice(null);setAuthEntry('resume');setAuthContextReady(true);setAuthUser(user);setShowLogin(false);setRoute('dashboard');
+    setSessionUser(user,workspaceChoice.remember);setDb(emptyDB());setRoleOverride(null);setWorkspaceChoice(null);setAuthEntry('resume');setAuthContextReady(true);setAuthUser(user);setShowLogin(false);setRoute(protectedEntryRoute(user));
   };
   const doLogout = ()=>{ if(!window.dispatchEvent(new Event("magnet:before-navigate",{cancelable:true})))return; setAuthContextReady(false);setWorkspaceChoice(null);setAuthEntry('signin');try { recordLogout(authUser); } catch(e){} clearSessionUser(); setAcctToken(null); setSbSession(null); setDb(emptyDB()); setAuthUser(null); setShowLogin(true); setRoleOverride(null); try{syncQueueChip();const status=document.getElementById('mo-save-status');if(status)status.remove();}catch(e){} };
 
@@ -7980,13 +7981,12 @@ function App(){
     _default:['dashboard','tasks','studio','deliverables','clientAssets','calendar','requests'],
   };
   const go = (r,keepDeep)=>{ if(r!==route&&!window.dispatchEvent(new Event("magnet:before-navigate",{cancelable:true})))return; setRoute(r); if(!keepDeep){try{const url=new URL(location.href);url.searchParams.delete('open');url.searchParams.delete('id');history.replaceState({},'',url.pathname+(url.search?'?'+url.searchParams.toString():'')+url.hash);}catch(e){}} if(canvasRef.current) canvasRef.current.scrollTop=0; };
-  const studioEntryHandled=useRef(false);
   useEffect(()=>{
-    if(studioEntryHandled.current||!authReady||!authContextReady||!authUser)return;
+    if(route==='studio'||!authReady||!authContextReady||!authUser)return;
     if(new URLSearchParams(location.search).get('open')==='studio'&&canView('studio',role)&&moduleEnabled('studio',appSettings)&&userSeesModule(authUser,'studio',role)){
-      studioEntryHandled.current=true;setRoute('studio');
+      setRoute('studio');
     }
-  },[authReady,authContextReady,authUser&&authUser.id,role]); // eslint-disable-line
+  },[authReady,authContextReady,authUser&&authUser.id,role,route,appSettings]); // eslint-disable-line
   const openEntity=(target,id)=>{ const routeMap={task:'tasks',tasks:'tasks',client:'clients',accounts:'clients',lead:'leads',project:'projects',contract:'contracts',invoice:'invoices',document:'documents',applicant:'candidates'}; const next=routeMap[target]||target||'dashboard'; const sameRoute=next===route; try{const url=new URL(location.href);url.searchParams.set('open',next);if(id)url.searchParams.set('id',id);else url.searchParams.delete('id');history.replaceState({},'',url.pathname+'?'+url.searchParams.toString()+url.hash);}catch(e){} go(next,true); if(sameRoute&&id)setTimeout(()=>window.dispatchEvent(new CustomEvent('magnet:open-entity',{detail:{route:next,id}})),0); };
   const organizationId=(authUser&&authUser.organizationId)||activeOrganizationId();
   const commitContextCurrent=()=>!!(authUser&&getSessionUser()&&getSessionUser().id===authUser.id&&activeOrganizationId()===organizationId);
