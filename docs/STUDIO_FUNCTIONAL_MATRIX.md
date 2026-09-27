@@ -56,3 +56,9 @@ Latest deployed application: `7c1a7fc`, `dpl_EqYhAckF2MUdfxNQ5mQTSrs8VNpG`, http
 - This is bounded concurrency coverage, not sustained load, large-library or throttled-device certification. Performance remains PARTIAL.
 - Native Safari's unrelated prompt is no longer blocking. Production restored System Owner, completed dashboard hydration and opened Studio through navigation. The visible Studio library contains no document controls for this account; native export/print was not exercised and remains unverified. No synthetic production records were created.
 - No new deterministic application defect found in this follow-up. Application release remains `7c1a7fc`; no code/schema changes or redeployment required. Existing supported-workflow results and unsupported-feature classifications remain unchanged.
+
+## Keyboard and slow-response follow-up
+
+Independent staging real-browser checks passed: focus document and Enter to open, Enter to select a brief section, Space to activate Back, and Enter to expand/collapse version history. A real library response delayed by 2 seconds kept `aria-busy=true`, disabled Reload while pending, then restored the same saved version with no error. No document saves or business mutations occurred. Evidence: `backups/foundation-cleanup-20260927/studio-keyboard-check.json`.
+
+No new deterministic defect found; no application/schema change or deployment. This verifies these keyboard controls and one delayed-response path, not a complete screen-reader audit or all network failure modes. Native Safari/iOS printing and sustained/large-library/device load remain unverified; unsupported product features remain outside existing functionality.
