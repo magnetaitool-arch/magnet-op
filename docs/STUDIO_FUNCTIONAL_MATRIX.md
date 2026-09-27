@@ -19,6 +19,7 @@ Scope: existing embedded Studio only. Hosted tests use independent Supabase stag
 | Video file upload | NOT IMPLEMENTED | None; no fake upload option added | `video/mp4` rejected; upload UI advertises supported documents/images only | NOT SUPPORTED |
 | Historical versions | WORKING | Disable file change on historical editor | DB immutable versions/author/time; V1–V5 persisted; UI history controls inspected and dirty protection tested | VERIFIED V1 read-only selection; historical file selector disabled |
 | Arabic / English / mobile | PARTIAL | Missing editor helper translations | Real 1440px EN and 390px AR screenshots reviewed, RTL frame and no page overflow; mobile approval/final actions succeeded | VERIFIED tested screens; PDF template headings remain English |
+| Light theme review panel | BROKEN: dark background with dark text | Use existing shell surface/ink tokens | Actual before/after screenshot; white background and rgb(27,36,48) foreground | VERIFIED |
 | Role / tenant isolation | WORKING | Narrow campaign correction only | Manager/designer positive; finance/HR/sales/client/anon and cross-tenant negative; inactive/conflicting identity mapping denied | VERIFIED tested roles; separate Content Creator role UI pending |
 | Session restoration | PARTIAL acceptance | No credential changes | Staging fresh login reopens all saved documents and versions; production saved game row remains unchanged | Owner Safari refresh/logout-login pending; do not claim complete |
 
