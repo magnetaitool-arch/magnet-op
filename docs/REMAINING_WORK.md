@@ -2,7 +2,7 @@
 
 - BLOCKED_EXTERNAL: Supply Resend key and verified EMAIL_FROM, set webhook signing secret, register `/api/resend-webhook`, then verify a real delivered event. No delivery is claimed from queue acceptance.
 - BLOCKED_EXTERNAL: Grant magnetofficial.com repository/backend access; implement the durable website submission/retry worker using WEBSITE_LEAD_INTEGRATION.md. The Magnet OS server secret is configured privately; website deployment is not done.
-- OWNER_ACTION_REQUIRED: Authorize an available unattended worker host/schedule and verify execution; the existing protected outbox endpoint is ready, but no schedule is claimed active.
+- OWNER_ACTION_REQUIRED: Authorize an available unattended worker host/schedule and verify execution; the existing protected outbox endpoint and `tools/notification-outbox-workflow.yml` template are ready, but no schedule is claimed active.
 - IMPLEMENTATION_REMAINING: Team invitation issue/resend/revoke/expiry/acceptance and provider-native password recovery through the transitional identity bridge. Do not equate templates or the existing invitation table with completed workflows.
 
 Earlier outstanding operational items (not redone in Phase 4):
