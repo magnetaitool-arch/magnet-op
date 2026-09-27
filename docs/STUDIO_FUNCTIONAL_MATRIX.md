@@ -62,3 +62,12 @@ Latest deployed application: `7c1a7fc`, `dpl_EqYhAckF2MUdfxNQ5mQTSrs8VNpG`, http
 Independent staging real-browser checks passed: focus document and Enter to open, Enter to select a brief section, Space to activate Back, and Enter to expand/collapse version history. A real library response delayed by 2 seconds kept `aria-busy=true`, disabled Reload while pending, then restored the same saved version with no error. No document saves or business mutations occurred. Evidence: `backups/foundation-cleanup-20260927/studio-keyboard-check.json`.
 
 No new deterministic defect found; no application/schema change or deployment. This verifies these keyboard controls and one delayed-response path, not a complete screen-reader audit or all network failure modes. Native Safari/iOS printing and sustained/large-library/device load remain unverified; unsupported product features remain outside existing functionality.
+
+## Native Safari export recovery
+
+- Signed into independent staging through Safari's actual login form with the existing Content Creator QA account; password saving declined. Opened existing brief v2, refreshed/reopened without losing its content, clicked Export PDF, then used Safari's native Print / Save PDF dialog.
+- Found a real WebKit pagination defect: a long answer in the two-column grid was cut/repeated across page boundaries. Fixed only expanded overflow pages: answers use block flow, sections can fragment, answer blocks prefer staying together, and paragraph widows/orphans are constrained. Ordinary fixed pages retain their layout.
+- Native Safari retest produced `studio-native-safari-brief-flow.pdf`: 8 pages, exactly 160 normalized source phrases, final END-OF-BRIEF sentinel and closing page. Rendered continuation page visually inspected. Original failing export is retained privately for comparison.
+- Actual Chromium UI export regression produced `studio-chromium-brief-flow.pdf`: 8 pages, exactly 160 phrases and the final sentinel. Saved server document remains v2; no business mutation was needed.
+- Native Safari brief export/Save as PDF is now VERIFIED for this scenario. iOS printing, native Safari report coverage, physical printers, and different printer settings are not certified. Existing English PDF headings remain unchanged. Overall PARTIAL remains accurate.
+- Full existing tests, scoped lint/typecheck, security checks, config (zero failures/two existing email warnings) and 44-file build passed. No schema, RLS, auth or production data changes. Service-worker cache v53.
