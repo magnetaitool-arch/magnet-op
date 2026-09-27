@@ -4413,7 +4413,7 @@ function setSbSession(s){ try{ if(s) store.set(SB_SESSION_KEY, JSON.stringify(s)
 }
 function sbAccessToken(){ try{ const s=getSbSession(); if(!s||!s.access_token) return ''; if(s.expires_at && (Number(s.expires_at)*1000) < (Date.now()+5000)) return ''; return s.access_token; }catch(e){ return ''; } }
 function applyAuthV2Contract(d){ if(d) AUTH_V2={enabled:!!d.enabled||!!d.required,required:!!d.required,roles:Array.isArray(d.roles)?d.roles:[]}; return AUTH_V2; }
-async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return AUTH_V2; const r=await fetch(_acctUrl(cfg),{method:'POST',headers:{apikey:cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'health'})}); if(r.ok){ const j=await r.json(); applyAuthV2Contract(j&&j.authV2); } return AUTH_V2; }catch(e){ return AUTH_V2; } }
+async function loadAuthV2Flag(cfg){ try{ if(!cfgComplete(cfg)) return AUTH_V2; const r=await fetch(_acctUrl(cfg),{method:'POST',headers:{apikey:cfg.key,'Content-Type':'application/json'},body:JSON.stringify({action:'health'}),signal:AbortSignal.timeout(10000)}); if(r.ok){ const j=await r.json(); applyAuthV2Contract(j&&j.authV2); } return AUTH_V2; }catch(e){ return AUTH_V2; } }
 function authV2AppliesTo(user){ return !!(user && (AUTH_V2.required || (AUTH_V2.enabled && (AUTH_V2.roles.length===0 || AUTH_V2.roles.indexOf(user.role)>=0)))); }
 try{ window.__authv2={ get:()=>AUTH_V2, session:getSbSession, token:sbAccessToken, reload:loadAuthV2Flag }; }catch(e){}
 /* ---- AUTH_V2 session management (Step 3): access+refresh tokens, auto-refresh,
@@ -4424,7 +4424,7 @@ function _authUrl(cfg, p){ return (cfg&&cfg.url||'').replace(/\/$/,'')+'/auth/v1
 let _sbTimer=null;
 const sessionRefresh=window.MagnetSessionRefresh.createSessionRefresh({
   read:getSbSession,write:setSbSession,fetch:(...args)=>fetch(...args),
-  lock:navigator.locks ? (name,run)=>navigator.locks.request(name,run) : undefined
+  lock:navigator.locks ? (name,run)=>navigator.locks.request(name,{signal:AbortSignal.timeout(12000)},run) : undefined
 });
 async function sbRefresh(cfg){
   if(!cfgComplete(cfg))return null;
@@ -5021,6 +5021,7 @@ function syncQueuePush(item,failure){
   } catch(e){return false;}
 }
 let _sqDraining=false;
+const _sqAuthAttempts=new Map();
 async function syncQueueDrain(options){
   if(_sqDraining) return; _sqDraining=true;
   try {
@@ -5028,14 +5029,26 @@ async function syncQueueDrain(options){
     const cfg=getCfg(); if(!cfgComplete(cfg)) return;
     const initialAll=syncQueueLoad(); const scope=syncQueueScope();
     const list=syncQueueCurrent(initialAll); if(!scope||!list.length){syncQueueChip();return;}
+    // The queue shares the shell's JWT. Never send anon writes while auth is
+    // hydrating, and never replay a previous actor's work after an async refresh.
+    await loadAuthV2Flag(cfg);
+    await sbEnsureFresh(cfg);
+    const token=sbAccessToken();
+    if(!AUTH_V2.enabled||!token||!syncQueueMatches(scope,syncQueueScope()))return;
     const now=Date.now();
-    const attemptable=list.filter(item=>manual||(!item.blocked&&(!Number(item.nextRetryAt)||Number(item.nextRetryAt)<=now)));
+    const eligible=item=>manual||(!item.blocked&&(!Number(item.nextRetryAt)||Number(item.nextRetryAt)<=now))||
+      (item.blocked&&item.lastFailure&&item.lastFailure.category==='auth'&&_sqAuthAttempts.get(syncQueueItemKey(item))!==token);
+    const attemptable=list.filter(eligible);
     if(!attemptable.length){syncQueueChip();return;}
+    const canonical=await loadCanonicalIdentity(cfg,getSessionUser());
+    if(!canonical||!canonical.ok||!syncQueueMatches(canonical.user,scope)||
+       !syncQueueMatches(scope,syncQueueScope())||sbAccessToken()!==token)return;
     const initialVersions=new Map(list.map(item=>[syncQueueItemKey(item),syncQueueItemVersion(item)]));
     syncQueueChip('retrying');
     const keep=[];
     for(const item of list){
-      if(!manual&&(item.blocked||(Number(item.nextRetryAt)>now))){ keep.push(item); continue; }
+      if(!eligible(item)||!syncQueueMatches(scope,syncQueueScope())||sbAccessToken()!==token){keep.push(item);continue;}
+      _sqAuthAttempts.set(syncQueueItemKey(item),token);
       let ok=false, failure=null;
       try {
         if(item.type==='upsert' && item.rec && item.rec.id){

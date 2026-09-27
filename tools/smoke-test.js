@@ -200,7 +200,7 @@ const packageConfig = JSON.parse(read('package.json'));
   ? ok('sync feedback is consolidated, actionable, and clear of persistent navigation')
   : bad('sync feedback can duplicate failures, hide the cause, or cover navigation');
 /syncRetryDelay/.test(html)
-  && /item\.blocked\|\|\(Number\(item\.nextRetryAt\)>now\)/.test(html)
+  && /!eligible\(item\)/.test(html) && /_sqAuthAttempts\.get/.test(html)
   && /syncQueueItemVersion\(item\)!==initialVersions\.get\(key\)/.test(html)
   ? ok('sync retries back off, permanent failures stop, and concurrent local edits are preserved')
   : bad('sync retries can loop forever or overwrite a newer queued edit');
