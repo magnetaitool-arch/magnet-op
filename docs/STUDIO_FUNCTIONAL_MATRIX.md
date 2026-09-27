@@ -49,3 +49,10 @@ Deployment: application `4f57e03`, `dpl_2k7rsWx19G8JZYZyTfMnM7KFyo4z`, primary h
 - Additional private evidence: `studio-additional-controls.json`, `studio-mobile-320-ar.png`, `studio-mobile-320-ar-editor.png` in the existing recovery evidence directory. Earlier workflow verification remains applicable; unsupported features remain unsupported.
 
 Latest deployed application: `7c1a7fc`, `dpl_EqYhAckF2MUdfxNQ5mQTSrs8VNpG`, https://magnet-op.vercel.app. Four affected/shell files match local build SHA-256; production login reload has no captured JavaScript errors. Previous deployment remains available.
+
+## Concurrent-read and native Safari follow-up
+
+- Independent staging: 15 real authenticated `list_studio_v2` requests, five rounds of three concurrent roles (manager, designer, Content Creator). All returned HTTP 200 / `ok:true`. Per-role document/task counts remained stable (14/3, 11/1, 2/1). Duration 556–1,787ms. No business rows were mutated. Evidence: `backups/foundation-cleanup-20260927/studio-concurrent-read-check.json`.
+- This is bounded concurrency coverage, not sustained load, large-library or throttled-device certification. Performance remains PARTIAL.
+- Native Safari's unrelated prompt is no longer blocking. Production restored System Owner, completed dashboard hydration and opened Studio through navigation. The visible Studio library contains no document controls for this account; native export/print was not exercised and remains unverified. No synthetic production records were created.
+- No new deterministic application defect found in this follow-up. Application release remains `7c1a7fc`; no code/schema changes or redeployment required. Existing supported-workflow results and unsupported-feature classifications remain unchanged.
