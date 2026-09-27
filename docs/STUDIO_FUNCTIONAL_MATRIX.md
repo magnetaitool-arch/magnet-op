@@ -47,3 +47,5 @@ Deployment: application `4f57e03`, `dpl_2k7rsWx19G8JZYZyTfMnM7KFyo4z`, primary h
 - Native Safari verification could not proceed because Safari had an unrelated password-update system prompt. It was left untouched. Native Safari/iOS print coverage remains PARTIAL; no successful print claim is made.
 - Existing full tests, lint, typecheck, security and 44-file build passed again. Configuration: zero failures, two existing email warnings. No schema or authorization changes.
 - Additional private evidence: `studio-additional-controls.json`, `studio-mobile-320-ar.png`, `studio-mobile-320-ar-editor.png` in the existing recovery evidence directory. Earlier workflow verification remains applicable; unsupported features remain unsupported.
+
+Latest deployed application: `7c1a7fc`, `dpl_EqYhAckF2MUdfxNQ5mQTSrs8VNpG`, https://magnet-op.vercel.app. Four affected/shell files match local build SHA-256; production login reload has no captured JavaScript errors. Previous deployment remains available.

@@ -1,9 +1,9 @@
 # SHIP STATUS
 
 DEPLOYED: YES — https://magnet-op.vercel.app
-COMMIT: 4f57e03 (application); includes b2436b8 / c541364 Studio fixes.
+COMMIT: 7c1a7fc (application); extended Studio control verification and Arabic helper fix.
 BRANCH: codex/magnet-os-v2-staging
-DEPLOYMENT TARGET: Existing Vercel project; magnet-hsci60oea-magnetaitool-archs-projects.vercel.app; dpl_2k7rsWx19G8JZYZyTfMnM7KFyo4z. Primary alias and six artifact checksums verified.
+DEPLOYMENT TARGET: Existing Vercel project; magnet-cmetym2ss-magnetaitool-archs-projects.vercel.app; dpl_EqYhAckF2MUdfxNQ5mQTSrs8VNpG. Primary alias and four affected/shell artifact checksums verified.
 BUILD STATUS: PASS — lint, typecheck, existing npm test command, targeted hosted/browser/storage checks, 57-migration database suite, 44-file production build. Live config: zero failures; email warnings remain.
 DATABASE STATUS: SAFE — latest function-only migration compared all 106 public table counts/full fingerprints atomically; unchanged. Exact authorized Safari game retry persisted. RLS and tenant isolation retained.
 MIGRATIONS PENDING: NONE — canonical 57 / production ledger 67.
