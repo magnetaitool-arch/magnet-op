@@ -1,5 +1,5 @@
-DEPLOYED: YES — https://magnet-op.vercel.app; dpl_3x6FbpT7Qen3j6f3NLWue4tTsmn3 (READY).
-COMMIT: Pending checkpoint/deployment for verified assignment notification deduplication and Arabic labels; previous live b2f31e9.
+DEPLOYED: YES — https://magnet-op.vercel.app; dpl_8ig5WsKsVpC2ULbGHMDw9a4sYvvE (READY).
+COMMIT: c00924c — production notification deduplication and Arabic labels.
 BRANCH: codex/magnet-os-v2-staging
 DEPLOYMENT TARGET: https://magnet-op.vercel.app (existing Vercel project)
 BUILD STATUS: PASS — scoped lint/typecheck, full tests, security, 66 isolated migrations, targeted server tests and allowlisted build.
