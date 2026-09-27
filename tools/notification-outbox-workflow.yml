@@ -28,4 +28,4 @@ jobs:
             --header 'Content-Type: application/json' \
             --header "x-outbox-secret: $OUTBOX_SECRET" \
             --data '{"action":"drain","limit":25}')
-          RESULT="$result" node -e 'const r=JSON.parse(process.env.RESULT); if(!r.ok || (r.results||[]).some(x=>x.error)) process.exit(1); console.log("Processed:",r.processed);'
+          RESULT="$result" node -e 'const r=JSON.parse(process.env.RESULT); if(!r.ok || (r.results||[]).some(x=>x.error||x.status==="Failed")) process.exit(1); console.log("Processed:",r.processed);'
