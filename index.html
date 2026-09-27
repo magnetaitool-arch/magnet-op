@@ -1429,7 +1429,7 @@ body.theme-light .tbl thead th{background:#fff}
   .grid.g-3,.grid.g-4{grid-template-columns:1fr!important}
 }
 </style>
-<link rel="stylesheet" href="/styles/foundation.css?v=73d76aaf28340ef8">
+<link rel="stylesheet" href="/styles/foundation.css?v=33515d697be7926d">
 <div id="root"><div id="boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f6f7f9;color:#6f7b8a;font-family:system-ui">Loading Magnet OS…</div></div>
 <!-- ===== MAGNET CLOUD (shared live data + shared accounts) ===== -->
 <script src="/api/runtime-config"></script>
@@ -1440,7 +1440,9 @@ body.theme-light .tbl thead th{background:#fff}
 <script src="/modules/task-dependencies.js?v=55f0cc4cf973b26c"></script>
 <script src="/modules/task-status.js?v=34a7996fbdd53dcc"></script>
 <script src="/modules/legacy-review.js?v=e0b2febcb8a2caf6"></script>
-<script src="/modules/studio-workspace.js?v=906ddcaf4ba9e01e"></script>
+<script src="/magnet-studio/builder-model.js?v=7e204eb8ab08d70e"></script>
+<script src="/modules/studio-builder-resources.js?v=5e0da6a3783eb3f1"></script>
+<script src="/modules/studio-workspace.js?v=391fb43028454e2c"></script>
 <script src="/modules/project-briefs.js?v=f6d4dc1ba5da8907"></script>
 <script src="/modules/client-onboarding.js?v=2dedb7a6a385160c"></script>
 <script src="/modules/legacy-compatibility.js?v=bad46471340551a0"></script>
@@ -8027,7 +8029,7 @@ function App(){
 
   // permission gate: returns true if allowed, else shows a professional message.
   const requirePerm = (module, action)=>{ if(can(role,module,action)) return true; showProPopup('permissionDenied'); return false; };
-  const ctx = { db, role, user, brand, cloudOn, cfg:cfg.current, lang, currency, appSettings, applyAppSettings, organizationSettingsStatus, can, requirePerm,
+  const ctx = { studioAssetUrl: async(id)=>{const result=await workspaceRpc(cfg.current,'get_document_v2',{p_organization_id:tenantOrganizationId(),p_document_id:id});const f=result.document;if(!f||!f.mimeType?.startsWith('image/'))throw new Error('studio_image_required');return storageSignedUrl(cfg.current,f.bucket,f.optimizedPath||f.originalPath,300);}, db, role, user, brand, cloudOn, cfg:cfg.current, lang, currency, appSettings, applyAppSettings, organizationSettingsStatus, can, requirePerm,
     canEditSection:(section)=>userCanEditSection(authUser,section,role),
     canDelete:(section)=> isAdminRole(role) || (!PROTECTED_DELETE.includes(section) && userCanEditSection(authUser, section, role)),
     delRec:(coll,id,name)=>{ if(confirm((lang==='ar'?'أرشفة ':'Archive ')+(name||(lang==='ar'?'هذا السجل':'this record'))+(lang==='ar'?'؟ سيختفي من النظام ويمكن استعادته إداريًا.':'? It will leave active views and remains recoverable by an administrator.'))) deleteRecord(coll,id); },
@@ -11840,7 +11842,7 @@ function DocumentUploadModal({ctx,preset,clients,onClose,onDone}){
       if(!done||!done.ok)throw new Error(done&&done.error||'upload_finalize_failed');setProgress(100);onDone&&onDone(done);onClose();
     }catch(e){if(slot&&slot.id){try{await workspaceRpc(ctx.cfg,'cancel_document_upload_v2',{p_organization_id:tenantOrganizationId(),p_document_id:slot.id});}catch(ignore){}}setError(L('Upload failed: ','فشل الرفع: ')+String(e.message||e));setBusy(false);}
   };
-  const accept='application/pdf,image/jpeg,image/png,image/webp,image/heic,text/plain,text/csv,.docx,.xlsx';
+  const accept='video/mp4,video/webm,application/pdf,image/jpeg,image/png,image/webp,image/heic,text/plain,text/csv,.docx,.xlsx';
   return html`<${Modal} title=${L('Add document','إضافة مستند')} onClose=${onClose} wide=${true}>
     <div class="document-upload-zone"><div class="document-upload-file">${React.createElement(Icon.docs)}<div><b>${file?file.name:L('Choose a secure file','اختر ملفًا آمنًا')}</b><span>${file?formatFileSize(file.size):L('PDF, image, DOCX, XLSX, CSV — up to 25 MB','PDF أو صورة أو DOCX أو XLSX أو CSV — حتى 25 MB')}</span></div></div>
       <input style=${{marginTop:10,width:'100%'}} type="file" accept=${accept} capture=${preset==='scan'?'environment':null} onChange=${choose}/>
@@ -11880,7 +11882,7 @@ function DocumentProfileModal({ctx,detail,clients,onClose,onChanged}){
     <div class="document-facts" style=${{marginTop:14}}><div><span>${L('File','الملف')}</span><b>${original.originalFilename}</b></div><div><span>${L('Size','الحجم')}</span><b>${formatFileSize(original.originalSizeBytes)}</b></div><div><span>${L('Date','التاريخ')}</span><b>${fmtDate(original.documentDate||original.createdAt)}</b></div><div><span>${L('Version','الإصدار')}</span><b>${original.version}</b></div></div>
     ${editing&&html`<div class="document-upload-grid" style=${{marginTop:14}}><label class="fld"><span>${L('Title','الاسم')}</span><input value=${form.title} onInput=${e=>set('title',e.target.value)}/></label><label class="fld"><span>${L('Type','النوع')}</span><select value=${form.documentType} onChange=${e=>set('documentType',e.target.value)}>${DOCUMENT_V2_TYPES.map(x=>html`<option key=${x}>${x}</option>`)}</select></label><label class="fld"><span>${L('Visibility','الخصوصية')}</span><select value=${form.visibility} onChange=${e=>set('visibility',e.target.value)}>${visibility.map(x=>html`<option key=${x}>${x}</option>`)}</select></label><label class="fld"><span>${L('Date','التاريخ')}</span><input type="date" value=${form.documentDate} onChange=${e=>set('documentDate',e.target.value)}/></label><label class="fld"><span>${L('Client','العميل')}</span><select value=${form.clientAccountId} onChange=${e=>set('clientAccountId',e.target.value)}><option value="">—</option>${clients.map(c=>html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}</select></label><label class="fld"><span>${L('Employee','الموظف')}</span><select value=${form.employeeRecordId} onChange=${e=>set('employeeRecordId',e.target.value)}><option value="">—</option>${(ctx.db.employees||[]).map(e=>html`<option key=${e.id} value=${e.id}>${e.fullName||e.name}</option>`)}</select></label><label class="fld"><span>${L('Reference','المرجع')}</span><input value=${form.referenceNumber} onInput=${e=>set('referenceNumber',e.target.value)}/></label><label class="fld"><span>${L('Tags','الوسوم')}</span><input value=${form.tags} onInput=${e=>set('tags',e.target.value)}/></label><label class="fld full"><span>${L('Notes','الملاحظات')}</span><textarea rows="3" value=${form.notes} onInput=${e=>set('notes',e.target.value)}></textarea></label><div class="full right"><button class="btn btn-pri" disabled=${busy} onClick=${save}>${L('Save changes','حفظ التعديلات')}</button></div></div>`}
     <h4 style=${{marginTop:14}}>${L('Preview','المعاينة')} · ${L('Activity entries below','سجل النشاط أدناه')}: ${(detail.timeline||[]).length}</h4>
-    <div class="document-preview">${!previewUrl?html`<span class="sk" style=${{width:'100%',height:360}}></span>`:(original.mimeType||'').startsWith('image/')?html`<img src=${previewUrl} alt=${original.title}/>`:original.mimeType==='application/pdf'?html`<iframe src=${previewUrl} title=${original.title}></iframe>`:html`<div class="document-preview-fallback">${React.createElement(Icon.fileText)}<p>${L('Preview is not available for this file type.','لا توجد معاينة لهذا النوع.')}</p><button class="mini" onClick=${download}>${L('Download file','تنزيل الملف')}</button></div>`}</div>
+    <div class="document-preview">${!previewUrl?html`<span class="sk" style=${{width:'100%',height:360}}></span>`:(original.mimeType||'').startsWith('image/')?html`<img src=${previewUrl} alt=${original.title}/>`:(original.mimeType||'').startsWith('video/')?html`<video controls preload="metadata" src=${previewUrl} style=${{maxWidth:'100%',maxHeight:'70vh'}}></video>`:original.mimeType==='application/pdf'?html`<iframe src=${previewUrl} title=${original.title}></iframe>`:html`<div class="document-preview-fallback">${React.createElement(Icon.fileText)}<p>${L('Preview is not available for this file type.','لا توجد معاينة لهذا النوع.')}</p><button class="mini" onClick=${download}>${L('Download file','تنزيل الملف')}</button></div>`}</div>
     ${(detail.timeline||[]).length>0&&html`<div class="contract-timeline" style=${{marginTop:14}}>${detail.timeline.map((event,index)=>html`<div class="contract-event" key=${event.occurredAt+index}><i></i><div><b>${event.action}</b><span>${event.context&&event.context.changed||''}</span></div><span>${fmtDateTime(event.occurredAt)}</span></div>`)}</div>`}
   </div></div></div>`;
 }

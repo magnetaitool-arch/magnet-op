@@ -1,75 +1,27 @@
-# Studio verification — 2026-09-27
+# Studio functional matrix — 2026-09-27
 
-Scope: existing embedded Studio. VERIFIED means the stated end-to-end behavior passed, not every browser, format or load condition. Writes and failure injection use independent Supabase staging `vsurqqbxjvqzvqbmetjw`; production customer records were not modified for QA. Earlier passing evidence is retained rather than rerunning unchanged migrations.
+VERIFIED means the stated real workflow passed; it does not certify every browser/load condition. Mutating and adversarial tests use independent staging. Previous foundation evidence is retained in Git history and private recovery artifacts; no customer data was created or repaired for QA.
 
-| Workflow / controls | Status | Verified behavior / remaining limit |
+| Workflow | Status | Executed behavior / exact limitation |
 |---|---|---|
-| Auth handoff, session restore, sync, logout | VERIFIED | Single shell session; real expired-token refresh and queued write/readback; logout unmounts editor; production Safari restores System Owner and opens Studio. |
-| Direct Studio link | VERIFIED | Standalone URL restores the authenticated shell and opens Studio after identity hydration; fresh login follows the same link; unauthorized roles remain gated. |
-| Assigned task / client / project / campaign | VERIFIED | Actual task-scoped list/create/save; unrelated/deleted campaigns and unassigned/cross-tenant writes rejected. |
-| Brief template and seven sections | VERIFIED | All sections, title, text, links, project type, deadline; bilingual save/reopen and actual PDF output. Links are reference text, not a brand-kit manager. |
-| Report template and six steps | VERIFIED | Platform toggles, metrics, content, insights switch, Back/Continue/step navigation, save/reopen; real 3/4-page ordinary exports. |
-| Content/design/video notes and pinned brief | VERIFIED | UI create/save/reopen for all three; Content Creator now tested separately with an assigned task, brief and content document. Video means execution notes, not video editing. |
-| Save, persistence, retry and iframe lifecycle | VERIFIED | Versions persist; transport retry and in-flight editing retain edits. Fixed duplicate READY/load initialization that reset visible edits. Delayed load now preserves typing; real iframe reload restores saved v2. |
-| Versions/history and unsaved guards | VERIFIED | Historical payload/file selector read-only; immutable server history; dirty navigation/logout cancellation; concurrent save conflict and command replay. Restoring an old version is not supported. |
-| Comments / files / notifications | VERIFIED | Canonical task comment persists, version links private files, actual recipient notification; ordinary task comments only. |
-| PNG/PDF upload, preview and download | VERIFIED | PNG UI plus exact byte/hash storage readback; PDF now uploaded via actual task dialog, linked and opened in embedded preview. Missing-object finalize, anonymous access, oversized and unsupported MIME rejected. Archive/restore tested. |
-| Revision → save → resubmit → approve → final | VERIFIED | Newly repeated actual UI revision/save v2/resubmit; distinct manager approves/finalizes at 390px. Locked final editor and self-review rejection. Revision must be saved to a new Draft before resubmission. |
-| PDF exports | PARTIAL | Chromium brief/report exports pass. Native Safari long-brief export now passes with exactly 160 source phrases and final sentinel after a WebKit pagination fix. Native Safari report and iOS printing remain unverified. Normal pages retain existing layout. |
-| Arabic/English, desktop/mobile, theme | PARTIAL | Tested EN/AR editor, RTL, desktop light/dark, 390px mobile review/final and no overflow. Export templates intentionally retain English headings; native Safari/iOS print-dialog matrix not exhaustive. |
-| Roles, permissions and tenant isolation | VERIFIED | Designer/manager/Content Creator positive UI; finance/HR/sales/client/anon and cross-tenant negative RPC checks. Real other-user forged overwrite rejected 403/42501. No RLS changes. |
-| Error states | VERIFIED | Missing assignment disables create; required brief enforced; failed save retains edits; version conflicts, dirty export, locked history, unauthorized writes and rejected uploads handled. Not a claim to every possible provider outage. |
-| Performance | PARTIAL | Observed staging navigation 1,040 ms; 11 RPC samples, slowest 1,016 ms; tested mobile page had no overflow. No sustained multi-user load, large-library benchmark or throttled mobile-device certification. |
-| Templates / editor blocks / brand kit | PARTIAL | Existing brief/report templates and fixed section fields work. No reusable template CRUD, draggable blocks, page reordering or editable brand-kit feature exists. |
-| Advanced Studio functions | NOT SUPPORTED | Video upload/editing; PNG/PPTX export; share links; media annotation; threaded/resolved/mention comments; client Studio approval; publishing; version restoration; Studio search/filter/sort. No fake controls added. |
+| Shared auth, session restore, sync, logout, direct Studio entry | VERIFIED | Existing shell session and previous expired-token/queued-write, logout, Safari owner and deep-link tests retained. No alternate Studio login. |
+| Canonical tasks, pinned briefs, content/design/video notes | VERIFIED | Existing create/save/reopen/review paths retained; task/client/project/campaign scope and immutable brief version enforced. Video is execution notes plus private attached media, not editing. |
+| Structured builder and 10 templates | VERIFIED | UI-created/saved proposal, audit, strategy, content plan, monthly/media/campaign reports, persona, competitor analysis and quarterly review. |
+| Pages and 21 block types | VERIFIED | Actual UI edit, page/block duplicate/delete and real pointer drag; 24-page document reopened after fresh login with persisted order. Overflow blocks export instead of silently clipping. |
+| Client brand kit and reusable template | VERIFIED | Canonical kit save, immutable historical snapshots, authorized inherited logo; saved client template creates a separate draft. |
+| Real data sources | VERIFIED | Actual proposal pricing, client report metrics/recommendations and approved Studio content applied/saved/exported. Unreadable or absent metrics are not fabricated. Legacy Calendar authorization unchanged. |
+| Save, retry and persistence | VERIFIED | Autosave/version persistence, refresh/relogin, offline failure retains edits and retry saves. Existing optimistic conflict/idempotency tests retained. |
+| Versions and restoration | VERIFIED | History read-only; restore creates new draft while original FINAL v4 remains unchanged. |
+| Page/block/internal and external comments | VERIFIED | Persisted targeted comments; external responses refresh when reopening the same document. Threading, resolution and mentions are not implemented. |
+| Review → revision → resubmit → approval → final | VERIFIED | Existing distinct-role revision workflow plus manager mobile approval/finalization; self-review and locked-history writes denied. External review never replaces internal approval. |
+| Scoped public presentation links | VERIFIED | Anonymous fixed snapshot, private referenced logo, opt-in responses, revoke/regenerate and old-link denial. Expiry/issuer suspension/invalid targets/tenant isolation tested in database suite. Signed image URLs can remain valid for up to 60 seconds after revocation. |
+| Builder PDF and PNG | VERIFIED | Actual Chromium and native Safari proposal/strategy/report/Arabic audit downloads; parsed and visually inspected. PNG opened at 2560×1440. 24-page PDF passed. |
+| PPTX | PARTIAL | Valid ZIP/XML with rasterized page slides. Text/blocks are not native editable PowerPoint objects; no native PowerPoint application available for acceptance. |
+| Existing legacy print templates | PARTIAL | Chromium exports and native Safari 160-phrase long brief verified previously. Legacy report/iOS print dialogs and full translation of old export headings remain outside the new builder export coverage. |
+| Arabic/English and mobile review | VERIFIED | Builder RTL/mixed content and Arabic Safari PDF verified; 390px internal/public review readable without horizontal overflow. Desktop-only page/block authoring is explicit. |
+| Permissions / tenant and storage isolation | VERIFIED | Isolated 60-migration suite; actual role-denied brand writes; user-JWT storage readback and anonymous denial; task/client-scoped shares/images. No RLS disabling or browser service key. |
+| Performance | PARTIAL | 24-page PDF ~9.3s/~1MB; bounded concurrent reads previously passed. Sustained multi-user load, very large libraries and throttled physical devices remain unverified. |
+| Private MP4/WebM storage | VERIFIED | MP4 upload, task link, exact hash readback and anonymous denial. Actual 1280×720 playback passed after limiting CSP media sources to the two approved Supabase projects. |
+| Video editing, publishing, media annotation, Studio library search/filter | NOT SUPPORTED | No successful integration or editing claim. |
 
-## Defects repaired in this pass
-
-1. Long PDF content was silently clipped by fixed-height pages. Only overflowing pages now expand and flow across print pages; both saved long-document exports retain their final text.
-2. The iframe READY and late load paths could initialize twice, resetting current input to an older/blank payload. Per-frame handshake deduplication prevents this, and confirmed save payloads are retained for actual iframe reload.
-
-3. Standalone Studio redirected to the shell but ignored `open=studio`. The shell now consumes that link only after authenticated context and existing navigation permissions are confirmed.
-
-## Release checks / remaining blockers
-
-- Scoped lint/typecheck, full existing test command plus new behavioral control regressions, security checks and allowlisted build pass. Existing database schema/RLS unchanged; no migration required.
-- No known broken supported critical workflow remains in the tested scope. Overall Studio remains PARTIAL because unsupported features and the explicit browser/performance limits above are not completed features.
-- No owner credentials or business-ownership decision is required for these frontend fixes. No production data was fabricated, reassigned or deleted.
-- Private evidence: `backups/foundation-cleanup-20260927/`, including `studio-long-fixed.pdf`, `studio-long-brief-fixed.pdf`, continuation-page rendering and mobile final-review screenshot. Original role/database/workflow proof remains in prior release artifacts.
-
-Deployment: application `4f57e03`, `dpl_2k7rsWx19G8JZYZyTfMnM7KFyo4z`, primary https://magnet-op.vercel.app. All six changed/current app artifacts match release checksums. Actual production standalone Studio entry redirects anonymous users to login with no captured JavaScript runtime errors. Authenticated mutation/negative tests remain deliberately on independent staging.
-
-## Additional control pass — same release foundation
-
-- Actual seven-section navigation, Back/Continue and both endpoints passed without changing saved v2. Blocked-popup injection displayed the export recovery message and preserved the title/version.
-- At 320px, EN/AR shell width was 320px and embedded editor width 284px; neither overflowed. Visual inspection found a punctuation mismatch in the Arabic brief helper dictionary; corrected and retested in both languages.
-- Eight sequential, read-only staging library reloads completed in 232–335ms; RPC durations 185–282ms, all without application errors. This does not certify concurrent, large-library or throttled-device performance.
-- Native Safari verification could not proceed because Safari had an unrelated password-update system prompt. It was left untouched. Native Safari/iOS print coverage remains PARTIAL; no successful print claim is made.
-- Existing full tests, lint, typecheck, security and 44-file build passed again. Configuration: zero failures, two existing email warnings. No schema or authorization changes.
-- Additional private evidence: `studio-additional-controls.json`, `studio-mobile-320-ar.png`, `studio-mobile-320-ar-editor.png` in the existing recovery evidence directory. Earlier workflow verification remains applicable; unsupported features remain unsupported.
-
-Latest deployed application: `7c1a7fc`, `dpl_EqYhAckF2MUdfxNQ5mQTSrs8VNpG`, https://magnet-op.vercel.app. Four affected/shell files match local build SHA-256; production login reload has no captured JavaScript errors. Previous deployment remains available.
-
-## Concurrent-read and native Safari follow-up
-
-- Independent staging: 15 real authenticated `list_studio_v2` requests, five rounds of three concurrent roles (manager, designer, Content Creator). All returned HTTP 200 / `ok:true`. Per-role document/task counts remained stable (14/3, 11/1, 2/1). Duration 556–1,787ms. No business rows were mutated. Evidence: `backups/foundation-cleanup-20260927/studio-concurrent-read-check.json`.
-- This is bounded concurrency coverage, not sustained load, large-library or throttled-device certification. Performance remains PARTIAL.
-- Native Safari's unrelated prompt is no longer blocking. Production restored System Owner, completed dashboard hydration and opened Studio through navigation. The visible Studio library contains no document controls for this account; native export/print was not exercised and remains unverified. No synthetic production records were created.
-- No new deterministic application defect found in this follow-up. Application release remains `7c1a7fc`; no code/schema changes or redeployment required. Existing supported-workflow results and unsupported-feature classifications remain unchanged.
-
-## Keyboard and slow-response follow-up
-
-Independent staging real-browser checks passed: focus document and Enter to open, Enter to select a brief section, Space to activate Back, and Enter to expand/collapse version history. A real library response delayed by 2 seconds kept `aria-busy=true`, disabled Reload while pending, then restored the same saved version with no error. No document saves or business mutations occurred. Evidence: `backups/foundation-cleanup-20260927/studio-keyboard-check.json`.
-
-No new deterministic defect found; no application/schema change or deployment. This verifies these keyboard controls and one delayed-response path, not a complete screen-reader audit or all network failure modes. Native Safari/iOS printing and sustained/large-library/device load remain unverified; unsupported product features remain outside existing functionality.
-
-## Native Safari export recovery
-
-- Signed into independent staging through Safari's actual login form with the existing Content Creator QA account; password saving declined. Opened existing brief v2, refreshed/reopened without losing its content, clicked Export PDF, then used Safari's native Print / Save PDF dialog.
-- Found a real WebKit pagination defect: a long answer in the two-column grid was cut/repeated across page boundaries. Fixed only expanded overflow pages: answers use block flow, sections can fragment, answer blocks prefer staying together, and paragraph widows/orphans are constrained. Ordinary fixed pages retain their layout.
-- Native Safari retest produced `studio-native-safari-brief-flow.pdf`: 8 pages, exactly 160 normalized source phrases, final END-OF-BRIEF sentinel and closing page. Rendered continuation page visually inspected. Original failing export is retained privately for comparison.
-- Actual Chromium UI export regression produced `studio-chromium-brief-flow.pdf`: 8 pages, exactly 160 phrases and the final sentinel. Saved server document remains v2; no business mutation was needed.
-- Native Safari brief export/Save as PDF is now VERIFIED for this scenario. iOS printing, native Safari report coverage, physical printers, and different printer settings are not certified. Existing English PDF headings remain unchanged. Overall PARTIAL remains accurate.
-- Full existing tests, scoped lint/typecheck, security checks, config (zero failures/two existing email warnings) and 44-file build passed. No schema, RLS, auth or production data changes. Service-worker cache v53.
-
-Latest application release: `3e73af2`, `dpl_DM5Kh1rkhDq2ujqrJfv5CNnh4uSU`, https://magnet-op.vercel.app. Four shell/affected artifacts match release SHA-256. Previous deployment remains available for rollback.
+Detailed builder execution, fixes, backup and rollback: [STUDIO_V2_RELEASE_VERIFICATION.md](STUDIO_V2_RELEASE_VERIFICATION.md). Current deployment and migration status: [SHIP_STATUS.md](SHIP_STATUS.md).

@@ -221,7 +221,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
     localize();
   };
   window.addEventListener('beforeunload', (event) => {
-    if (dirty) {
+    if (dirty || window.MagnetBuilderEditor?.isDirty()) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -235,7 +235,14 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       return;
     const m = event.data;
     if (m.type === 'HELLO') send('READY', handshake);
+    if (m.type === 'OPEN' && (m.templateKey || m.payload?.builder === 1)) {
+      dirty = false;
+      window.MagnetBuilderEditor.open(m, send);
+      return;
+    }
+    if (m.type !== 'OPEN' && m.type !== 'HELLO' && window.MagnetBuilderEditor?.handle(m)) return;
     if (m.type === 'OPEN') {
+      window.MagnetBuilderEditor.active = false;
       readOnly = !!m.readOnly;
       lang = m.lang === 'ar' ? 'ar' : 'en';
       contextBrief = m.briefId || m.payload?.briefId || '';
@@ -259,7 +266,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       };
       if (!m.payload && m.clientName) state.doc.client = m.clientName;
       renderStudio();
-      dirty = !m.payload;
+      dirty = !m.payload || !!m.isNew;
       if (dirty) send('DIRTY');
       const label = $('#saved');
       if (label)

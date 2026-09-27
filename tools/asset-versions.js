@@ -17,7 +17,7 @@ function versionedHtml(html, read) {
   );
 }
 function verifyAssetVersions(write = false) {
-  for (const htmlFile of ['index.html', 'magnet-studio/index.html']) {
+  for (const htmlFile of ['index.html', 'magnet-studio/index.html', 'magnet-studio/share.html']) {
     const target = path.join(root, htmlFile),
       current = fs.readFileSync(target, 'utf8');
     const expected = versionedHtml(current, (file) => fs.readFileSync(path.join(root, file)));

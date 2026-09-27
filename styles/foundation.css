@@ -539,3 +539,6 @@ body.theme-light .crm-followup-overdue {
 /* Studio review controls must follow the shell theme for readable contrast. */
 .studio-review{background:var(--panel);color:var(--ink);border-color:var(--line-strong)}
 .studio-workspace .inp{background:var(--bg-2);color:var(--ink);border-color:var(--line-strong)}
+
+/* Studio builder resources use the workspace tokens; each group stays collapsible. */
+.studio-builder-resources{margin-block:16px}.studio-builder-resources>details{padding:14px 0;border-bottom:1px solid var(--line-strong)}.studio-builder-resources summary{cursor:pointer;font-weight:650;min-height:34px}.studio-builder-resources summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.studio-builder-resources label{display:block;font-size:13px;line-height:1.7;margin-block:10px}.studio-builder-resources input[type=checkbox]{margin-inline-end:8px}.studio-builder-resources a{color:var(--ink);text-decoration:underline;text-underline-offset:4px}.studio-builder-resources button{margin:4px;min-height:40px}.studio-builder-resources p{overflow-wrap:anywhere}.studio-builder-resources input[type=color]{width:100%;min-height:36px;border:1px solid var(--line-strong);background:transparent}

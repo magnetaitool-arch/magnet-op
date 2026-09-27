@@ -1,3 +1,7 @@
+# Studio V2 update — 2026-09-27
+
+Additive builder migrations are live and reconciled: 60 canonical / 70 production ledger; all 106 original public table counts/full-row fingerprints unchanged. Core builder release gates passed on isolated staging; scoped lint/typecheck, full tests, security and 54-file build pass. Current application rollout is tracked in SHIP_STATUS.md. PPTX remains raster-slide PARTIAL; sustained-load/device and legacy print limits remain explicit in STUDIO_FUNCTIONAL_MATRIX.md. Existing email/social/scheduled-backup owner actions remain unchanged.
+
 # Phase 3 release gate — 2026-09-27
 
 Core and Studio remain intact. Legacy Review is an additional module under Settings → Data & Maintenance, with active owner/admin plus organization.manage enforced server-side. The exact existing Markdown source was imported as 173 cases / 143 groups. Original case keys and records were preserved; real cases remain OPEN and no repair was inferred or executed on Magnet business data.

@@ -1,6 +1,7 @@
 'use strict';
 function createStudioWorkspace(React, html) {
   const { useState, useEffect, useRef } = React;
+  const BuilderResources = window.MagnetBuilderResources.createBuilderResources(React, html);
   return function StudioWorkspace({ ctx }) {
     const L = (en, ar) => (ctx.lang === 'ar' ? ar : en);
     const statusLabel = (value) =>
@@ -25,7 +26,9 @@ function createStudioWorkspace(React, html) {
       [editor, setEditor] = useState(null),
       [campaign, setCampaign] = useState(''),
       [brief, setBrief] = useState(''),
-      [dirty, setDirty] = useState(false);
+      [dirty, setDirty] = useState(false),
+      [builderResources, setBuilderResources] = useState(null),
+      [builderTarget, setBuilderTarget] = useState(null);
     const frame = useRef(null),
       current = useRef({}),
       lock = useRef(false),
@@ -33,7 +36,7 @@ function createStudioWorkspace(React, html) {
       generation = useRef(0),
       edits = useRef(0),
       initialized = useRef(null);
-    current.current = { ctx, detail, editor, task, kind, file, campaign, brief };
+    current.current = { ctx, detail, editor, task, kind, file, campaign, brief, builderResources };
     const errorText = L(
       'Not confirmed. Check your connection and permissions. For a version conflict, reopen the document before editing.',
       'لم يتم تأكيد العملية. تحقق من الاتصال والصلاحيات. عند تعارض النسخ، أعد فتح المستند قبل التعديل.',
@@ -79,6 +82,12 @@ function createStudioWorkspace(React, html) {
         lang: c.ctx.lang,
         payload: c.editor?.payload || null,
         kind: c.editor?.kind || 'brief',
+        templateKey: c.editor?.templateKey,
+        files: c.detail?.files || [],
+        brand: c.builderResources?.taskId === c.task ? c.builderResources?.kit?.brand : undefined,
+        isNew: c.editor?.revision === undefined,
+        projectName: list?.tasks.find((t) => t.id === c.task)?.project || '',
+        campaignName: list?.campaigns?.find((item) => item.id === c.campaign)?.title || '',
         readOnly: c.editor?.readOnly || false,
         briefId: c.editor?.briefId || c.brief,
         clientName: list?.tasks.find((t) => t.id === c.task)?.client || '',
@@ -145,7 +154,11 @@ function createStudioWorkspace(React, html) {
         );
         if (edit === edits.current) setDirty(false);
         pending.current = null;
-        post({ type: 'SAVED', payload: action === 'SAVE' ? payload : null });
+        post({
+          type: 'SAVED',
+          payload: action === 'SAVE' ? payload : null,
+          files: out.files || [],
+        });
         post({ type: 'LOCK', readOnly: !['DRAFT', 'REVISION'].includes(out.document.status) });
         await load();
       } catch {
@@ -166,6 +179,24 @@ function createStudioWorkspace(React, html) {
           event.data?.channel !== 'magnet-studio'
         )
           return;
+        if (event.data.type === 'ASSET_REQUEST') {
+          const c = current.current,
+            id = event.data.payload?.id,
+            nonce = c.editor?.nonce;
+          if (
+            c.detail?.files?.some((f) => f.id === id) ||
+            id === c.builderResources?.kit?.brand?.logoId ||
+            id === c.editor?.payload?.brand?.logoId ||
+            c.editor?.payload?.pages?.some((p) => p.blocks?.some((b) => b.mediaId === id))
+          )
+            c.ctx
+              .studioAssetUrl(id)
+              .then((url) => {
+                if (current.current.editor?.nonce === nonce) post({ type: 'ASSET_URL', id, url });
+              })
+              .catch(() => post({ type: 'ASSET_ERROR', id }));
+        }
+        if (event.data.type === 'SELECTION') setBuilderTarget(event.data.payload);
         if (event.data.type === 'DIRTY') {
           edits.current++;
           setDirty(true);
@@ -177,7 +208,8 @@ function createStudioWorkspace(React, html) {
       return () => window.removeEventListener('message', receive);
     });
     const open = async (id) => {
-      if (lock.current) return;
+      if (lock.current || dirty) return;
+      post({ type: 'LOCK', readOnly: true });
       lock.current = true;
       setBusy(true);
       setError('');
@@ -225,20 +257,27 @@ function createStudioWorkspace(React, html) {
         pending.current = null;
       } catch {
         setError(errorText);
+        post({ type: 'LOCK', readOnly: editor?.readOnly || false });
       } finally {
         lock.current = false;
         setBusy(false);
       }
     };
     const create = () => {
-      if (!task || lock.current) return;
+      if (
+        !task ||
+        lock.current ||
+        (kind.startsWith('builder:') && builderResources?.taskId !== task)
+      )
+        return;
       setDirty(false);
       setDetail(null);
       setFile('');
       pending.current = null;
       setEditor({
         id: crypto.randomUUID(),
-        kind,
+        kind: kind.startsWith('builder:') ? 'report' : kind,
+        templateKey: kind.startsWith('builder:') ? kind.slice(8) : undefined,
         taskId: task,
         campaignId: campaign,
         briefId: brief,
@@ -266,8 +305,12 @@ function createStudioWorkspace(React, html) {
             >${L('Client / project / task', 'العميل / المشروع / المهمة')}<select
               class="inp"
               value=${task}
-              disabled=${busy}
+              disabled=${busy || dirty}
               onChange=${(e) => {
+                setEditor(null);
+                setDetail(null);
+                setFile('');
+                setBuilderTarget(null);
                 setTask(e.target.value);
                 setCampaign('');
                 setBrief('');
@@ -284,6 +327,16 @@ function createStudioWorkspace(React, html) {
               onChange=${(e) => setKind(e.target.value)}
             >
               ${[
+                ['builder:proposal', 'Proposal builder', 'محرر العروض'],
+                ['builder:audit', 'Social media audit', 'تدقيق التواصل الاجتماعي'],
+                ['builder:strategy', 'Marketing strategy', 'استراتيجية التسويق'],
+                ['builder:content_plan', 'Content plan', 'خطة المحتوى'],
+                ['builder:monthly_report', 'Monthly report builder', 'محرر التقرير الشهري'],
+                ['builder:media_report', 'Media buying report', 'تقرير الإعلانات'],
+                ['builder:campaign_report', 'Campaign report', 'تقرير الحملة'],
+                ['builder:persona', 'Buyer persona', 'شخصية العميل'],
+                ['builder:competitors', 'Competitor analysis', 'تحليل المنافسين'],
+                ['builder:quarterly_review', 'Quarterly review', 'المراجعة ربع السنوية'],
                 ['brief', 'Brief', 'بريف'],
                 ['report', 'Report', 'تقرير'],
                 ['content', 'Content', 'محتوى'],
@@ -315,7 +368,7 @@ function createStudioWorkspace(React, html) {
             >`
           }<button
             class="btn btn-pri"
-            disabled=${busy || dirty || !task || (['content', 'design', 'video'].includes(kind) && !brief)}
+            disabled=${busy || dirty || !task || (kind.startsWith('builder:') && builderResources?.taskId !== task) || (['content', 'design', 'video'].includes(kind) && !brief)}
             onClick=${create}
           >
             ${L('Create document', 'إنشاء مستند')}
@@ -323,6 +376,29 @@ function createStudioWorkspace(React, html) {
         </div>`
       }
       ${list && !list.tasks.length && html`<p>${L('No eligible assigned work. A manager must link a task to a valid client and project first.', 'لا توجد مهام متاحة. يجب ربط المهمة بعميل ومشروع صحيحين أولًا.')}</p>`}
+      <${BuilderResources}
+        ctx=${ctx}
+        task=${task}
+        detail=${detail}
+        dirty=${dirty}
+        target=${builderTarget}
+        post=${post}
+        onResources=${setBuilderResources}
+        onTemplate=${(payload) => {
+          setDetail(null);
+          setFile('');
+          setDirty(true);
+          setBuilderTarget(null);
+          setEditor({
+            id: crypto.randomUUID(),
+            kind: 'report',
+            taskId: task,
+            campaignId: campaign,
+            payload: window.MagnetBuilderModel.clone(payload),
+            nonce: crypto.randomUUID(),
+          });
+        }}
+      />
       ${list && html`<div class="studio-list">${list.documents.map((d) => html`<button class="btn" disabled=${busy || dirty} onClick=${() => open(d.id)}>${d.title} · v${d.revision} · ${statusLabel(d.status)}</button>`)}</div>`}
       ${
         detail &&
@@ -361,7 +437,30 @@ function createStudioWorkspace(React, html) {
           >
           <details>
             <summary>${L('Version and review history', 'سجل النسخ والمراجعة')}</summary>
-            ${detail.versions.map((v) => html`<button class="btn" disabled=${busy || dirty} onClick=${() => setEditor({ id: detail.document.id, kind: detail.document.kind, revision: v.revision, payload: v.payload, readOnly: true, nonce: crypto.randomUUID() })}>${L('View version', 'عرض نسخة')} ${v.revision}</button>`)}${detail.events.map((e) => html`<p>${statusLabel(e.action)} · v${e.revision} ${e.comment || ''}</p>`)}
+            ${detail.versions.map((v) => html`<button class="btn" disabled=${busy || dirty} onClick=${() => setEditor({ id: detail.document.id, kind: detail.document.kind, revision: v.revision, payload: v.payload, readOnly: true, nonce: crypto.randomUUID() })}>${L('View version', 'عرض نسخة')} ${v.revision}</button>`)}${detail.versions.map(
+              (v) =>
+                html`<p>
+                  v${v.revision} · ${v.createdAt}<button
+                    class="btn"
+                    disabled=${busy || dirty}
+                    onClick=${() => {
+                      setDetail(null);
+                      setDirty(true);
+                      setFile(v.fileId || '');
+                      setEditor({
+                        id: crypto.randomUUID(),
+                        kind: detail.document.kind,
+                        taskId: detail.document.task_id,
+                        campaignId: detail.document.campaign_record_id,
+                        payload: window.MagnetBuilderModel.clone(v.payload),
+                        nonce: crypto.randomUUID(),
+                      });
+                    }}
+                  >
+                    ${L('Restore as new document', 'استعادة كمستند جديد')}
+                  </button>
+                </p>`,
+            )}${detail.events.map((e) => html`<p>${statusLabel(e.action)} · v${e.revision} ${e.comment || ''}</p>`)}
           </details>
         </div>`
       }
