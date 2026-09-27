@@ -1436,7 +1436,7 @@ body.theme-light .tbl thead th{background:#fff}
 <script src="/modules/auth-entry.js?v=a41967ed3945bb79"></script>
 <script src="/modules/session-refresh.js?v=fa10e2c60a01f1c1"></script>
 <script src="/modules/acquisition-metrics.js?v=2e4310edce5aa8c4"></script>
-<script src="/modules/acquisition-settings.js?v=a32707781f95e4e5"></script>
+<script src="/modules/acquisition-settings.js?v=641fd99e3ab8c47a"></script>
 <script src="/modules/notification-preferences.js?v=352a2f6f20f40d5c"></script>
 <script src="/modules/crm-followups.js?v=852a97e023ff2ab1"></script>
 <script src="/modules/proposal-revisions.js?v=c53cd78498abc5aa"></script>
@@ -10905,7 +10905,7 @@ function SettingsView({ ctx, x }){
         ${emailHealth&&emailHealth.ok?html`<span>${emailHealth.provider} · ${emailHealth.emailConfigured?(ctx.lang==='ar'?'الإعداد موجود — التسليم غير مؤكد':'Configured — delivery not yet verified'):(ctx.lang==='ar'?'يحتاج إعداد مزوّد البريد':'Provider configuration missing')}</span>`:''}
         ${emailHealth&&emailHealth.error?html`<span role="alert">${emailHealth.error}</span>`:''}
       </div>
-      ${emailHealth&&emailHealth.ok&&html`<p class="muted">${emailHealth.from||'—'} · Webhook: ${emailHealth.webhookConfigured?'Configured':'Missing'} · Worker: ${emailHealth.workerConfigured?'Configured':'Missing'}</p><div style=${{overflowX:'auto'}}><table class="table"><thead><tr><th>Event</th><th>Status</th><th>Attempts</th><th>Time</th><th>Error</th></tr></thead><tbody>${(emailHealth.messages||[]).map(m=>html`<tr key=${m.id}><td>${m.event_type||m.kind}</td><td>${m.status}</td><td>${m.attempt_count}</td><td>${fmtDateTime(m.created_at)}</td><td>${m.last_error_category||'—'}</td></tr>`)}</tbody></table></div>`}
+      ${emailHealth&&emailHealth.ok&&html`<p class="muted">${emailHealth.from||'—'} · Webhook: ${emailHealth.webhookConfigured?'Configured':'Missing'} · Worker: ${emailHealth.workerConfigured?'Configured':'Missing'}</p><div style=${{overflowX:'auto'}}><table class="table"><thead><tr><th>${ctx.lang==='ar'?'الحدث':'Event'}</th><th>${ctx.lang==='ar'?'الحالة':'Status'}</th><th>${ctx.lang==='ar'?'المحاولات':'Attempts'}</th><th>${ctx.lang==='ar'?'الوقت':'Time'}</th><th>${ctx.lang==='ar'?'الخطأ':'Error'}</th></tr></thead><tbody>${(emailHealth.messages||[]).map(m=>html`<tr key=${m.id}><td>${m.event_type||m.kind}</td><td>${m.status}</td><td>${m.attempt_count}</td><td>${fmtDateTime(m.created_at)}</td><td>${m.last_error_category||'—'}</td></tr>`)}</tbody></table></div>`}
       <div class="flex gap8" style=${{flexWrap:'wrap',alignItems:'flex-end'}}>
         <label class="fld" style=${{minWidth:240}}><span>${ctx.lang==='ar'?'إيميل لاختبار الإرسال':'Send a test email to'}</span>
           <input value=${email} placeholder="you@example.com" onChange=${e=>setEmail(e.target.value)}/></label>

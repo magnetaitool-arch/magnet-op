@@ -21,6 +21,7 @@ export async function verifyWebsiteAcquisition({client,orgA,orgB,user,asRole}){
   assert.equal(row.payload.utm_campaign,'synthetic');assert.equal(row.payload.language,'ar');assert.equal(row.payload.assignedAuthUserId,user);
   assert.equal((await client.query('select count(*)::int n from crm_followups_v2 where lead_id=$1',[first.crmLeadId])).rows[0].n,1);
   assert.equal((await client.query("select count(*)::int n from user_notifications_v2 where entity_id=$1 and notification_type='LEAD_ASSIGNED'",[first.id])).rows[0].n,1);
+  assert.equal((await client.query('select count(*)::int n from user_notifications_v2 where entity_id=$1 and recipient_user_id=$2',[first.id,user])).rows[0].n,1);
   assert.equal((await client.query("select count(*)::int n from outbox_messages where kind='EMAIL_NOTIFICATION' and payload->>'entityId'=$1",[first.id])).rows[0].n,1);
  });
  await assert.rejects(asRole('authenticated',()=>client.query('select website_lead_rules_v2($1)',[orgB])),{code:'42501'});
