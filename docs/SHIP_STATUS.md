@@ -1,17 +1,17 @@
 # SHIP STATUS
 
-DEPLOYED: YES — foundation backup clarification live at https://magnet-op.vercel.app. Confirmed game identity mapping fix applied; manual Safari login/retest pending. See STUDIO_SYNC_RECOVERY.md.
-COMMIT: 9bdc16a (deployed fix); final verification recorded in the subsequent documentation checkpoint.
+DEPLOYED: YES — https://magnet-op.vercel.app
+COMMIT: 1c4eec5 (application); subsequent documentation checkpoint records acceptance limits.
 BRANCH: codex/magnet-os-v2-staging
-DEPLOYMENT TARGET: Existing Vercel project; magnet-ov3qto6lc-magnetaitool-archs-projects.vercel.app; dpl_58hZLXraqhT2ey3qZZX9Zvsm8FpF. Primary alias verified.
-BUILD STATUS: PASS — regression, scoped lint/typecheck, 44-file build, 55-migration database suite, security, independent staging and targeted live UI/API checks. Live browser console/errors empty.
-DATABASE STATUS: SAFE — 101 existing public tables unchanged by migration; 2,683 original rows across seven critical tables unchanged after live QA and account shutdown. Real 173 cases / 143 groups remain OPEN; synthetic repair/audit/reconciliation PASS. Test account suspended; old access and refresh denied.
-MIGRATIONS PENDING: NONE — ledger 66, canonical files 56.
-BLOCKED_EXTERNAL: Backup workflow publication scope, stable scheduler credentials and approved secret transport; email/social credentials.
-CRITICAL KNOWN ISSUES: Exact Safari sync mapping fixed; browser confirmation awaits owner login. No permission bypass or queue deletion. Automatic and independent-provider backup NOT ACTIVE. Manual encrypted database/object export and isolated restore PASS. New recovery point includes Phase 3: 142 tables / 3 objects restored; 2,683 original rows compared.
+DEPLOYMENT TARGET: Existing Vercel project; magnet-m8n5ikyyd-magnetaitool-archs-projects.vercel.app; dpl_CCXJ24h23DvNrabGZq6s9oB2VmLN. Primary alias updated.
+BUILD STATUS: PASS — lint, typecheck, existing npm test command, targeted hosted/browser/storage checks, 57-migration database suite, 44-file production build. Live config: zero failures; email warnings remain.
+DATABASE STATUS: SAFE — latest function-only migration compared all 106 public table counts/full fingerprints atomically; unchanged. Exact authorized Safari game retry persisted. RLS and tenant isolation retained.
+MIGRATIONS PENDING: NONE — canonical 57 / production ledger 67.
+BLOCKED_EXTERNAL: Scheduled backup authorization/credentials; email/social credentials. Video upload and PPTX are unsupported features, not successful integrations.
+CRITICAL KNOWN ISSUES: Owner Safari refresh remains at “Opening your workspace”; manual logout/login acceptance pending. Studio is not fully production-certified. Detailed verified/untested boundaries: STUDIO_FUNCTIONAL_MATRIX.md. Manual encrypted backup/restore PASS; scheduled backup remains partial.
 NEXT 5 ACTIONS:
-1. Owners review the 143 grouped decisions in Legacy Data Review.
-2. Authorize/install the prepared daily backup workflow and approved secret delivery.
-3. Verify first scheduled artifact, failure notification and independent-provider restore.
-4. Confirm historical employee credentials; configure external providers separately.
-5. Address noncritical language/viewport transition follow-ups listed in REMAINING_WORK.md.
+1. Complete owner's Safari logout/login acceptance without clearing site data.
+2. Verify refreshed production Studio under the owner session; retain exact score/queue evidence.
+3. Finish remaining PDF-upload UI and separate Content Creator UI checks from the functional matrix.
+4. Review ambiguous legacy cases separately; no guessed ownership repairs.
+5. Authorize scheduled backup credentials/transport separately; verify first scheduled recovery point.
