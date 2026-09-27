@@ -1,5 +1,6 @@
 // The existing Magnet OS parent owns auth and RPCs. Never copy tokens into this frame.
 if (window.parent !== window && new URLSearchParams(location.search).has('embedded')) {
+  const handshake = crypto.randomUUID();
   let readOnly = false,
     lang = 'en',
     dirty = false,
@@ -233,6 +234,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
     )
       return;
     const m = event.data;
+    if (m.type === 'HELLO') send('READY', handshake);
     if (m.type === 'OPEN') {
       readOnly = !!m.readOnly;
       lang = m.lang === 'ar' ? 'ar' : 'en';
@@ -294,7 +296,7 @@ if (window.parent !== window && new URLSearchParams(location.search).has('embedd
       );
   });
   app.innerHTML = '<p role="status">Connecting to Magnet OS…</p>';
-  send('READY');
+  send('READY', handshake);
 } else {
   // Production entry belongs to the authenticated shell. Original source/history remains preserved.
   location.replace('/?open=studio');

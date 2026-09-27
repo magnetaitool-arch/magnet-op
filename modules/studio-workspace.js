@@ -31,7 +31,8 @@ function createStudioWorkspace(React, html) {
       lock = useRef(false),
       pending = useRef(null),
       generation = useRef(0),
-      edits = useRef(0);
+      edits = useRef(0),
+      initialized = useRef(null);
     current.current = { ctx, detail, editor, task, kind, file, campaign, brief };
     const errorText = L(
       'Not confirmed. Check your connection and permissions. For a version conflict, reopen the document before editing.',
@@ -67,8 +68,12 @@ function createStudioWorkspace(React, html) {
         { channel: 'magnet-studio', ...message },
         location.origin,
       );
-    const initialize = () => {
+    const initialize = (handshake) => {
       const c = current.current;
+      if (!c.editor || typeof handshake !== 'string') return;
+      const key = c.editor.nonce + ':' + handshake;
+      if (initialized.current === key) return;
+      initialized.current = key;
       post({
         type: 'OPEN',
         lang: c.ctx.lang,
@@ -130,7 +135,13 @@ function createStudioWorkspace(React, html) {
         setDetail(out);
         setComment('');
         setEditor((previous) =>
-          previous ? { ...previous, revision: out.document.revision } : previous,
+          previous
+            ? {
+                ...previous,
+                revision: out.document.revision,
+                payload: out.versions[0]?.payload || previous.payload,
+              }
+            : previous,
         );
         if (edit === edits.current) setDirty(false);
         pending.current = null;
@@ -159,7 +170,7 @@ function createStudioWorkspace(React, html) {
           edits.current++;
           setDirty(true);
         }
-        if (event.data.type === 'READY') initialize();
+        if (event.data.type === 'READY') initialize(event.data.payload);
         if (event.data.type === 'SAVE') run('SAVE', event.data.payload);
       };
       window.addEventListener('message', receive);
@@ -354,7 +365,7 @@ function createStudioWorkspace(React, html) {
           </details>
         </div>`
       }
-      ${editor && html`<iframe key=${editor.nonce} ref=${frame} class="studio-frame" title=${L('Studio document editor', 'محرر مستندات ستوديو')} src="/magnet-studio/index.html?embedded=1" onLoad=${initialize} />`}
+      ${editor && html`<iframe key=${editor.nonce} ref=${frame} class="studio-frame" title=${L('Studio document editor', 'محرر مستندات ستوديو')} src="/magnet-studio/index.html?embedded=1" onLoad=${() => post({ type: 'HELLO' })} />`}
     </section>`;
   };
 }
