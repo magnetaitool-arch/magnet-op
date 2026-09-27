@@ -31,3 +31,9 @@ Application rollback: retain the previous production deployment (`dpl_DM5Kh1rkhD
 Shared-image endpoint uses existing server-only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Browser receives only the existing public configuration and its own user session. Public token validation resolves exactly one referenced file before signing a URL lasting at most 60 seconds. The service key never enters the browser bundle. Client-side export vendors are pinned and bundled with their licenses.
 
 PPTX remains PARTIAL (raster slides). Sustained concurrency/large-library/throttled-device performance remains PARTIAL. Video editing, threaded/mention/media-annotation comments and social publishing are NOT SUPPORTED. Existing email/social credentials and scheduled backup authorization remain independent external blockers, not false successes.
+
+## Live deployment verification
+
+Application `2f6203c` pushed and deployed to `dpl_AqCNChFxzckQXFxfx6noBMBTXejT`; primary alias https://magnet-op.vercel.app. Thirteen shell/editor/vendor/shared-presentation artifacts match local build SHA-256. Invalid shared-asset token returns 403; production CSP matches the intended policy. Anonymous deep link reaches login with no captured JavaScript errors; Arabic login at 390px has no horizontal overflow.
+
+Native Safari restored the existing System Owner session, opened Studio, exposed all ten builder template choices, switched AR/EN and refreshed without losing authentication. This account currently has no eligible canonical tasks in its Studio list, so no production authoring mutation was invented. Complete builder mutation/review/export/negative tests ran on independent staging. Previous deployment remains available.
