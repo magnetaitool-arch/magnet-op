@@ -5,6 +5,7 @@ Scope: existing embedded Studio. VERIFIED means the stated end-to-end behavior p
 | Workflow / controls | Status | Verified behavior / remaining limit |
 |---|---|---|
 | Auth handoff, session restore, sync, logout | VERIFIED | Single shell session; real expired-token refresh and queued write/readback; logout unmounts editor; production Safari restores System Owner and opens Studio. |
+| Direct Studio link | VERIFIED | Standalone URL restores the authenticated shell and opens Studio after identity hydration; fresh login follows the same link; unauthorized roles remain gated. |
 | Assigned task / client / project / campaign | VERIFIED | Actual task-scoped list/create/save; unrelated/deleted campaigns and unassigned/cross-tenant writes rejected. |
 | Brief template and seven sections | VERIFIED | All sections, title, text, links, project type, deadline; bilingual save/reopen and actual PDF output. Links are reference text, not a brand-kit manager. |
 | Report template and six steps | VERIFIED | Platform toggles, metrics, content, insights switch, Back/Continue/step navigation, save/reopen; real 3/4-page ordinary exports. |
@@ -27,9 +28,11 @@ Scope: existing embedded Studio. VERIFIED means the stated end-to-end behavior p
 1. Long PDF content was silently clipped by fixed-height pages. Only overflowing pages now expand and flow across print pages; both saved long-document exports retain their final text.
 2. The iframe READY and late load paths could initialize twice, resetting current input to an older/blank payload. Per-frame handshake deduplication prevents this, and confirmed save payloads are retained for actual iframe reload.
 
+3. Standalone Studio redirected to the shell but ignored `open=studio`. The shell now consumes that link only after authenticated context and existing navigation permissions are confirmed.
+
 ## Release checks / remaining blockers
 
 - Scoped lint/typecheck, full existing test command plus new behavioral control regressions, security checks and allowlisted build pass. Existing database schema/RLS unchanged; no migration required.
 - No known broken supported critical workflow remains in the tested scope. Overall Studio remains PARTIAL because unsupported features and the explicit browser/performance limits above are not completed features.
-- No owner credentials or business-ownership decision is required for these two frontend fixes. No production data was fabricated, reassigned or deleted.
+- No owner credentials or business-ownership decision is required for these frontend fixes. No production data was fabricated, reassigned or deleted.
 - Private evidence: `backups/foundation-cleanup-20260927/`, including `studio-long-fixed.pdf`, `studio-long-brief-fixed.pdf`, continuation-page rendering and mobile final-review screenshot. Original role/database/workflow proof remains in prior release artifacts.
