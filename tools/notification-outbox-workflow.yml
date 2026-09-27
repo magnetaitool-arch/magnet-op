@@ -1,0 +1,31 @@
+# Publish as .github/workflows/notification-outbox.yml only with workflow-write authorization.
+# Secrets: MAGNET_OUTBOX_WORKER_SECRET (same existing server worker secret).
+# This template is NOT an active scheduler. Owner must verify its first run.
+name: Magnet notification outbox
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: magnet-notification-outbox
+  cancel-in-progress: false
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Process durable notifications
+        env:
+          OUTBOX_SECRET: ${{ secrets.MAGNET_OUTBOX_WORKER_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OUTBOX_SECRET"
+          result=$(curl --silent --show-error --fail --max-time 240 \
+            --request POST 'https://magnet-op.vercel.app/api/outbox' \
+            --header 'Content-Type: application/json' \
+            --header "x-outbox-secret: $OUTBOX_SECRET" \
+            --data '{"action":"drain","limit":25}')
+          RESULT="$result" node -e 'const r=JSON.parse(process.env.RESULT); if(!r.ok || (r.results||[]).some(x=>x.error)) process.exit(1); console.log("Processed:",r.processed);'

@@ -59,3 +59,8 @@ test('health resolves the actual identity RPC contract and retains the admin aut
  active=false;assert.equal((await handleOutbox(request,env)).status,401);
  }finally{global.fetch=original;}
 });
+test('missing providers do not claim or exhaust queued notifications',async()=>{
+ const {processOutbox}=require('../server/outbox');const original=global.fetch;
+ try{global.fetch=async()=>{throw Error('must not claim');};assert.deepEqual(await processOutbox({base:'https://example.invalid',key:'fixture'},{}),[]);}
+ finally{global.fetch=original;}
+});

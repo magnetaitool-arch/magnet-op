@@ -207,6 +207,8 @@ async function claimMessages(config, workerId, limit, messageId) {
 }
 
 async function processOutbox(config, env, options = {}) {
+  // Missing provider authorization leaves durable work queued; it must not exhaust retries.
+  if (!(env.RESEND_API_KEY && (env.EMAIL_FROM || env.FROM_EMAIL)) && !(env.WHATSAPP_PROVIDER === 'meta' && env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID)) return [];
   const workerId = 'worker-' + crypto.randomUUID();
   const messages = await claimMessages(config, workerId, options.limit || 10, options.messageId || null);
   const results = [];
