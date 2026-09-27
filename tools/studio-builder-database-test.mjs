@@ -52,6 +52,37 @@ export async function verifyStudioBuilder({ client, orgA, orgB, user, asRole }) 
       await client.query('select studio_resources_v3($1,$2) result', [orgA, task.id])
     ).rows[0].result;
     assert.equal(resources.templates.length, 1);
+    const contentId = randomUUID();
+    await client.query('set local role postgres');
+    await client.query(
+      "insert into studio_documents_v2(id,organization_id,task_id,kind,revision,status,created_by) values($1,$2,$3,'content',1,'DRAFT',$4)",
+      [contentId, orgA, task.id, user],
+    );
+    await client.query(
+      'insert into studio_versions_v2(organization_id,document_id,revision,payload,created_by) values($1,$2,1,$3,$4)',
+      [
+        orgA,
+        contentId,
+        { title: 'Approved source fixture', body: 'Actual approved content' },
+        user,
+      ],
+    );
+    await client.query('set local role authenticated');
+    const sources = async () =>
+      (await client.query('select studio_resources_v3($1,$2) result', [orgA, task.id])).rows[0]
+        .result.sources;
+    assert.ok(
+      !(await sources()).some((x) => x.id === contentId),
+      'Draft content must not be exposed as approved',
+    );
+    await client.query('set local role postgres');
+    await client.query("update studio_documents_v2 set status='APPROVED' where id=$1", [contentId]);
+    await client.query('set local role authenticated');
+    const source = (await sources()).find((x) => x.id === contentId);
+    assert.equal(source.type, 'studio_content');
+    assert.equal(source.summary, 'Actual approved content');
+    assert.equal(source.revision, 1);
+
     await reject(() => client.query('select studio_resources_v3($1,$2)', [orgB, task.id]), {
       code: '42501',
     });
@@ -138,6 +169,28 @@ export async function verifyStudioBuilder({ client, orgA, orgB, user, asRole }) 
         client.query("select studio_shared_v3($1,'APPROVE','Yes','Reviewer')", [readonly.token]),
       { code: '42501' },
     );
+    await client.query('set local role postgres');
+    await client.query(
+      "update organization_members set status='SUSPENDED' where organization_id=$1 and user_id=$2",
+      [orgA, user],
+    );
+    await client.query('set local role anon');
+    await reject(() => client.query('select studio_shared_v3($1)', [readonly.token]), {
+      code: '42501',
+    });
+    await client.query('set local role postgres');
+    await client.query(
+      "update organization_members set status='ACTIVE' where organization_id=$1 and user_id=$2",
+      [orgA, user],
+    );
+    await client.query(
+      "update studio_shares_v3 set expires_at=now()-interval '1 second' where id=$1",
+      [readonly.id],
+    );
+    await client.query('set local role anon');
+    await reject(() => client.query('select studio_shared_v3($1)', [readonly.token]), {
+      code: '42501',
+    });
   });
   console.log(
     'PASS builder structured validation, optimistic brand updates, immutable style snapshot, reusable templates, scoped public share/review/revocation and tenant isolation',
